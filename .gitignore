@@ -1,36 +1,80 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ========================
+# IDE
+# ========================
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
+# ========================
+# OS
+# ========================
 .DS_Store
+Thumbs.db
+
+# ========================
+# Java / Maven
+# ========================
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+hs_err_pid*
+
+# ========================
+# Node.js / Next.js
+# ========================
+node_modules/
+.next/
+out/
+build/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ========================
+# Test & Coverage
+# ========================
+coverage/
+*.lcov
+.nyc_output/
+
+# ========================
+# Environment Variables
+# ========================
+.env
+.env.local
+.env.*.local
 *.pem
 
-# debug
+# ========================
+# Logs
+# ========================
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.pnpm-debug.log*
 
-# local env files
-.env*.local
-.env
-
-# vercel
-.vercel
-
-# typescript
+# ========================
+# TypeScript
+# ========================
 *.tsbuildinfo
 next-env.d.ts
+
+# ========================
+# Vercel
+# ========================
+.vercel
+
+# ========================
+# Docker (optional local data)
+# ========================
+docker/*_data/

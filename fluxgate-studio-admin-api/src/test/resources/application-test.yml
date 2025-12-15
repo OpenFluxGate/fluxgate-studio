@@ -1,0 +1,15 @@
+server:
+  port: 0
+
+spring:
+  application:
+    name: fluxgate-studio-admin-api-test
+
+# Disable FluxGate MongoDB for unit tests
+fluxgate:
+  mongo:
+    enabled: false
+
+logging:
+  level:
+    org.fluxgate: DEBUG
