@@ -18,7 +18,7 @@ public class OpenApiConfig {
             new Info()
                 .title("FluxGate Studio Admin API")
                 .description("Admin API for FluxGate Studio - Rate Limit Management")
-                .version("0.0.1-SNAPSHOT")
+                .version("0.2.0")
                 .contact(new Contact().name("OpenFluxGate").url("https://github.com/OpenFluxGate"))
                 .license(
                     new License().name("MIT License").url("https://opensource.org/licenses/MIT")));
