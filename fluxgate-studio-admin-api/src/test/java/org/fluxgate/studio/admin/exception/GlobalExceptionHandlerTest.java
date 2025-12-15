@@ -41,7 +41,8 @@ class GlobalExceptionHandlerTest {
     @DisplayName("should return 400 for invalid rule")
     void shouldReturn400ForInvalidRule() throws Exception {
       // given
-      when(testService.doSomething()).thenThrow(new InvalidRuleException("Rule bands cannot be empty"));
+      when(testService.doSomething())
+          .thenThrow(new InvalidRuleException("Rule bands cannot be empty"));
 
       // when/then
       mockMvc
@@ -70,7 +71,8 @@ class GlobalExceptionHandlerTest {
           .andExpect(status().isServiceUnavailable())
           .andExpect(jsonPath("$.status").value(503))
           .andExpect(jsonPath("$.error").value("Service Unavailable"))
-          .andExpect(jsonPath("$.message").value("Storage connection failed. Please try again later."));
+          .andExpect(
+              jsonPath("$.message").value("Storage connection failed. Please try again later."));
     }
   }
 

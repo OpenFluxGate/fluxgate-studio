@@ -79,7 +79,8 @@ class ExceptionTest {
     @DisplayName("should create exception with storage type and message")
     void shouldCreateExceptionWithStorageTypeAndMessage() {
       // when
-      StorageConnectionException ex = new StorageConnectionException("MongoDB", "Connection refused");
+      StorageConnectionException ex =
+          new StorageConnectionException("MongoDB", "Connection refused");
 
       // then
       assertThat(ex.getStorageType()).isEqualTo("MongoDB");
@@ -94,7 +95,8 @@ class ExceptionTest {
       RuntimeException cause = new RuntimeException("Network error");
 
       // when
-      StorageConnectionException ex = new StorageConnectionException("Redis", "Connection failed", cause);
+      StorageConnectionException ex =
+          new StorageConnectionException("Redis", "Connection failed", cause);
 
       // then
       assertThat(ex.getStorageType()).isEqualTo("Redis");
@@ -126,7 +128,8 @@ class ExceptionTest {
       RuntimeException cause = new RuntimeException("Database error");
 
       // when
-      StorageOperationException ex = new StorageOperationException("delete", "Operation failed", cause);
+      StorageOperationException ex =
+          new StorageOperationException("delete", "Operation failed", cause);
 
       // then
       assertThat(ex.getOperation()).isEqualTo("delete");
