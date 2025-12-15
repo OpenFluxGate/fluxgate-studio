@@ -1,0 +1,65 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: fluxgate-studio-admin-api
+
+  # OAuth2 Resource Server - Keycloak JWT validation
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:18080/realms/fluxgate}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:18080/realms/fluxgate/protocol/openid-connect/certs}
+
+# Application security settings
+app:
+  security:
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
+# FluxGate MongoDB Configuration
+fluxgate:
+  mongo:
+    enabled: true
+    uri: ${FLUXGATE_MONGO_URI:mongodb://fluxgate:fluxgate123@localhost:27017/fluxgate?authSource=admin}
+    database: ${FLUXGATE_MONGO_DB:fluxgate}
+    rule-collection: rate_limit_rules
+    ddl-auto: create
+
+  # Disable reload (Admin API doesn't consume rules, only manages them)
+  reload:
+    enabled: false
+
+  # FluxGate Control Support - Rule Change Notification
+  control:
+    redis:
+      uri: ${FLUXGATE_REDIS_URI:redis://127.0.0.1:7100,redis://127.0.0.1:7101,redis://127.0.0.1:7102}
+      channel: ${FLUXGATE_RELOAD_CHANNEL:fluxgate:rule-reload}
+      timeout: 5s
+    source: fluxgate-studio-admin
+
+# Actuator endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+
+# Logging
+logging:
+  level:
+    org.fluxgate: DEBUG
+    org.springframework.web: INFO
+
+# OpenAPI / Swagger
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
