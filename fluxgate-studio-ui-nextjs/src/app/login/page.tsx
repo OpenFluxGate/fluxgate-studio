@@ -1,8 +1,8 @@
 'use client';
 
+import React, { useState } from 'react';
 import Image from 'next/image';
 import { signIn } from 'next-auth/react';
-import React, { useState } from 'react';
 
 import { ArrowRight, Shield } from 'lucide-react';
 

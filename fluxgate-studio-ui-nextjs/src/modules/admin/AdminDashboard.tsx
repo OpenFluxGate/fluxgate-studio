@@ -1,8 +1,8 @@
 'use client';
 
+import React, { useCallback, useEffect, useState } from 'react';
 import Image from 'next/image';
 import { signOut, useSession } from 'next-auth/react';
-import React, { useCallback, useEffect, useState } from 'react';
 
 import {
   AlertCircle,
