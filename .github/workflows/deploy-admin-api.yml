@@ -1,0 +1,60 @@
+name: Deploy Admin API to AWS Lightsail
+
+on:
+  push:
+      branches:
+            - main
+                paths:
+                      - 'fluxgate-studio-admin-api/**'
+                            - '.github/workflows/deploy-admin-api.yml'
+
+                            jobs:
+                              build-and-deploy:
+                                  runs-on: ubuntu-latest
+
+                                      steps:
+                                            - name: Checkout
+                                                    uses: actions/checkout@v4
+
+                                                          - name: Set up JDK 21
+                                                                  uses: actions/setup-java@v4
+                                                                          with:
+                                                                                    java-version: '21'
+                                                                                              distribution: 'temurin'
+                                                                                                        cache: maven
+                                                                                                        
+                                                                                                              - name: Build with Maven
+                                                                                                                      working-directory: fluxgate-studio-admin-api
+                                                                                                                              run: mvn clean package -DskipTests
+                                                                                                                              
+                                                                                                                                    - name: Stop existing service
+                                                                                                                                            uses: appleboy/ssh-action@v1.0.3
+                                                                                                                                                    with:
+                                                                                                                                                              host: ${{ secrets.LIGHTSAIL_HOST }}
+                                                                                                                                                                        username: ${{ secrets.LIGHTSAIL_USER }}
+                                                                                                                                                                                  key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+                                                                                                                                                                                            script: |
+                                                                                                                                                                                                        sudo systemctl stop fluxgate-admin-api || true
+                                                                                                                                                                                                                    mkdir -p /opt/fluxgate/admin-api
+                                                                                                                                                                                                                    
+                                                                                                                                                                                                                          - name: Copy JAR to Lightsail
+                                                                                                                                                                                                                                  uses: appleboy/scp-action@v0.1.7
+                                                                                                                                                                                                                                          with:
+                                                                                                                                                                                                                                                    host: ${{ secrets.LIGHTSAIL_HOST }}
+                                                                                                                                                                                                                                                              username: ${{ secrets.LIGHTSAIL_USER }}
+                                                                                                                                                                                                                                                                        key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+                                                                                                                                                                                                                                                                                  source: "fluxgate-studio-admin-api/target/fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar"
+                                                                                                                                                                                                                                                                                            target: "/opt/fluxgate/admin-api/"
+                                                                                                                                                                                                                                                                                                      strip_components: 2
+                                                                                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                            - name: Start service
+                                                                                                                                                                                                                                                                                                                    uses: appleboy/ssh-action@v1.0.3
+                                                                                                                                                                                                                                                                                                                            with:
+                                                                                                                                                                                                                                                                                                                                      host: ${{ secrets.LIGHTSAIL_HOST }}
+                                                                                                                                                                                                                                                                                                                                                username: ${{ secrets.LIGHTSAIL_USER }}
+                                                                                                                                                                                                                                                                                                                                                          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+                                                                                                                                                                                                                                                                                                                                                                    script: |
+                                                                                                                                                                                                                                                                                                                                                                                sudo systemctl start fluxgate-admin-api
+                                                                                                                                                                                                                                                                                                                                                                                            sleep 10
+                                                                                                                                                                                                                                                                                                                                                                                                        sudo systemctl status fluxgate-admin-api --no-pager
+                                                                                                                                                                                                                                                                                                                                                                                                                    curl -f http://localhost:8081/actuator/health || echo "Health check pending"
