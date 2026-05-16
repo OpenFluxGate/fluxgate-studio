@@ -8,8 +8,8 @@
 >
 > | 데모 | 설명 | 링크 |
 > |------|------|------|
-> | **FluxGate Studio** | Rate Limit 규칙 관리를 위한 어드민 UI | [데모 열기](http://52.78.8.213:3000/) |
-> | **FluxGate API** | Swagger UI가 포함된 Rate Limiting API | [Swagger 열기](http://52.78.8.213:8080/swagger-ui/index.html) |
+> | **FluxGate Studio** | Rate Limit 규칙 관리를 위한 어드민 UI | [데모 열기](http://13.124.192.116:3000/) |
+> | **FluxGate API** | Swagger UI가 포함된 Rate Limiting API | [Swagger 열기](http://13.124.192.116:8080/swagger-ui/index.html) |
 
 
 ## 아키텍처
