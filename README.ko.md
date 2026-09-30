@@ -85,11 +85,16 @@ cd fluxgate-studio-admin-api
 # 빌드
 ./mvnw clean package -DskipTests
 
-# 실행
-./mvnw spring-boot:run
+# 로컬 Keycloak dev realm 으로 실행
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
 API는 `http://localhost:8090`에서 접근 가능합니다.
+
+기본값은 안전한 쪽(audience 검증 on, `/api-docs` 인증 필요)입니다. 번들된 dev realm 에는 이 API 용
+audience 매퍼가 없으므로 `dev` 프로필 없이 실행하면 토큰이 `401` 로 거부됩니다. `dev` 프로필은 그 두
+가지만 완화하며 기동 시 각각 `WARN` 을 남깁니다. 배포에서는 절대 쓰지 마십시오 - 영문 README 의
+[Production checklist](README.md#production-checklist) 를 참고하십시오.
 
 ### 3. UI 시작
 
@@ -174,8 +179,12 @@ Keycloak 관리 콘솔: `http://localhost:18080/admin` (admin/admin)
 - `PATCH /api/rules/{id}/toggle` - 규칙 활성화/비활성화 토글
 
 ### API 문서
-- Swagger UI: `http://localhost:8090/swagger-ui.html`
+- Swagger UI: `http://localhost:8090/swagger-ui.html` (`prod` 프로필에서는 비활성화)
 - OpenAPI JSON: `http://localhost:8090/api-docs`
+
+OpenAPI 문서는 관리 API 전체 스키마이므로 `/api-docs/**` 는 `ROLE_USER` 또는 `ROLE_ADMIN` 을
+요구합니다. `fluxgate.studio.security.public-api-docs` 를 켜면 익명 접근이 허용되며, 기본값은
+`false` 이고 `dev` 프로필만 `true` 로 설정합니다.
 
 ## 개발
 

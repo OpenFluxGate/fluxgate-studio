@@ -65,19 +65,47 @@
 - Docker & Docker Compose
 - Maven
 
-### 1. Start Infrastructure
+### Option A - the whole stack with Docker Compose
+
+```bash
+# Keycloak + MongoDB + Redis + Admin API + UI
+docker compose up --build
+```
+
+Before the first run, add this line to your hosts file so the browser and the containers agree on
+the Keycloak URL (the access token `iss` claim has to match what the Admin API validates):
+
+```
+127.0.0.1 keycloak
+```
+
+Then open `http://localhost:3000` and sign in with `admin/admin` (full access) or `user/user`
+(read-only). See the comments at the top of `docker-compose.yml` for details.
+
+The Admin API container runs with `SPRING_PROFILES_ACTIVE=dev`. That profile exists only so the
+shipped defaults can be the safe ones: the bundled dev realm has no audience protocol mapper for this
+API, and Swagger UI has to read `/api-docs` without a token. It relaxes exactly those two settings and
+logs a `WARN` for each at startup. Never activate it in a deployment - see
+[Production checklist](#production-checklist).
+
+### Option B - run the services yourself
+
+#### 1. Start Infrastructure
 
 ```bash
 cd docker
 
-# Start Keycloak
+# Start Keycloak only
 docker compose -f key-cloak.yml up -d
-
-# Start MongoDB (if not using existing)
-docker compose -f mongodb.yml up -d
 ```
 
-### 2. Start Admin API
+MongoDB and Redis come from the root `docker-compose.yml`:
+
+```bash
+docker compose up -d mongo redis
+```
+
+#### 2. Start Admin API
 
 ```bash
 cd fluxgate-studio-admin-api
@@ -85,13 +113,15 @@ cd fluxgate-studio-admin-api
 # Build
 ./mvnw clean package -DskipTests
 
-# Run
-./mvnw spring-boot:run
+# Run against the local Keycloak dev realm
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-The API will be available at `http://localhost:8090`
+The API will be available at `http://localhost:8090`. Without `-Dspring-boot.run.profiles=dev` the
+safe defaults apply, and the dev realm's tokens are rejected with `401` because they carry no
+`fluxgate-studio-admin-api` audience.
 
-### 3. Start UI
+#### 3. Start UI
 
 ```bash
 cd fluxgate-studio-ui-nextjs
@@ -116,7 +146,10 @@ The UI will be available at `http://localhost:3000`
 #### UI (.env.local)
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8090
+# Admin API base URL. Server-side only: the browser talks to the Next.js route handler at
+# /api/proxy/**, which attaches the Keycloak access token (BFF pattern), so the token never
+# reaches client-side JavaScript.
+ADMIN_API_URL=http://localhost:8090
 
 # NextAuth
 NEXTAUTH_URL=http://localhost:3000
@@ -163,20 +196,87 @@ Access Keycloak Admin Console at `http://localhost:18080/admin` (admin/admin)
 
 ## API Endpoints
 
-### Dashboard
-- `GET /api/dashboard/stats` - Get dashboard statistics
+Reads require `ROLE_USER` or `ROLE_ADMIN`; every mutating endpoint requires `ROLE_ADMIN`.
 
-### Rules
-- `GET /api/rules` - List all rules
-- `GET /api/rules/{id}` - Get rule by ID
-- `POST /api/rules` - Create new rule
-- `PUT /api/rules/{id}` - Update rule
-- `DELETE /api/rules/{id}` - Delete rule
-- `PATCH /api/rules/{id}/toggle` - Toggle rule enabled/disabled
+| Verb | Path | Role | Purpose |
+|------|------|------|---------|
+| GET | `/api/dashboard/stats` | user, admin | Rule counters (computed with MongoDB `countDocuments`) |
+| GET | `/api/rules` | user, admin | List rules; optional `ruleSetId` filter |
+| GET | `/api/rules?page=&size=` | user, admin | Same, as a page envelope `{content, page, size, totalElements}` |
+| GET | `/api/rules/{id}` | user, admin | Read a single rule |
+| GET | `/api/rules/export` | user, admin | Download every rule as a JSON array |
+| POST | `/api/rules/{id}/simulate` | user, admin | Read-only dry-run over the rule bands |
+| POST | `/api/rules` | admin | Create a rule |
+| POST | `/api/rules/import` | admin | Upsert a batch of rules (at most 500 per request) |
+| PUT | `/api/rules/{id}` | admin | Replace a rule (requires `version` or `If-Match`) |
+| PATCH | `/api/rules/{id}/toggle` | admin | Toggle enabled/disabled (compare-and-set, `409` on a concurrent edit) |
+| DELETE | `/api/rules/{id}` | admin | Delete a rule |
+| DELETE | `/api/rules?ruleSetId=` | admin | Delete every rule of a rule set |
+
+### Pagination
+
+`GET /api/rules` returns a plain JSON array when neither `page` nor `size` is supplied, which keeps
+existing clients working. As soon as one of them is present the response becomes the page envelope
+`{content, page, size, totalElements}`. `size` defaults to 50 and is capped at 200.
+
+### Optimistic locking
+
+Every rule carries a `version`. `PUT /api/rules/{id}` requires the version that was read before
+editing, either as the `version` body field or as an `If-Match` header (the bare number or the
+quoted ETag that the API returns). A stale version is answered with `409 Conflict` and an error body
+listing `expectedVersion` and `actualVersion`, so concurrent edits are rejected rather than silently
+overwritten.
+
+`PATCH /api/rules/{id}/toggle` takes no version from the client - it reads the rule and writes it back
+through the same compare-and-set - but it fails the same way with `409 Conflict` when another writer
+changed the rule in between, instead of losing that change.
 
 ### API Documentation
-- Swagger UI: `http://localhost:8090/swagger-ui.html`
+- Swagger UI: `http://localhost:8090/swagger-ui.html` (disabled in the `prod` profile)
 - OpenAPI JSON: `http://localhost:8090/api-docs`
+
+The OpenAPI document describes the whole admin surface, so `/api-docs/**` requires `ROLE_USER` or
+`ROLE_ADMIN`. `fluxgate.studio.security.public-api-docs` opens it up for anonymous readers; it
+defaults to `false` and is only set to `true` by the `dev` profile, so that Swagger UI works locally.
+
+## Production checklist
+
+Everything the shipped defaults cannot decide for you. Walk this list before exposing the Studio
+outside a laptop.
+
+| # | Check | Where |
+|---|-------|-------|
+| 1 | `SPRING_PROFILES_ACTIVE=prod` - or at the very least **not** `dev`. The `dev` profile disables audience validation and opens `/api-docs`, and says so with a `WARN` at startup. | Admin API environment |
+| 2 | JWT audience validation on (`fluxgate.studio.security.validate-audience=true`, the default) **and** an `audience` protocol mapper on the Keycloak client that puts `fluxgate-studio-admin-api` into the token's `aud` claim. Without the mapper every request is a `401`; without validation a token minted for any other client of the same realm is accepted. | `application-prod.yml`, Keycloak client |
+| 3 | Swagger UI off (`springdoc.swagger-ui.enabled=false`, set by the `prod` profile). | `application-prod.yml` |
+| 4 | OpenAPI document behind authentication (`fluxgate.studio.security.public-api-docs=false`, the default): `/api-docs/**` then requires `ROLE_USER` or `ROLE_ADMIN`. | `application-prod.yml` |
+| 5 | CORS: `CORS_ALLOWED_ORIGINS` lists the real UI origins, never `*`. The application fails to start on `*` together with `allow-credentials=true`. | Admin API environment |
+| 6 | `fluxgate.mongo.ddl-auto=validate` so the application never creates collections or indexes implicitly. | `application-prod.yml` |
+| 7 | Every secret injected from the environment: `FLUXGATE_MONGO_URI`, `FLUXGATE_REDIS_URI`, `NEXTAUTH_SECRET`, `KEYCLOAK_CLIENT_SECRET`. No defaults from the dev realm survive into a deployment. | both services |
+| 8 | Actuator: only `health,info,metrics` exposed and `management.endpoint.health.show-details=when_authorized` (health details name the internal Redis/Mongo hosts). | `application-prod.yml` |
+| 9 | UI security headers served on every response: `X-Frame-Options: DENY`, `Content-Security-Policy: frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`. Check them with `curl -I` against the deployed UI, because a reverse proxy can strip or override them. | `fluxgate-studio-ui-nextjs/next.config.ts` |
+| 10 | BFF proxy allow-list unchanged, or extended by the rules below. | `fluxgate-studio-ui-nextjs/src/app/api/proxy/[...path]/route.ts` |
+
+### Extending the BFF proxy allow-list
+
+`ALLOWED_PREFIXES` in the proxy route is the only control that limits which part of the Admin API the
+browser can reach, so it has to stay a prefix allow-list over validated segments:
+
+- Add **prefixes**, never a catch-all. `api/rules` and `api/dashboard` match themselves and anything
+  below them; an empty prefix would match everything.
+- Keep the per segment validation. Next.js URL-decodes `[...path]` before the handler sees it, so
+  `%2e%2e` arrives as `..` and `%2f` as `/`; a joined-string check alone is defeated by the `..`
+  normalisation that `fetch` performs (`api/rules/%2e%2e/%2e%2e/actuator/metrics` would resolve to
+  `/actuator/metrics`). Every segment that is empty, `.`, `..`, or contains `/` or `\` is rejected
+  with a `404`.
+- Keep the second check on the assembled URL: its `origin` must equal the Admin API origin and its
+  path must still be inside the allow-list after normalisation.
+- Never widen the forwarded request headers to include `authorization` or `cookie`. The only
+  credential the Admin API may see is the access token the route handler reads server-side.
+- The body cap (1 MB, `413` on both `content-length` and the measured payload) applies to every
+  method with a body. Raise it deliberately, not by accident.
+- `src/app/api/proxy/[...path]/route.test.ts` covers traversal, backslashes, the body cap and the
+  happy path. Extend it together with the allow-list (`npm test`).
 
 ## Development
 
@@ -193,7 +293,17 @@ npm run lint
 
 # Format
 npm run format
+
+# Unit tests (BFF proxy route handler)
+npm test
 ```
+
+#### Multi-environment support
+
+> **TODO:** there is no environment (dev/stage/prod) concept in FluxGate Studio. The unused
+> `EnvSwitcher` component was removed rather than left as decorative UI; reintroducing it requires a
+> backend concept first (an `environment` field on the rule DTOs plus per-environment MongoDB
+> collections or namespaces).
 
 ### API Development
 
@@ -232,9 +342,11 @@ fluxgate-studio/
 │   │       └── exception/         # Custom exceptions
 │   └── pom.xml
 │
-└── docker/
-    ├── key-cloak.yml              # Keycloak Docker Compose
-    └── fluxgate-realm.json        # Keycloak realm config
+├── docker/
+│   ├── key-cloak.yml              # Keycloak-only Docker Compose (development template)
+│   └── fluxgate-realm.json        # Keycloak realm config (development template)
+│
+└── docker-compose.yml             # Full stack: Keycloak + MongoDB + Redis + Admin API + UI
 ```
 
 ## License
