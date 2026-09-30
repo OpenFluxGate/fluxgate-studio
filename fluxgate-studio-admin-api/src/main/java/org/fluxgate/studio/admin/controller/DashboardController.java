@@ -9,11 +9,16 @@ import org.fluxgate.studio.admin.service.DashboardService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** REST controller for dashboard statistics. */
+/**
+ * REST controller for dashboard statistics.
+ *
+ * <p>Read-only endpoint, available to {@code ROLE_USER} and {@code ROLE_ADMIN}.
+ */
 @RestController
 @RequestMapping("/api/dashboard")
 @Tag(name = "Dashboard", description = "Dashboard statistics APIs")
@@ -28,6 +33,7 @@ public class DashboardController {
   }
 
   @GetMapping("/stats")
+  @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
   @Operation(
       summary = "Get dashboard stats",
       description = "Get summary statistics for the dashboard")
