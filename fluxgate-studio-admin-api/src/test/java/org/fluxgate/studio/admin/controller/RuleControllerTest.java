@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -17,13 +18,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 import org.fluxgate.studio.admin.dto.request.CreateRuleRequest;
+import org.fluxgate.studio.admin.dto.request.ImportRulesRequest;
 import org.fluxgate.studio.admin.dto.request.RateBandRequest;
+import org.fluxgate.studio.admin.dto.request.SimulateRequest;
 import org.fluxgate.studio.admin.dto.request.UpdateRuleRequest;
+import org.fluxgate.studio.admin.dto.response.BandSimulationResponse;
+import org.fluxgate.studio.admin.dto.response.ImportResultResponse;
+import org.fluxgate.studio.admin.dto.response.PageResponse;
 import org.fluxgate.studio.admin.dto.response.RateBandResponse;
 import org.fluxgate.studio.admin.dto.response.RuleResponse;
+import org.fluxgate.studio.admin.dto.response.SimulationResponse;
 import org.fluxgate.studio.admin.exception.GlobalExceptionHandler;
 import org.fluxgate.studio.admin.exception.RuleAlreadyExistsException;
 import org.fluxgate.studio.admin.exception.RuleNotFoundException;
+import org.fluxgate.studio.admin.exception.RuleVersionMismatchException;
 import org.fluxgate.studio.admin.service.RuleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -65,7 +73,8 @@ class RuleControllerTest {
         List.of(new RateBandResponse(60, 100, "100-per-minute")),
         "test-ruleset",
         List.of("api"),
-        Map.of());
+        Map.of(),
+        1L);
   }
 
   @Nested
@@ -235,7 +244,8 @@ class RuleControllerTest {
               List.of(new RateBandRequest(120L, 50L, "50-per-2minutes")),
               "updated-ruleset",
               null,
-              null);
+              null,
+              3L);
       RuleResponse response =
           new RuleResponse(
               "test-rule",
@@ -247,8 +257,9 @@ class RuleControllerTest {
               List.of(new RateBandResponse(120, 50, "50-per-2minutes")),
               "updated-ruleset",
               List.of(),
-              Map.of());
-      when(ruleService.updateRule(eq("test-rule"), any(UpdateRuleRequest.class)))
+              Map.of(),
+              4L);
+      when(ruleService.updateRule(eq("test-rule"), any(UpdateRuleRequest.class), any()))
           .thenReturn(response);
 
       // when/then
@@ -322,6 +333,272 @@ class RuleControllerTest {
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.deletedCount").value(3))
           .andExpect(jsonPath("$.ruleSetId").value("test-ruleset"));
+    }
+  }
+
+  @Nested
+  @DisplayName("GET /api/rules (paged)")
+  class ListRulesPagedTests {
+
+    @Test
+    @DisplayName("should return a page envelope when page is supplied")
+    void shouldReturnPageEnvelope() throws Exception {
+      // given
+      PageResponse<RuleResponse> page =
+          new PageResponse<>(List.of(createTestRuleResponse("rule-1", "Rule 1", true)), 1, 10, 42L);
+      when(ruleService.getRulesPage(null, 1, 10)).thenReturn(page);
+
+      // when/then
+      mockMvc
+          .perform(get("/api/rules").param("page", "1").param("size", "10"))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.content.length()").value(1))
+          .andExpect(jsonPath("$.page").value(1))
+          .andExpect(jsonPath("$.size").value(10))
+          .andExpect(jsonPath("$.totalElements").value(42));
+    }
+
+    @Test
+    @DisplayName("should default the page index and size")
+    void shouldDefaultPageIndexAndSize() throws Exception {
+      // given
+      when(ruleService.getRulesPage(null, 0, RuleService.DEFAULT_PAGE_SIZE))
+          .thenReturn(new PageResponse<>(List.of(), 0, RuleService.DEFAULT_PAGE_SIZE, 0L));
+
+      // when/then
+      mockMvc.perform(get("/api/rules").param("size", "50")).andExpect(status().isOk());
+      verify(ruleService).getRulesPage(null, 0, RuleService.DEFAULT_PAGE_SIZE);
+    }
+
+    @Test
+    @DisplayName("should keep returning a plain list without paging parameters")
+    void shouldReturnPlainListWithoutPagingParameters() throws Exception {
+      // given
+      when(ruleService.getAllRules())
+          .thenReturn(List.of(createTestRuleResponse("rule-1", "Rule 1", true)));
+
+      // when/then
+      mockMvc
+          .perform(get("/api/rules"))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.length()").value(1))
+          .andExpect(jsonPath("$[0].id").value("rule-1"));
+    }
+  }
+
+  @Nested
+  @DisplayName("GET /api/rules/export")
+  class ExportRulesTests {
+
+    @Test
+    @DisplayName("should return every rule as a downloadable JSON array")
+    void shouldExportRules() throws Exception {
+      // given
+      when(ruleService.getAllRules())
+          .thenReturn(List.of(createTestRuleResponse("rule-1", "Rule 1", true)));
+
+      // when/then
+      mockMvc
+          .perform(get("/api/rules/export"))
+          .andExpect(status().isOk())
+          .andExpect(
+              header()
+                  .string("Content-Disposition", "attachment; filename=\"fluxgate-rules.json\""))
+          .andExpect(jsonPath("$.length()").value(1))
+          .andExpect(jsonPath("$[0].version").value(1));
+    }
+  }
+
+  @Nested
+  @DisplayName("POST /api/rules/import")
+  class ImportRulesTests {
+
+    @Test
+    @DisplayName("should import rules and report the summary")
+    void shouldImportRules() throws Exception {
+      // given
+      ImportRulesRequest request =
+          new ImportRulesRequest(
+              List.of(
+                  new CreateRuleRequest(
+                      "rule-1",
+                      "Rule 1",
+                      true,
+                      "PER_IP",
+                      "ip",
+                      "REJECT_REQUEST",
+                      List.of(new RateBandRequest(60L, 100L, null)),
+                      null,
+                      null,
+                      null)));
+      when(ruleService.importRules(any())).thenReturn(new ImportResultResponse(1, 1, 0));
+
+      // when/then
+      mockMvc
+          .perform(
+              post("/api/rules/import")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(objectMapper.writeValueAsString(request)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.total").value(1))
+          .andExpect(jsonPath("$.created").value(1))
+          .andExpect(jsonPath("$.updated").value(0));
+    }
+
+    @Test
+    @DisplayName("should return 400 for an empty import")
+    void shouldReturn400ForEmptyImport() throws Exception {
+      mockMvc
+          .perform(
+              post("/api/rules/import")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"rules\": []}"))
+          .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("should return 400 for an invalid enum value")
+    void shouldReturn400ForInvalidEnumValue() throws Exception {
+      String body =
+          "{\"rules\": [{\"id\": \"rule-1\", \"name\": \"Rule\", \"enabled\": true,"
+              + " \"scope\": \"PER_GALAXY\", \"keyStrategyId\": \"ip\","
+              + " \"onLimitExceedPolicy\": \"REJECT_REQUEST\","
+              + " \"bands\": [{\"windowSeconds\": 60, \"capacity\": 100}]}]}";
+
+      mockMvc
+          .perform(post("/api/rules/import").contentType(MediaType.APPLICATION_JSON).content(body))
+          .andExpect(status().isBadRequest())
+          .andExpect(
+              jsonPath("$.details[0]").value(org.hamcrest.Matchers.containsString("PER_IP")));
+    }
+  }
+
+  @Nested
+  @DisplayName("POST /api/rules/{id}/simulate")
+  class SimulateRuleTests {
+
+    @Test
+    @DisplayName("should return the per band dry-run result")
+    void shouldSimulateRule() throws Exception {
+      // given
+      SimulationResponse response =
+          new SimulationResponse(
+              "test-rule",
+              15L,
+              1L,
+              false,
+              10L,
+              0L,
+              List.of(new BandSimulationResponse("burst", 1L, 10L, 10L, 10L, 0L, true)));
+      when(ruleService.simulate(eq("test-rule"), any(SimulateRequest.class))).thenReturn(response);
+
+      // when/then
+      mockMvc
+          .perform(
+              post("/api/rules/test-rule/simulate")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"requests\": 15, \"seconds\": 1}"))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.allowed").value(false))
+          .andExpect(jsonPath("$.bands[0].exceeded").value(true));
+    }
+
+    @Test
+    @DisplayName("should return 400 when the burst size is missing")
+    void shouldReturn400WhenRequestsMissing() throws Exception {
+      mockMvc
+          .perform(
+              post("/api/rules/test-rule/simulate")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"seconds\": 1}"))
+          .andExpect(status().isBadRequest());
+    }
+  }
+
+  @Nested
+  @DisplayName("PUT /api/rules/{id} optimistic locking")
+  class UpdateRuleVersioningTests {
+
+    private UpdateRuleRequest requestWithoutVersion() {
+      return new UpdateRuleRequest(
+          "Updated Rule",
+          true,
+          "PER_IP",
+          "ip",
+          "REJECT_REQUEST",
+          List.of(new RateBandRequest(60L, 100L, null)),
+          null,
+          null,
+          null,
+          null);
+    }
+
+    @Test
+    @DisplayName("should pass a quoted If-Match ETag through as the expected version")
+    void shouldParseQuotedIfMatchHeader() throws Exception {
+      // given
+      when(ruleService.updateRule(eq("test-rule"), any(UpdateRuleRequest.class), eq(7L)))
+          .thenReturn(createTestRuleResponse("test-rule", "Updated Rule", true));
+
+      // when/then
+      mockMvc
+          .perform(
+              put("/api/rules/test-rule")
+                  .header("If-Match", "\"7\"")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(objectMapper.writeValueAsString(requestWithoutVersion())))
+          .andExpect(status().isOk())
+          .andExpect(header().string("ETag", "\"1\""));
+    }
+
+    @Test
+    @DisplayName("should accept a weak If-Match ETag")
+    void shouldParseWeakIfMatchHeader() throws Exception {
+      // given
+      when(ruleService.updateRule(eq("test-rule"), any(UpdateRuleRequest.class), eq(9L)))
+          .thenReturn(createTestRuleResponse("test-rule", "Updated Rule", true));
+
+      // when/then
+      mockMvc
+          .perform(
+              put("/api/rules/test-rule")
+                  .header("If-Match", "W/\"9\"")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(objectMapper.writeValueAsString(requestWithoutVersion())))
+          .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("should return 400 for a non numeric If-Match header")
+    void shouldReturn400ForNonNumericIfMatch() throws Exception {
+      mockMvc
+          .perform(
+              put("/api/rules/test-rule")
+                  .header("If-Match", "not-a-version")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(objectMapper.writeValueAsString(requestWithoutVersion())))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("If-Match")));
+    }
+
+    @Test
+    @DisplayName("should return 409 when the rule was modified concurrently")
+    void shouldReturn409OnVersionMismatch() throws Exception {
+      // given
+      when(ruleService.updateRule(eq("test-rule"), any(UpdateRuleRequest.class), any()))
+          .thenThrow(new RuleVersionMismatchException("test-rule", 3L, 5L));
+
+      // when/then
+      mockMvc
+          .perform(
+              put("/api/rules/test-rule")
+                  .header("If-Match", "3")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(objectMapper.writeValueAsString(requestWithoutVersion())))
+          .andExpect(status().isConflict())
+          .andExpect(jsonPath("$.error").value("Conflict"))
+          .andExpect(jsonPath("$.details[0]").value("expectedVersion: 3"))
+          .andExpect(jsonPath("$.details[1]").value("actualVersion: 5"));
     }
   }
 }

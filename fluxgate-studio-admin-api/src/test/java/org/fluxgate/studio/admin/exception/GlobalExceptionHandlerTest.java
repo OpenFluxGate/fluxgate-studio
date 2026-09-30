@@ -96,6 +96,74 @@ class GlobalExceptionHandlerTest {
     }
   }
 
+  @Nested
+  @DisplayName("IllegalArgumentException handling")
+  class IllegalArgumentExceptionTests {
+
+    @Test
+    @DisplayName("should not echo the exception message back to the client")
+    void shouldNotEchoTheExceptionMessage() throws Exception {
+      // given - the kind of message the MongoDB driver or Spring type conversion produces
+      when(testService.doSomething())
+          .thenThrow(
+              new IllegalArgumentException(
+                  "Invalid connection string mongodb://fluxgate:fluxgate123@mongo:27017"));
+
+      // when/then
+      mockMvc
+          .perform(get("/test"))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.status").value(400))
+          .andExpect(jsonPath("$.error").value("Bad Request"))
+          .andExpect(jsonPath("$.message").value("Invalid request"))
+          .andExpect(jsonPath("$.details").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("should surface a validation style message as a detail")
+    void shouldSurfaceValidationStyleMessageAsDetail() throws Exception {
+      // given
+      when(testService.doSomething())
+          .thenThrow(new IllegalArgumentException("must be one of: PER_IP, PER_USER, GLOBAL"));
+
+      // when/then
+      mockMvc
+          .perform(get("/test"))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.message").value("Invalid request"))
+          .andExpect(jsonPath("$.details[0]").value("must be one of: PER_IP, PER_USER, GLOBAL"));
+    }
+
+    @Test
+    @DisplayName("should drop an over long message even when it looks like validation output")
+    void shouldDropOverLongMessage() throws Exception {
+      // given
+      when(testService.doSomething())
+          .thenThrow(new IllegalArgumentException("must be one of: " + "X".repeat(300)));
+
+      // when/then
+      mockMvc
+          .perform(get("/test"))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.message").value("Invalid request"))
+          .andExpect(jsonPath("$.details").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("should stay generic when the exception carries no message")
+    void shouldStayGenericWithoutMessage() throws Exception {
+      // given
+      when(testService.doSomething()).thenThrow(new IllegalArgumentException());
+
+      // when/then
+      mockMvc
+          .perform(get("/test"))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.message").value("Invalid request"))
+          .andExpect(jsonPath("$.details").doesNotExist());
+    }
+  }
+
   // Test controller for testing exception handling
   @RestController
   static class TestController {

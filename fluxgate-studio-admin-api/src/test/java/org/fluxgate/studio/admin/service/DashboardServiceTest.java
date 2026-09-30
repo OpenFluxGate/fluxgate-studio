@@ -1,16 +1,13 @@
 package org.fluxgate.studio.admin.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
-import java.time.Duration;
-import java.util.List;
-import org.fluxgate.core.config.LimitScope;
-import org.fluxgate.core.config.OnLimitExceedPolicy;
-import org.fluxgate.core.config.RateLimitBand;
-import org.fluxgate.core.config.RateLimitRule;
-import org.fluxgate.core.spi.RateLimitRuleRepository;
 import org.fluxgate.studio.admin.dto.response.DashboardStatsResponse;
+import org.fluxgate.studio.admin.exception.StorageOperationException;
+import org.fluxgate.studio.admin.repository.RuleStatistics;
+import org.fluxgate.studio.admin.repository.StudioRuleRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,40 +18,20 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class DashboardServiceTest {
 
-  @Mock private RateLimitRuleRepository ruleRepository;
+  @Mock private StudioRuleRepository studioRuleRepository;
 
   private DashboardService dashboardService;
 
   @BeforeEach
   void setUp() {
-    dashboardService = new DashboardService(ruleRepository);
-  }
-
-  private RateLimitRule createTestRule(String id, boolean enabled, String ruleSetId) {
-    RateLimitRule.Builder builder =
-        RateLimitRule.builder(id)
-            .name("Test Rule " + id)
-            .enabled(enabled)
-            .scope(LimitScope.PER_IP)
-            .keyStrategyId("ip")
-            .onLimitExceedPolicy(OnLimitExceedPolicy.REJECT_REQUEST)
-            .ruleSetId(ruleSetId);
-    builder.addBand(RateLimitBand.builder(Duration.ofSeconds(60), 100).build());
-    return builder.build();
+    dashboardService = new DashboardService(studioRuleRepository);
   }
 
   @Test
-  @DisplayName("should return correct statistics")
+  @DisplayName("should return the counters computed by the storage engine")
   void shouldReturnCorrectStatistics() {
     // given
-    List<RateLimitRule> rules =
-        List.of(
-            createTestRule("rule-1", true, "ruleset-a"),
-            createTestRule("rule-2", true, "ruleset-a"),
-            createTestRule("rule-3", false, "ruleset-b"),
-            createTestRule("rule-4", true, "ruleset-c"),
-            createTestRule("rule-5", false, null));
-    when(ruleRepository.findAll()).thenReturn(rules);
+    when(studioRuleRepository.statistics()).thenReturn(new RuleStatistics(5, 3, 2, 3));
 
     // when
     DashboardStatsResponse stats = dashboardService.getStats();
@@ -68,10 +45,10 @@ class DashboardServiceTest {
   }
 
   @Test
-  @DisplayName("should handle empty rule list")
+  @DisplayName("should handle an empty rule collection")
   void shouldHandleEmptyRuleList() {
     // given
-    when(ruleRepository.findAll()).thenReturn(List.of());
+    when(studioRuleRepository.statistics()).thenReturn(new RuleStatistics(0, 0, 0, 0));
 
     // when
     DashboardStatsResponse stats = dashboardService.getStats();
@@ -84,21 +61,13 @@ class DashboardServiceTest {
   }
 
   @Test
-  @DisplayName("should count only non-null rule set IDs")
-  void shouldCountOnlyNonNullRuleSetIds() {
+  @DisplayName("should wrap storage failures")
+  void shouldWrapStorageFailures() {
     // given
-    List<RateLimitRule> rules =
-        List.of(
-            createTestRule("rule-1", true, "ruleset-a"),
-            createTestRule("rule-2", true, null),
-            createTestRule("rule-3", true, ""),
-            createTestRule("rule-4", true, "ruleset-a"));
-    when(ruleRepository.findAll()).thenReturn(rules);
+    when(studioRuleRepository.statistics()).thenThrow(new IllegalStateException("mongo down"));
 
-    // when
-    DashboardStatsResponse stats = dashboardService.getStats();
-
-    // then
-    assertThat(stats.totalRuleSets()).isEqualTo(1);
+    // when/then
+    assertThatThrownBy(() -> dashboardService.getStats())
+        .isInstanceOf(StorageOperationException.class);
   }
 }

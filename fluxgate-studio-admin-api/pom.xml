@@ -27,8 +27,8 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
 
-        <!-- FluxGate dependency -->
-        <fluxgate.version>0.2.0</fluxgate.version>
+        <!-- FluxGate dependency (latest published release) -->
+        <fluxgate.version>0.3.7</fluxgate.version>
 
         <!-- Plugin versions (aligned with fluxgate engine) -->
         <jacoco.version>0.8.12</jacoco.version>
@@ -96,10 +96,10 @@
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
 
-        <!-- FluxGate Spring Boot Starter (MongoDB AutoConfiguration) -->
+        <!-- FluxGate Spring Boot 3 Starter (MongoDB AutoConfiguration) -->
         <dependency>
             <groupId>io.github.openfluxgate</groupId>
-            <artifactId>fluxgate-spring-boot-starter</artifactId>
+            <artifactId>fluxgate-spring-boot3-starter</artifactId>
             <version>${fluxgate.version}</version>
             <exclusions>
                 <!-- Exclude Redis-related dependencies (not needed for Admin API) -->
@@ -135,6 +135,13 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Spring Security test support (@WithMockUser role based slice tests) -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
 
