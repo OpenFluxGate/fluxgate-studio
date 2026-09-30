@@ -1,5 +1,4 @@
 export { Badge } from './Badge';
-export { EnvSwitcher } from './EnvSwitcher';
 export { RuleCard } from './RuleCard';
 export { RuleFormPanel } from './RuleFormPanel';
 export { ScopeIcon } from './ScopeIcon';

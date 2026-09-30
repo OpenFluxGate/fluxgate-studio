@@ -2,7 +2,9 @@
 
 import React, { useState } from 'react';
 
-import { AlertTriangle, CheckCircle, Play, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Loader2, Play, XCircle } from 'lucide-react';
+
+import { simulateRule } from '@/lib/api';
 
 import { useTheme } from '../contexts/ThemeContext';
 import { type Rule, type SimulationResult } from '../types';
@@ -12,26 +14,77 @@ interface SimulationPanelProps {
   onClose: () => void;
 }
 
+/**
+ * Tokens a band offers to a burst spread over `seconds`, starting from a full bucket.
+ *
+ * Mirrors the server side computation in `RuleService.availableTokens` and is only used as a
+ * fallback when the simulate endpoint cannot be reached.
+ */
+function availableTokens(capacity: number, windowSeconds: number, seconds: number): number {
+  if (windowSeconds <= 0) {
+    return capacity;
+  }
+  return capacity + Math.floor((capacity * seconds) / windowSeconds);
+}
+
+/** Client-side fallback mirroring `POST /api/rules/{id}/simulate`. */
+export function simulateLocally(rule: Rule, requests: number, seconds: number): SimulationResult {
+  const bands = rule.bands.map((band) => {
+    const available = availableTokens(band.capacity, band.windowSeconds, seconds);
+    return {
+      label: band.label || `${band.capacity}-per-${band.windowSeconds}s`,
+      capacity: band.capacity,
+      available,
+      consumed: Math.min(requests, available),
+      remaining: Math.max(0, available - requests),
+      exceeded: requests > available,
+    };
+  });
+
+  const mostRestrictive = bands.length ? Math.min(...bands.map((band) => band.available)) : 0;
+
+  return {
+    allowed: bands.every((band) => !band.exceeded),
+    consumed: Math.min(requests, mostRestrictive),
+    remaining: Math.max(0, mostRestrictive - requests),
+    estimated: true,
+    bands,
+  };
+}
+
 export const SimulationPanel = ({ rule, onClose }: SimulationPanelProps) => {
   const { theme } = useTheme();
   const [key, setKey] = useState('192.168.1.100');
   const [path, setPath] = useState('/api/orders');
   const [burst, setBurst] = useState(15);
+  const [seconds, setSeconds] = useState(1);
+  const [running, setRunning] = useState(false);
   const [result, setResult] = useState<SimulationResult | null>(null);
 
-  const runSimulation = () => {
-    setResult({
-      allowed: burst <= 10,
-      consumed: Math.min(burst, 10),
-      remaining: Math.max(0, 10 - burst),
-      bands: rule.bands.map((band) => ({
-        label: band.label,
-        capacity: band.capacity,
-        consumed: Math.min(burst, band.capacity),
-        remaining: Math.max(0, band.capacity - burst),
-        exceeded: burst > band.capacity,
-      })),
-    });
+  const runSimulation = async () => {
+    setRunning(true);
+    try {
+      const simulation = await simulateRule(rule.id, burst, seconds);
+      setResult({
+        allowed: simulation.allowed,
+        consumed: simulation.consumed,
+        remaining: simulation.remaining,
+        bands: simulation.bands.map((band) => ({
+          label: band.label || `${band.capacity}-per-${band.windowSeconds}s`,
+          capacity: band.capacity,
+          available: band.available,
+          consumed: band.consumed,
+          remaining: band.remaining,
+          exceeded: band.exceeded,
+        })),
+      });
+    } catch (error) {
+      // The dry-run is pure arithmetic, so a failed call degrades to the same computation locally.
+      console.warn('Simulate endpoint unavailable, computing locally instead', error);
+      setResult(simulateLocally(rule, burst, seconds));
+    } finally {
+      setRunning(false);
+    }
   };
 
   return (
@@ -52,7 +105,9 @@ export const SimulationPanel = ({ rule, onClose }: SimulationPanelProps) => {
               <h2 className={`font-semibold ${theme.colors.textPrimary}`}>Simulation</h2>
             </div>
             <button
+              type="button"
               onClick={onClose}
+              aria-label="Close"
               className={`${theme.colors.textMuted} transition-colors hover:opacity-80`}
             >
               <XCircle size={20} />
@@ -63,10 +118,14 @@ export const SimulationPanel = ({ rule, onClose }: SimulationPanelProps) => {
 
         <div className="space-y-4 p-4">
           <div>
-            <label className={`block text-xs ${theme.colors.textTertiary} mb-1.5`}>
+            <label
+              htmlFor="simulation-key"
+              className={`block text-xs ${theme.colors.textTertiary} mb-1.5`}
+            >
               Key (IP / User ID / API Key)
             </label>
             <input
+              id="simulation-key"
               type="text"
               value={key}
               onChange={(e) => setKey(e.target.value)}
@@ -76,34 +135,70 @@ export const SimulationPanel = ({ rule, onClose }: SimulationPanelProps) => {
           </div>
 
           <div>
-            <label className={`block text-xs ${theme.colors.textTertiary} mb-1.5`}>Path</label>
+            <label
+              htmlFor="simulation-path"
+              className={`block text-xs ${theme.colors.textTertiary} mb-1.5`}
+            >
+              Path
+            </label>
             <input
+              id="simulation-path"
               type="text"
               value={path}
               onChange={(e) => setPath(e.target.value)}
               className={`w-full px-3 py-2 ${theme.colors.bgInput} ${theme.colors.border} rounded-lg border text-sm ${theme.colors.textPrimary} placeholder-slate-500 focus:outline-none ${theme.colors.borderFocus}`}
               placeholder="e.g., /api/orders"
             />
+            <p className={`mt-1 text-[10px] ${theme.colors.textMuted}`}>
+              The dry-run is computed from the rule&apos;s bands and does not read live bucket
+              state, so key and path are context for you rather than inputs to the calculation.
+            </p>
           </div>
 
-          <div>
-            <label className={`block text-xs ${theme.colors.textTertiary} mb-1.5`}>
-              Burst Count
-            </label>
-            <input
-              type="number"
-              value={burst}
-              onChange={(e) => setBurst(parseInt(e.target.value) || 0)}
-              className={`w-full px-3 py-2 ${theme.colors.bgInput} ${theme.colors.border} rounded-lg border text-sm ${theme.colors.textPrimary} placeholder-slate-500 focus:outline-none ${theme.colors.borderFocus}`}
-              min="1"
-              max="1000"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label
+                htmlFor="simulation-burst"
+                className={`block text-xs ${theme.colors.textTertiary} mb-1.5`}
+              >
+                Burst Count
+              </label>
+              <input
+                id="simulation-burst"
+                type="number"
+                value={burst}
+                onChange={(e) => setBurst(parseInt(e.target.value, 10) || 0)}
+                className={`w-full px-3 py-2 ${theme.colors.bgInput} ${theme.colors.border} rounded-lg border text-sm ${theme.colors.textPrimary} placeholder-slate-500 focus:outline-none ${theme.colors.borderFocus}`}
+                min="1"
+                max="1000"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="simulation-seconds"
+                className={`block text-xs ${theme.colors.textTertiary} mb-1.5`}
+              >
+                Over (sec)
+              </label>
+              <input
+                id="simulation-seconds"
+                type="number"
+                value={seconds}
+                onChange={(e) => setSeconds(parseInt(e.target.value, 10) || 1)}
+                className={`w-full px-3 py-2 ${theme.colors.bgInput} ${theme.colors.border} rounded-lg border text-sm ${theme.colors.textPrimary} placeholder-slate-500 focus:outline-none ${theme.colors.borderFocus}`}
+                min="1"
+                max="86400"
+              />
+            </div>
           </div>
 
           <button
+            type="button"
             onClick={runSimulation}
-            className={`w-full bg-gradient-to-r py-2.5 ${theme.colors.gradientPrimary} rounded-lg font-medium text-white transition-all duration-200 hover:opacity-90 ${theme.colors.shadowAccent}`}
+            disabled={running}
+            className={`flex w-full items-center justify-center gap-2 bg-gradient-to-r py-2.5 ${theme.colors.gradientPrimary} rounded-lg font-medium text-white transition-all duration-200 hover:opacity-90 disabled:opacity-60 ${theme.colors.shadowAccent}`}
           >
+            {running && <Loader2 size={16} className="animate-spin" />}
             Run Simulation
           </button>
 
@@ -122,6 +217,11 @@ export const SimulationPanel = ({ rule, onClose }: SimulationPanelProps) => {
                 >
                   {result.allowed ? 'Request Allowed' : 'Rate Limit Exceeded'}
                 </span>
+                {result.estimated && (
+                  <span className={`text-[10px] ${theme.colors.textMuted} uppercase`}>
+                    estimated locally
+                  </span>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -137,14 +237,14 @@ export const SimulationPanel = ({ rule, onClose }: SimulationPanelProps) => {
                             band.exceeded ? 'bg-red-500' : 'bg-cyan-500'
                           }`}
                           style={{
-                            width: `${Math.min(100, (band.consumed / band.capacity) * 100)}%`,
+                            width: `${Math.min(100, (band.consumed / Math.max(1, band.available)) * 100)}%`,
                           }}
                         />
                       </div>
                       <span
                         className={`font-mono text-xs ${band.exceeded ? theme.colors.danger : theme.colors.textSecondary}`}
                       >
-                        {band.consumed}/{band.capacity}
+                        {band.consumed}/{band.available}
                       </span>
                     </div>
                   </div>

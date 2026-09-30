@@ -22,7 +22,17 @@ export interface Rule {
   ruleSetId: string | null;
   tags: string[];
   attributes: Record<string, unknown>;
+  /** Optimistic locking token; 0 for a rule that has not been saved yet. */
+  version: number;
 }
+
+/**
+ * Per-field validation messages, keyed by form field name.
+ *
+ * Band fields use the `bands[<index>].<field>` key shape used by the server's
+ * `ErrorResponse.details`.
+ */
+export type FieldErrors = Record<string, string>;
 
 export interface Stats {
   totalRules: number;
@@ -96,9 +106,12 @@ export interface SimulationResult {
   allowed: boolean;
   consumed: number;
   remaining: number;
+  /** True when the numbers were computed in the browser because the API call failed. */
+  estimated?: boolean;
   bands: {
     label: string;
     capacity: number;
+    available: number;
     consumed: number;
     remaining: number;
     exceeded: boolean;

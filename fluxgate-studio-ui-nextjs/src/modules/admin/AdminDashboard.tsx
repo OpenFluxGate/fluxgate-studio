@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { signOut, useSession } from 'next-auth/react';
 
@@ -19,10 +19,14 @@ import {
 } from 'lucide-react';
 
 import {
+  ApiError,
   createRule as apiCreateRule,
+  type CreateRuleRequest,
   deleteRule as apiDeleteRule,
+  exportRules as apiExportRules,
   fetchDashboardStats,
   fetchRules,
+  importRules as apiImportRules,
   toggleRule as apiToggleRule,
   updateRule as apiUpdateRule,
 } from '@/lib/api';
@@ -42,7 +46,22 @@ import {
   ThemeSwitcher,
 } from './components';
 import { useTheme } from './contexts/ThemeContext';
-import { type Rule, type Stats } from './types';
+import { type FieldErrors, type Rule, type Stats } from './types';
+
+/**
+ * Turns the server's `ErrorResponse.details` entries (`"name: name is required"`) into the
+ * per-field map the rule form renders inline.
+ */
+function toFieldErrors(details: string[]): FieldErrors {
+  const errors: FieldErrors = {};
+  for (const detail of details) {
+    const separator = detail.indexOf(':');
+    if (separator > 0) {
+      errors[detail.slice(0, separator).trim()] = detail.slice(separator + 1).trim();
+    }
+  }
+  return errors;
+}
 
 export const AdminDashboard = () => {
   const { theme } = useTheme();
@@ -55,6 +74,9 @@ export const AdminDashboard = () => {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [formErrors, setFormErrors] = useState<FieldErrors>({});
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -103,6 +125,7 @@ export const AdminDashboard = () => {
 
   const handleSave = async (data: Partial<Rule> & { id: string }) => {
     try {
+      setFormErrors({});
       if (selectedRule) {
         // Update existing rule
         const updatedRule = await apiUpdateRule(data.id, mapRuleToUpdateRequest(data));
@@ -118,7 +141,65 @@ export const AdminDashboard = () => {
       setShowForm(false);
       setSelectedRule(null);
     } catch (err) {
+      if (err instanceof ApiError && err.details.length > 0) {
+        setFormErrors(toFieldErrors(err.details));
+      }
       setError(err instanceof Error ? err.message : 'Failed to save rule');
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const exported = await apiExportRules();
+      const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `fluxgate-rules-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setNotice(`Exported ${exported.length} rule(s).`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export rules');
+    }
+  };
+
+  const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    // Reset the input so selecting the same file again re-triggers the change event.
+    event.target.value = '';
+    if (!file) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(await file.text());
+      const payload: CreateRuleRequest[] = Array.isArray(parsed) ? parsed : parsed.rules;
+      if (!Array.isArray(payload) || payload.length === 0) {
+        setError('The selected file does not contain a rule array.');
+        return;
+      }
+      const confirmed = window.confirm(
+        `Import ${payload.length} rule(s) from "${file.name}"? Rules with an existing id will be` +
+          ' overwritten.'
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      const result = await apiImportRules(payload);
+      setNotice(
+        `Imported ${result.total} rule(s): ${result.created} created, ${result.updated} updated.`
+      );
+      await loadData();
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        setError('The selected file is not valid JSON.');
+        return;
+      }
+      setError(err instanceof Error ? err.message : 'Failed to import rules');
     }
   };
 
@@ -223,6 +304,23 @@ export const AdminDashboard = () => {
             </div>
           )}
 
+          {/* Notice Banner */}
+          {notice && (
+            <div
+              className={`mb-6 p-4 ${theme.colors.successBg} ${theme.colors.successBorder} flex items-center gap-3 rounded-lg border`}
+            >
+              <span className={theme.colors.success}>{notice}</span>
+              <button
+                type="button"
+                onClick={() => setNotice(null)}
+                aria-label="Dismiss"
+                className={`ml-auto ${theme.colors.success} hover:opacity-70`}
+              >
+                ×
+              </button>
+            </div>
+          )}
+
           {/* Loading State */}
           {loading && !stats && (
             <div className="flex items-center justify-center py-20">
@@ -280,20 +378,35 @@ export const AdminDashboard = () => {
 
                   <div className="flex items-center gap-2">
                     <button
+                      type="button"
+                      onClick={handleExport}
                       className={`flex items-center gap-1.5 px-3 py-2 text-sm ${theme.colors.textTertiary} ${theme.colors.bgCardHover} rounded-lg transition-colors`}
                     >
                       <Download size={14} />
                       Export
                     </button>
+                    <input
+                      ref={importInputRef}
+                      type="file"
+                      accept="application/json,.json"
+                      onChange={handleImportFile}
+                      className="hidden"
+                      aria-hidden="true"
+                      tabIndex={-1}
+                    />
                     <button
+                      type="button"
+                      onClick={() => importInputRef.current?.click()}
                       className={`flex items-center gap-1.5 px-3 py-2 text-sm ${theme.colors.textTertiary} ${theme.colors.bgCardHover} rounded-lg transition-colors`}
                     >
                       <Upload size={14} />
                       Import
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         setSelectedRule(null);
+                        setFormErrors({});
                         setShowForm(true);
                       }}
                       className={`flex items-center gap-1.5 bg-gradient-to-r px-4 py-2 ${theme.colors.gradientPrimary} rounded-lg text-sm font-medium text-white transition-all hover:opacity-90 ${theme.colors.shadowAccent}`}
@@ -314,6 +427,7 @@ export const AdminDashboard = () => {
                     rule={rule}
                     onEdit={(r) => {
                       setSelectedRule(r);
+                      setFormErrors({});
                       setShowForm(true);
                     }}
                     onSimulate={(r) => {
@@ -335,8 +449,10 @@ export const AdminDashboard = () => {
                     {searchQuery ? 'No rules match your search' : 'No rules found'}
                   </p>
                   <button
+                    type="button"
                     onClick={() => {
                       setSelectedRule(null);
+                      setFormErrors({});
                       setShowForm(true);
                     }}
                     className={`mt-4 text-sm ${theme.colors.accent}`}
@@ -362,9 +478,11 @@ export const AdminDashboard = () => {
         {showForm && (
           <RuleFormPanel
             rule={selectedRule}
+            serverErrors={formErrors}
             onClose={() => {
               setShowForm(false);
               setSelectedRule(null);
+              setFormErrors({});
             }}
             onSave={handleSave}
           />

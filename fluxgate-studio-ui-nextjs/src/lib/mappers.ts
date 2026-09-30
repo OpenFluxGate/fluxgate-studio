@@ -14,6 +14,7 @@ export function mapApiRuleToRule(apiRule: ApiRule): Rule {
     ruleSetId: apiRule.ruleSetId,
     tags: apiRule.tags || [],
     attributes: apiRule.attributes || {},
+    version: apiRule.version ?? 0,
   };
 }
 
@@ -61,5 +62,6 @@ export function mapRuleToUpdateRequest(rule: Partial<Rule>) {
     ruleSetId: rule.ruleSetId || undefined,
     tags: rule.tags || [],
     attributes: rule.attributes || {},
+    version: rule.version ?? 0,
   };
 }
