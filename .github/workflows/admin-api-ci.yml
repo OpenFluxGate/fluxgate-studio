@@ -1,5 +1,7 @@
 name: Admin API CI
 
+# Single source of truth for the Admin API checks (the former build.yml has been merged into this
+# file and ui-ci.yml, so spotless and the full verify with the coverage gate always run together).
 on:
   push:
     branches: [ "main", "development/**" ]
@@ -50,13 +52,13 @@ jobs:
           cache: maven
 
       - name: Check code style
-        run: mvn -B spotless:check
+        run: ./mvnw -B -ntp spotless:check
 
       - name: Build (skip tests first)
-        run: mvn -B compile -DskipTests
+        run: ./mvnw -B -ntp compile -DskipTests
 
-      - name: Run tests with coverage
-        run: mvn -B verify
+      - name: Run tests with coverage gate
+        run: ./mvnw -B -ntp verify
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

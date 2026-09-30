@@ -1,5 +1,7 @@
 name: UI CI
 
+# Single source of truth for the UI checks (the former build.yml has been merged into this file
+# and admin-api-ci.yml, so lint, typecheck and build always run together).
 on:
   push:
     branches: [ "main", "development/**" ]
@@ -26,7 +28,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: fluxgate-studio-ui-nextjs/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -34,5 +38,16 @@ jobs:
       - name: Run linter
         run: npm run lint
 
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Type check
+        run: npm run typecheck
+
       - name: Build
         run: npm run build
+
+      - name: Audit dependencies
+        # Advisory only: a newly published CVE must not block an unrelated pull request.
+        continue-on-error: true
+        run: npm audit --audit-level=high
