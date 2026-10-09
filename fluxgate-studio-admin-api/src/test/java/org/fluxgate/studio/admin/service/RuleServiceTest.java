@@ -290,6 +290,7 @@ class RuleServiceTest {
               List.of("api", "v1"),
               null);
       when(ruleRepository.existsById("new-rule")).thenReturn(false);
+      when(studioRuleRepository.insertIfAbsent(any())).thenReturn(true);
 
       // when
       RuleResponse result = ruleService.createRule(request);
@@ -299,7 +300,7 @@ class RuleServiceTest {
       assertThat(result.name()).isEqualTo("New Rule");
       assertThat(result.version()).isEqualTo(1L);
       assertThat(result.tags()).containsExactly("api", "v1");
-      verify(ruleRepository).save(any(RateLimitRule.class));
+      verify(studioRuleRepository).insertIfAbsent(any(RateLimitRule.class));
     }
 
     @Test
@@ -702,6 +703,9 @@ class RuleServiceTest {
       when(ruleRepository.findById("existing-rule"))
           .thenReturn(Optional.of(createTestRule("existing-rule", "Existing", true, 6L)));
 
+      when(studioRuleRepository.insertIfAbsent(any())).thenReturn(true);
+      when(studioRuleRepository.replaceIfVersionMatches(any(), eq(6L))).thenReturn(true);
+
       // when
       ImportResultResponse result = ruleService.importRules(List.of(newRule, existingRule));
 
@@ -709,7 +713,9 @@ class RuleServiceTest {
       assertThat(result.total()).isEqualTo(2);
       assertThat(result.created()).isEqualTo(1);
       assertThat(result.updated()).isEqualTo(1);
-      verify(ruleRepository, org.mockito.Mockito.times(2)).save(any(RateLimitRule.class));
+      verify(studioRuleRepository).insertIfAbsent(any());
+      verify(studioRuleRepository).replaceIfVersionMatches(any(), eq(6L));
+      verify(ruleRepository, never()).save(any());
     }
 
     @Test

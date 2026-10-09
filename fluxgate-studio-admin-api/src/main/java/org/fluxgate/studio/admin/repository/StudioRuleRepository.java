@@ -37,6 +37,9 @@ public interface StudioRuleRepository {
    */
   RuleStatistics statistics();
 
+  /** Inserts a new rule without replacing an existing policy with the same id. */
+  boolean insertIfAbsent(RateLimitRule rule);
+
   /**
    * Replace a rule only when the stored optimistic locking token still matches.
    *

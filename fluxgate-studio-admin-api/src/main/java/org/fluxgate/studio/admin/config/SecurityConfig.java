@@ -132,6 +132,14 @@ public class SecurityConfig {
                     // Read-only dry-run, deliberately available to the read-only role
                     .requestMatchers(HttpMethod.POST, "/api/rules/*/simulate")
                     .hasAnyRole(ROLE_USER, ROLE_ADMIN)
+                    .requestMatchers(HttpMethod.POST, "/api/rule-sets/**")
+                    .hasRole(ROLE_ADMIN)
+                    .requestMatchers(HttpMethod.PUT, "/api/rule-sets/**")
+                    .hasRole(ROLE_ADMIN)
+                    .requestMatchers(HttpMethod.PATCH, "/api/rule-sets/**")
+                    .hasRole(ROLE_ADMIN)
+                    .requestMatchers(HttpMethod.DELETE, "/api/rule-sets/**")
+                    .hasRole(ROLE_ADMIN)
                     // Mutating rule endpoints are admin only
                     .requestMatchers(HttpMethod.POST, RULES_PATTERN)
                     .hasRole(ROLE_ADMIN)

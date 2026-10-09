@@ -79,6 +79,7 @@ class MongoStudioRuleRepositoryTest {
   private FindIterable<Document> stubFind(List<Document> documents) {
     FindIterable<Document> iterable = mock(FindIterable.class);
     when(collection.find(any(Bson.class))).thenReturn(iterable);
+    when(iterable.first()).thenReturn(documents.isEmpty() ? null : documents.getFirst());
     when(iterable.sort(any(Bson.class))).thenReturn(iterable);
     when(iterable.skip(anyInt())).thenReturn(iterable);
     when(iterable.limit(anyInt())).thenReturn(iterable);
@@ -170,6 +171,7 @@ class MongoStudioRuleRepositoryTest {
   @DisplayName("should replace the rule when the stored version matches")
   void shouldReplaceWhenVersionMatches() {
     // given
+    stubFind(List.of(ruleDocument("rule-1", true, 2L)));
     UpdateResult result = mock(UpdateResult.class);
     when(result.getMatchedCount()).thenReturn(1L);
     when(collection.replaceOne(any(Bson.class), any(Document.class))).thenReturn(result);
@@ -181,13 +183,14 @@ class MongoStudioRuleRepositoryTest {
     assertThat(replaced).isTrue();
     ArgumentCaptor<Bson> filter = ArgumentCaptor.forClass(Bson.class);
     verify(collection).replaceOne(filter.capture(), any(Document.class));
-    assertThat(filter.getValue().toString()).contains("attributes.version");
+    assertThat(filter.getValue().toString()).contains("$expr").contains("$literal");
   }
 
   @Test
   @DisplayName("should report a mismatch when nothing was replaced")
   void shouldReportMismatch() {
     // given
+    stubFind(List.of(ruleDocument("rule-1", true, 2L)));
     UpdateResult result = mock(UpdateResult.class);
     when(result.getMatchedCount()).thenReturn(0L);
     when(collection.replaceOne(any(Bson.class), any(Document.class))).thenReturn(result);
@@ -200,11 +203,10 @@ class MongoStudioRuleRepositoryTest {
   @DisplayName("should adopt rules written before versioning was introduced")
   void shouldAdoptUnversionedRules() {
     // given
-    UpdateResult miss = mock(UpdateResult.class);
-    when(miss.getMatchedCount()).thenReturn(0L);
+    stubFind(List.of(ruleDocument("rule-1", true, null)));
     UpdateResult hit = mock(UpdateResult.class);
     when(hit.getMatchedCount()).thenReturn(1L);
-    when(collection.replaceOne(any(Bson.class), any(Document.class))).thenReturn(miss, hit);
+    when(collection.replaceOne(any(Bson.class), any(Document.class))).thenReturn(hit);
 
     // when
     boolean replaced =

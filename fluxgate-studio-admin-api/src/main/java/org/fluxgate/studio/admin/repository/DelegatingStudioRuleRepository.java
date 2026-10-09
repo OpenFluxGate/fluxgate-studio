@@ -51,6 +51,15 @@ public class DelegatingStudioRuleRepository implements StudioRuleRepository {
   }
 
   @Override
+  public synchronized boolean insertIfAbsent(RateLimitRule rule) {
+    if (ruleRepository.existsById(rule.getId())) {
+      return false;
+    }
+    ruleRepository.save(rule);
+    return true;
+  }
+
+  @Override
   public boolean replaceIfVersionMatches(RateLimitRule rule, long expectedVersion) {
     Optional<RateLimitRule> stored = ruleRepository.findById(rule.getId());
     if (stored.isEmpty() || RuleVersions.versionOf(stored.get()) != expectedVersion) {

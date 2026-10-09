@@ -15,6 +15,12 @@ import org.fluxgate.studio.admin.validation.EnumValue;
  *
  * <p>{@link #version()} carries the optimistic locking token returned by the previous read. It may
  * be omitted when the {@code If-Match} request header is used instead.
+ *
+ * <p>This editor changes only the fields declared here. MongoDB matcher, priority, access-control,
+ * algorithm, calendar and unknown extension fields are preserved. Keep each extended band's label
+ * stable; ambiguous renames/removals and calendar-duration changes require an extended editor and
+ * are rejected rather than silently discarding policy metadata. Attributes are merged with stored
+ * attributes so omitted extension values survive an edit.
  */
 public record UpdateRuleRequest(
     @NotBlank(message = "name is required") String name,

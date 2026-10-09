@@ -146,7 +146,9 @@ public class RuleService {
       }
 
       RateLimitRule rule = toEntity(request, RuleVersions.INITIAL_VERSION + 1);
-      ruleRepository.save(rule);
+      if (!studioRuleRepository.insertIfAbsent(rule)) {
+        throw new RuleAlreadyExistsException(request.id());
+      }
       log.info("Rule created: {}", request.id());
       return toResponse(rule);
     } catch (RuleAlreadyExistsException e) {
@@ -300,13 +302,24 @@ public class RuleService {
             existing
                 .map(rule -> RuleVersions.versionOf(rule) + 1)
                 .orElse(RuleVersions.INITIAL_VERSION + 1);
-        ruleRepository.save(toEntity(request, nextVersion));
         if (existing.isPresent()) {
+          long expectedVersion = RuleVersions.versionOf(existing.get());
+          if (!replaceOrThrow(toEntity(request, nextVersion), expectedVersion)) {
+            throw new RuleVersionMismatchException(
+                request.id(),
+                expectedVersion,
+                RuleVersions.versionOf(findRuleOrThrow(request.id())));
+          }
           updated++;
         } else {
+          if (!studioRuleRepository.insertIfAbsent(toEntity(request, nextVersion))) {
+            throw new RuleAlreadyExistsException(request.id());
+          }
           created++;
         }
       }
+    } catch (InvalidRuleException | RuleVersionMismatchException | RuleAlreadyExistsException e) {
+      throw e;
     } catch (Exception e) {
       throw new StorageOperationException("import", e.getMessage(), e);
     }
@@ -400,6 +413,8 @@ public class RuleService {
   private boolean replaceOrThrow(RateLimitRule rule, long expectedVersion) {
     try {
       return studioRuleRepository.replaceIfVersionMatches(rule, expectedVersion);
+    } catch (InvalidRuleException e) {
+      throw e;
     } catch (Exception e) {
       throw new StorageOperationException("update", e.getMessage(), e);
     }
