@@ -3,6 +3,7 @@ package org.fluxgate.studio.admin.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
+import com.mongodb.WriteConcern;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import org.bson.Document;
@@ -16,6 +17,7 @@ class PolicyRepositoryConfigTest {
     MongoDatabase db = mock(MongoDatabase.class);
     MongoCollection<Document> collection = mock(MongoCollection.class, RETURNS_SELF);
     when(db.getCollection(anyString())).thenReturn(collection);
+    when(db.getWriteConcern()).thenReturn(WriteConcern.ACKNOWLEDGED);
     new ApplicationContextRunner()
         .withUserConfiguration(PolicyRepositoryConfig.class)
         .withBean("fluxgateMongoDatabase", MongoDatabase.class, () -> db)
