@@ -150,9 +150,14 @@ public class RuleController {
     @ApiResponse(responseCode = "404", description = "Rule not found")
   })
   public ResponseEntity<RuleResponse> getRule(
-      @Parameter(description = "Rule ID", required = true) @PathVariable String id) {
+      @Parameter(description = "Rule ID", required = true) @PathVariable String id,
+      @RequestParam(required = false) String ruleSetId,
+      @RequestParam(required = false) String unassigned) {
     log.debug("GET /api/rules/{}", id);
-    return ResponseEntity.ok(ruleService.getRuleById(id));
+    return ResponseEntity.ok(
+        scoped(ruleSetId, unassigned)
+            ? ruleService.getRuleById(ruleSetId, id)
+            : ruleService.getRuleById(id));
   }
 
   @PostMapping("/{id}/simulate")
@@ -170,9 +175,14 @@ public class RuleController {
   })
   public ResponseEntity<SimulationResponse> simulateRule(
       @Parameter(description = "Rule ID", required = true) @PathVariable String id,
-      @Valid @RequestBody SimulateRequest request) {
+      @Valid @RequestBody SimulateRequest request,
+      @RequestParam(required = false) String ruleSetId,
+      @RequestParam(required = false) String unassigned) {
     log.debug("POST /api/rules/{}/simulate", id);
-    return ResponseEntity.ok(ruleService.simulate(id, request));
+    return ResponseEntity.ok(
+        scoped(ruleSetId, unassigned)
+            ? ruleService.simulate(ruleSetId, id, request)
+            : ruleService.simulate(id, request));
   }
 
   @PostMapping
@@ -218,9 +228,14 @@ public class RuleController {
       @Parameter(description = "Expected rule version, optionally quoted as an ETag")
           @RequestHeader(value = HttpHeaders.IF_MATCH, required = false)
           String ifMatch,
-      @Valid @RequestBody UpdateRuleRequest request) {
+      @Valid @RequestBody UpdateRuleRequest request,
+      @RequestParam(required = false) String ruleSetId,
+      @RequestParam(required = false) String unassigned) {
     log.debug("PUT /api/rules/{} - ifMatch={}", id, ifMatch);
-    RuleResponse updated = ruleService.updateRule(id, request, parseIfMatch(ifMatch));
+    RuleResponse updated =
+        scoped(ruleSetId, unassigned)
+            ? ruleService.updateRule(ruleSetId, id, request, parseIfMatch(ifMatch))
+            : ruleService.updateRule(id, request, parseIfMatch(ifMatch));
     return ResponseEntity.ok().eTag(String.valueOf(updated.version())).body(updated);
   }
 
@@ -259,9 +274,12 @@ public class RuleController {
     @ApiResponse(responseCode = "404", description = "Rule not found")
   })
   public ResponseEntity<Void> deleteRule(
-      @Parameter(description = "Rule ID", required = true) @PathVariable String id) {
+      @Parameter(description = "Rule ID", required = true) @PathVariable String id,
+      @RequestParam(required = false) String ruleSetId,
+      @RequestParam(required = false) String unassigned) {
     log.debug("DELETE /api/rules/{}", id);
-    ruleService.deleteRule(id);
+    if (scoped(ruleSetId, unassigned)) ruleService.deleteRule(ruleSetId, id);
+    else ruleService.deleteRule(id);
     return ResponseEntity.noContent().build();
   }
 
@@ -279,9 +297,14 @@ public class RuleController {
     @ApiResponse(responseCode = "409", description = "Rule was modified concurrently")
   })
   public ResponseEntity<RuleResponse> toggleRule(
-      @Parameter(description = "Rule ID", required = true) @PathVariable String id) {
+      @Parameter(description = "Rule ID", required = true) @PathVariable String id,
+      @RequestParam(required = false) String ruleSetId,
+      @RequestParam(required = false) String unassigned) {
     log.debug("PATCH /api/rules/{}/toggle", id);
-    return ResponseEntity.ok(ruleService.toggleRule(id));
+    return ResponseEntity.ok(
+        scoped(ruleSetId, unassigned)
+            ? ruleService.toggleRule(ruleSetId, id)
+            : ruleService.toggleRule(id));
   }
 
   @DeleteMapping
@@ -300,5 +323,16 @@ public class RuleController {
             "message", "Rules deleted successfully",
             "ruleSetId", ruleSetId,
             "deletedCount", count));
+  }
+
+  private boolean scoped(String ruleSetId, String unassigned) {
+    if (ruleSetId != null && ruleSetId.isBlank()) {
+      throw new InvalidRuleException("ruleSetId", "must not be empty");
+    }
+    if (unassigned != null && (!"true".equals(unassigned) || ruleSetId != null)) {
+      throw new InvalidRuleException(
+          "unassigned", "must be true and mutually exclusive with ruleSetId");
+    }
+    return ruleSetId != null || "true".equals(unassigned);
   }
 }

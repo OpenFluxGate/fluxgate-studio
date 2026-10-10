@@ -46,6 +46,7 @@ import {
   ThemeSwitcher,
 } from './components';
 import { useTheme } from './contexts/ThemeContext';
+import { ruleIdentity } from './types';
 import { type FieldErrors, type Rule, type Stats } from './types';
 
 /**
@@ -102,19 +103,23 @@ export const AdminDashboard = () => {
       rule.id.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleToggle = async (id: string) => {
+  const handleToggle = async (rule: Rule) => {
     try {
-      const updatedRule = await apiToggleRule(id);
-      setRules(rules.map((r) => (r.id === id ? mapApiRuleToRule(updatedRule) : r)));
+      const updatedRule = await apiToggleRule(rule.id, rule.ruleSetId);
+      setRules(
+        rules.map((r) =>
+          ruleIdentity(r) === ruleIdentity(rule) ? mapApiRuleToRule(updatedRule) : r
+        )
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to toggle rule');
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (rule: Rule) => {
     try {
-      await apiDeleteRule(id);
-      setRules(rules.filter((r) => r.id !== id));
+      await apiDeleteRule(rule.id, rule.ruleSetId);
+      setRules(rules.filter((r) => ruleIdentity(r) !== ruleIdentity(rule)));
       // Refresh stats
       const statsData = await fetchDashboardStats();
       setStats(mapApiStatsToStats(statsData));
@@ -128,8 +133,16 @@ export const AdminDashboard = () => {
       setFormErrors({});
       if (selectedRule) {
         // Update existing rule
-        const updatedRule = await apiUpdateRule(data.id, mapRuleToUpdateRequest(data));
-        setRules(rules.map((r) => (r.id === data.id ? mapApiRuleToRule(updatedRule) : r)));
+        const updatedRule = await apiUpdateRule(
+          data.id,
+          mapRuleToUpdateRequest(data),
+          selectedRule.ruleSetId
+        );
+        setRules(
+          rules.map((r) =>
+            ruleIdentity(r) === ruleIdentity(selectedRule) ? mapApiRuleToRule(updatedRule) : r
+          )
+        );
       } else {
         // Create new rule
         const newRule = await apiCreateRule(mapRuleToCreateRequest(data));
@@ -423,7 +436,7 @@ export const AdminDashboard = () => {
               <div className="grid grid-cols-2 gap-4">
                 {filteredRules.map((rule) => (
                   <RuleCard
-                    key={rule.id}
+                    key={ruleIdentity(rule)}
                     rule={rule}
                     onEdit={(r) => {
                       setSelectedRule(r);

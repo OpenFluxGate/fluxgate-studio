@@ -9,7 +9,6 @@ import static org.mockito.Mockito.when;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import org.fluxgate.core.config.LimitScope;
 import org.fluxgate.core.config.OnLimitExceedPolicy;
 import org.fluxgate.core.config.RateLimitBand;
@@ -122,8 +121,7 @@ class DelegatingStudioRuleRepositoryTest {
   @DisplayName("should replace when the stored version matches")
   void shouldReplaceWhenVersionMatches() {
     // given
-    when(ruleRepository.findById("rule-1"))
-        .thenReturn(Optional.of(rule("rule-1", true, "set-a", 2L)));
+    when(ruleRepository.findAll()).thenReturn(List.of(rule("rule-1", true, "set-a", 2L)));
 
     // when
     boolean replaced = repository.replaceIfVersionMatches(rule("rule-1", true, "set-a", 3L), 2L);
@@ -137,8 +135,7 @@ class DelegatingStudioRuleRepositoryTest {
   @DisplayName("should refuse to replace when the stored version differs")
   void shouldRefuseOnVersionMismatch() {
     // given
-    when(ruleRepository.findById("rule-1"))
-        .thenReturn(Optional.of(rule("rule-1", true, "set-a", 5L)));
+    when(ruleRepository.findAll()).thenReturn(List.of(rule("rule-1", true, "set-a", 5L)));
 
     // when/then
     assertThat(repository.replaceIfVersionMatches(rule("rule-1", true, "set-a", 3L), 2L)).isFalse();
@@ -149,10 +146,32 @@ class DelegatingStudioRuleRepositoryTest {
   @DisplayName("should refuse to replace a rule that no longer exists")
   void shouldRefuseWhenRuleIsGone() {
     // given
-    when(ruleRepository.findById("rule-1")).thenReturn(Optional.empty());
+    when(ruleRepository.findAll()).thenReturn(List.of());
 
     // when/then
     assertThat(repository.replaceIfVersionMatches(rule("rule-1", true, "set-a", 3L), 2L)).isFalse();
+    verify(ruleRepository, never()).save(any());
+  }
+
+  @Test
+  void fallbackFindsNullPairButRefusesAmbiguousGlobalWrites() {
+    var assigned = rule("shared", true, "a", 1L);
+    var unassigned = rule("shared", true, null, 1L);
+    when(ruleRepository.findAll()).thenReturn(List.of(assigned, unassigned));
+    assertThat(repository.findById(null, "shared")).contains(unassigned);
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> repository.deleteById("a", "shared"))
+        .isInstanceOf(org.fluxgate.studio.admin.exception.AmbiguousRuleException.class);
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+            () -> repository.replaceIfVersionMatches(assigned, 1L))
+        .isInstanceOf(org.fluxgate.studio.admin.exception.AmbiguousRuleException.class);
+    verify(ruleRepository, never()).deleteById(org.mockito.ArgumentMatchers.anyString());
+    verify(ruleRepository, never()).save(any());
+  }
+
+  @Test
+  void fallbackRejectsDuplicateGlobalIdentityWithoutClaimingScopedPersistence() {
+    when(ruleRepository.existsById("shared")).thenReturn(true);
+    assertThat(repository.insertIfAbsent(rule("shared", true, "new-set", 1L))).isFalse();
     verify(ruleRepository, never()).save(any());
   }
 }

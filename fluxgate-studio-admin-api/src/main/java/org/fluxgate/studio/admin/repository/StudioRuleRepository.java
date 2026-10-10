@@ -1,6 +1,7 @@
 package org.fluxgate.studio.admin.repository;
 
 import java.util.List;
+import java.util.Optional;
 import org.fluxgate.core.config.RateLimitRule;
 
 /**
@@ -37,7 +38,21 @@ public interface StudioRuleRepository {
    */
   RuleStatistics statistics();
 
-  /** Inserts a new rule without replacing an existing policy with the same id. */
+  /** Storage-specific identity normalization (Mongo maps absent sets to default). */
+  default String normalizeRuleSetId(String ruleSetId) {
+    return ruleSetId;
+  }
+
+  /** Resolves a legacy ID, refusing ambiguous matches. */
+  Optional<RateLimitRule> findById(String id);
+
+  /** Finds an exact pair; null identifies rules without a rule set. */
+  Optional<RateLimitRule> findById(String ruleSetId, String id);
+
+  /** Deletes an exact pair only. */
+  boolean deleteById(String ruleSetId, String id);
+
+  /** Inserts without replacing an existing policy with the same (ruleSetId, id). */
   boolean insertIfAbsent(RateLimitRule rule);
 
   /**

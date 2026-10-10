@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -28,6 +29,7 @@ import org.fluxgate.studio.admin.dto.response.PageResponse;
 import org.fluxgate.studio.admin.dto.response.RateBandResponse;
 import org.fluxgate.studio.admin.dto.response.RuleResponse;
 import org.fluxgate.studio.admin.dto.response.SimulationResponse;
+import org.fluxgate.studio.admin.exception.AmbiguousRuleException;
 import org.fluxgate.studio.admin.exception.GlobalExceptionHandler;
 import org.fluxgate.studio.admin.exception.RuleAlreadyExistsException;
 import org.fluxgate.studio.admin.exception.RuleNotFoundException;
@@ -600,5 +602,90 @@ class RuleControllerTest {
           .andExpect(jsonPath("$.details[0]").value("expectedVersion: 3"))
           .andExpect(jsonPath("$.details[1]").value("actualVersion: 5"));
     }
+  }
+
+  private List<org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder>
+      identityRequests() {
+    String update =
+        "{\"name\":\"Edited\",\"enabled\":true,\"scope\":\"GLOBAL\",\"keyStrategyId\":\"global\",\"onLimitExceedPolicy\":\"REJECT_REQUEST\",\"bands\":[{\"windowSeconds\":60,\"capacity\":10}],\"version\":1}";
+    return List.of(
+        get("/api/rules/shared"),
+        delete("/api/rules/shared"),
+        patch("/api/rules/shared/toggle"),
+        post("/api/rules/shared/simulate")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"requests\":1,\"seconds\":1}"),
+        put("/api/rules/shared").contentType(MediaType.APPLICATION_JSON).content(update));
+  }
+
+  @Test
+  void allIdentityRoutesRejectEmptyAndMutuallyExclusiveSelectorsBeforeServiceCalls()
+      throws Exception {
+    for (var request : identityRequests())
+      mockMvc.perform(request.param("ruleSetId", "")).andExpect(status().isBadRequest());
+    for (var request : identityRequests())
+      mockMvc.perform(request.param("unassigned", "")).andExpect(status().isBadRequest());
+    for (var request : identityRequests())
+      mockMvc.perform(request.param("unassigned", "false")).andExpect(status().isBadRequest());
+    for (var request : identityRequests())
+      mockMvc
+          .perform(request.param("ruleSetId", "set").param("unassigned", "true"))
+          .andExpect(status().isBadRequest());
+    verifyNoInteractions(ruleService);
+  }
+
+  @Test
+  void allIdentityRoutesForwardAssignedPairSelector() throws Exception {
+    when(ruleService.updateRule(eq("set"), eq("shared"), any(), any()))
+        .thenReturn(createTestRuleResponse("shared", "Edited", true));
+    for (var request : identityRequests())
+      mockMvc.perform(request.param("ruleSetId", "set")).andExpect(status().is2xxSuccessful());
+    verify(ruleService).getRuleById("set", "shared");
+    verify(ruleService).deleteRule("set", "shared");
+    verify(ruleService).toggleRule("set", "shared");
+    verify(ruleService).simulate(eq("set"), eq("shared"), any());
+    verify(ruleService).updateRule(eq("set"), eq("shared"), any(), any());
+  }
+
+  @Test
+  void allIdentityRoutesForwardExplicitUnassignedSelector() throws Exception {
+    when(ruleService.updateRule(org.mockito.ArgumentMatchers.isNull(), eq("shared"), any(), any()))
+        .thenReturn(createTestRuleResponse("shared", "Edited", true));
+    for (var request : identityRequests())
+      mockMvc.perform(request.param("unassigned", "true")).andExpect(status().is2xxSuccessful());
+    verify(ruleService).getRuleById(null, "shared");
+    verify(ruleService).deleteRule(null, "shared");
+    verify(ruleService).toggleRule(null, "shared");
+    verify(ruleService).simulate(org.mockito.ArgumentMatchers.isNull(), eq("shared"), any());
+    verify(ruleService)
+        .updateRule(org.mockito.ArgumentMatchers.isNull(), eq("shared"), any(), any());
+  }
+
+  @Test
+  void legacyAmbiguityIsTyped409OnEveryIdentityRoute() throws Exception {
+    when(ruleService.getRuleById("shared")).thenThrow(new AmbiguousRuleException());
+    doThrow(new AmbiguousRuleException()).when(ruleService).deleteRule("shared");
+    when(ruleService.toggleRule("shared")).thenThrow(new AmbiguousRuleException());
+    when(ruleService.simulate(eq("shared"), any())).thenThrow(new AmbiguousRuleException());
+    when(ruleService.updateRule(eq("shared"), any(), any()))
+        .thenThrow(new AmbiguousRuleException());
+    for (var request : identityRequests())
+      mockMvc.perform(request).andExpect(status().isConflict());
+  }
+
+  @Test
+  void blankCreationIdentityReturns400BeforeServiceAndImportWrites() throws Exception {
+    String body =
+        "{\"id\":\"shared\",\"name\":\"Rule\",\"enabled\":true,\"scope\":\"GLOBAL\",\"keyStrategyId\":\"global\",\"onLimitExceedPolicy\":\"REJECT_REQUEST\",\"bands\":[{\"windowSeconds\":60,\"capacity\":10}],\"ruleSetId\":\" \"}";
+    mockMvc
+        .perform(post("/api/rules").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isBadRequest());
+    mockMvc
+        .perform(
+            post("/api/rules/import")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"rules\":[" + body + "]}"))
+        .andExpect(status().isBadRequest());
+    verifyNoInteractions(ruleService);
   }
 }

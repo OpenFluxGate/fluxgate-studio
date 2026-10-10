@@ -41,6 +41,13 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()));
   }
 
+  @ExceptionHandler(AmbiguousRuleException.class)
+  public ResponseEntity<ErrorResponse> handleAmbiguousRule(
+      AmbiguousRuleException ex, HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(new ErrorResponse(409, "Conflict", ex.getMessage(), request.getRequestURI()));
+  }
+
   @ExceptionHandler(RuleAlreadyExistsException.class)
   public ResponseEntity<ErrorResponse> handleRuleAlreadyExists(
       RuleAlreadyExistsException ex, HttpServletRequest request) {

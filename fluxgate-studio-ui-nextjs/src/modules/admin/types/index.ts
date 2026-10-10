@@ -117,3 +117,8 @@ export interface SimulationResult {
     exceeded: boolean;
   }[];
 }
+
+/** Stable composite identity without delimiter collisions. */
+export function ruleIdentity(rule: Pick<Rule, 'id' | 'ruleSetId'>): string {
+  return JSON.stringify([rule.ruleSetId, rule.id]);
+}

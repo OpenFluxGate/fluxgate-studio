@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.mongodb.client.ListIndexesIterable;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoCursor;
 import org.bson.Document;
 import org.fluxgate.core.spi.RateLimitRuleRepository;
 import org.fluxgate.studio.admin.repository.DelegatingStudioRuleRepository;
@@ -24,7 +26,11 @@ class StudioRepositoryConfigTest {
   void shouldSelectMongoRepository() {
     // given
     ObjectProvider<MongoCollection<Document>> provider = mock(ObjectProvider.class);
-    when(provider.getIfAvailable()).thenReturn(mock(MongoCollection.class));
+    MongoCollection<Document> collection = mock(MongoCollection.class);
+    ListIndexesIterable<Document> indexes = mock(ListIndexesIterable.class);
+    when(collection.listIndexes()).thenReturn(indexes);
+    when(indexes.iterator()).thenReturn(mock(MongoCursor.class));
+    when(provider.getIfAvailable()).thenReturn(collection);
 
     // when
     StudioRuleRepository repository =

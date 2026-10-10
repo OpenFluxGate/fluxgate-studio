@@ -2,9 +2,11 @@ package org.fluxgate.studio.admin.repository;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import org.fluxgate.core.config.RateLimitRule;
 import org.fluxgate.core.spi.RateLimitRuleRepository;
+import org.fluxgate.studio.admin.exception.AmbiguousRuleException;
 
 /**
  * Fallback {@link StudioRuleRepository} for storage backends that only implement the core {@link
@@ -51,6 +53,34 @@ public class DelegatingStudioRuleRepository implements StudioRuleRepository {
   }
 
   @Override
+  public Optional<RateLimitRule> findById(String id) {
+    List<RateLimitRule> matches =
+        ruleRepository.findAll().stream().filter(rule -> id.equals(rule.getId())).limit(2).toList();
+    if (matches.size() > 1) throw new AmbiguousRuleException();
+    return matches.stream().findFirst();
+  }
+
+  @Override
+  public Optional<RateLimitRule> findById(String ruleSetId, String id) {
+    return (ruleSetId == null
+            ? ruleRepository.findAll()
+            : ruleRepository.findByRuleSetId(ruleSetId))
+        .stream()
+            .filter(
+                rule ->
+                    id.equals(rule.getId()) && Objects.equals(ruleSetId, rule.getRuleSetIdOrNull()))
+            .findFirst();
+  }
+
+  @Override
+  public synchronized boolean deleteById(String ruleSetId, String id) {
+    Optional<RateLimitRule> existing = findById(id);
+    return existing.isPresent()
+        && Objects.equals(ruleSetId, existing.get().getRuleSetIdOrNull())
+        && ruleRepository.deleteById(id);
+  }
+
+  @Override
   public synchronized boolean insertIfAbsent(RateLimitRule rule) {
     if (ruleRepository.existsById(rule.getId())) {
       return false;
@@ -60,9 +90,11 @@ public class DelegatingStudioRuleRepository implements StudioRuleRepository {
   }
 
   @Override
-  public boolean replaceIfVersionMatches(RateLimitRule rule, long expectedVersion) {
-    Optional<RateLimitRule> stored = ruleRepository.findById(rule.getId());
-    if (stored.isEmpty() || RuleVersions.versionOf(stored.get()) != expectedVersion) {
+  public synchronized boolean replaceIfVersionMatches(RateLimitRule rule, long expectedVersion) {
+    Optional<RateLimitRule> stored = findById(rule.getId());
+    if (stored.isEmpty()
+        || !Objects.equals(stored.get().getRuleSetIdOrNull(), rule.getRuleSetIdOrNull())
+        || RuleVersions.versionOf(stored.get()) != expectedVersion) {
       return false;
     }
     ruleRepository.save(rule);

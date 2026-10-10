@@ -64,7 +64,7 @@ export const SimulationPanel = ({ rule, onClose }: SimulationPanelProps) => {
   const runSimulation = async () => {
     setRunning(true);
     try {
-      const simulation = await simulateRule(rule.id, burst, seconds);
+      const simulation = await simulateRule(rule.id, burst, seconds, rule.ruleSetId);
       setResult({
         allowed: simulation.allowed,
         consumed: simulation.consumed,

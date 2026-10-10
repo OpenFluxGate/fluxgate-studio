@@ -163,8 +163,17 @@ export async function fetchRulesPage(
   return handleResponse<ApiPage<ApiRule>>(response);
 }
 
-export async function fetchRuleById(id: string): Promise<ApiRule> {
-  const response = await fetch(`${API_BASE_PATH}/api/rules/${encodeURIComponent(id)}`);
+/** A missing selector preserves the legacy API; null explicitly selects unassigned rules. */
+export function ruleUrl(id: string, ruleSetId?: string | null, suffix = ''): string {
+  const path = `${API_BASE_PATH}/api/rules/${encodeURIComponent(id)}${suffix}`;
+  if (ruleSetId === undefined) return path;
+  if (ruleSetId !== null && ruleSetId.trim() === '') throw new Error('ruleSetId must not be empty');
+  const query = new URLSearchParams(ruleSetId === null ? { unassigned: 'true' } : { ruleSetId });
+  return `${path}?${query.toString()}`;
+}
+
+export async function fetchRuleById(id: string, ruleSetId?: string | null): Promise<ApiRule> {
+  const response = await fetch(ruleUrl(id, ruleSetId));
   return handleResponse<ApiRule>(response);
 }
 
@@ -177,8 +186,12 @@ export async function createRule(request: CreateRuleRequest): Promise<ApiRule> {
   return handleResponse<ApiRule>(response);
 }
 
-export async function updateRule(id: string, request: UpdateRuleRequest): Promise<ApiRule> {
-  const response = await fetch(`${API_BASE_PATH}/api/rules/${encodeURIComponent(id)}`, {
+export async function updateRule(
+  id: string,
+  request: UpdateRuleRequest,
+  ruleSetId?: string | null
+): Promise<ApiRule> {
+  const response = await fetch(ruleUrl(id, ruleSetId), {
     method: 'PUT',
     headers: { ...JSON_HEADERS, 'If-Match': String(request.version) },
     body: JSON.stringify(request),
@@ -186,15 +199,15 @@ export async function updateRule(id: string, request: UpdateRuleRequest): Promis
   return handleResponse<ApiRule>(response);
 }
 
-export async function deleteRule(id: string): Promise<void> {
-  const response = await fetch(`${API_BASE_PATH}/api/rules/${encodeURIComponent(id)}`, {
+export async function deleteRule(id: string, ruleSetId?: string | null): Promise<void> {
+  const response = await fetch(ruleUrl(id, ruleSetId), {
     method: 'DELETE',
   });
   return handleResponse<void>(response);
 }
 
-export async function toggleRule(id: string): Promise<ApiRule> {
-  const response = await fetch(`${API_BASE_PATH}/api/rules/${encodeURIComponent(id)}/toggle`, {
+export async function toggleRule(id: string, ruleSetId?: string | null): Promise<ApiRule> {
+  const response = await fetch(ruleUrl(id, ruleSetId, '/toggle'), {
     method: 'PATCH',
   });
   return handleResponse<ApiRule>(response);
@@ -228,9 +241,10 @@ export async function importRules(rules: CreateRuleRequest[]): Promise<ApiImport
 export async function simulateRule(
   id: string,
   requests: number,
-  seconds: number
+  seconds: number,
+  ruleSetId?: string | null
 ): Promise<ApiSimulation> {
-  const response = await fetch(`${API_BASE_PATH}/api/rules/${encodeURIComponent(id)}/simulate`, {
+  const response = await fetch(ruleUrl(id, ruleSetId, '/simulate'), {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify({ requests, seconds }),

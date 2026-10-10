@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -26,6 +27,7 @@ import org.fluxgate.studio.admin.dto.response.PageResponse;
 import org.fluxgate.studio.admin.dto.response.RateBandResponse;
 import org.fluxgate.studio.admin.dto.response.RuleResponse;
 import org.fluxgate.studio.admin.dto.response.SimulationResponse;
+import org.fluxgate.studio.admin.exception.AmbiguousRuleException;
 import org.fluxgate.studio.admin.exception.InvalidRuleException;
 import org.fluxgate.studio.admin.exception.RuleAlreadyExistsException;
 import org.fluxgate.studio.admin.exception.RuleNotFoundException;
@@ -66,7 +68,9 @@ public class RuleService {
   public List<RuleResponse> getAllRules() {
     log.debug("Fetching all rules");
     try {
-      return ruleRepository.findAll().stream().map(this::toResponse).toList();
+      return studioRuleRepository.findPage(null, 0, Integer.MAX_VALUE).stream()
+          .map(this::toResponse)
+          .toList();
     } catch (Exception e) {
       throw new StorageOperationException("findAll", e.getMessage(), e);
     }
@@ -81,7 +85,9 @@ public class RuleService {
   public List<RuleResponse> getRulesByRuleSetId(String ruleSetId) {
     log.debug("Fetching rules for ruleSetId: {}", ruleSetId);
     try {
-      return ruleRepository.findByRuleSetId(ruleSetId).stream().map(this::toResponse).toList();
+      return studioRuleRepository.findPage(ruleSetId, 0, Integer.MAX_VALUE).stream()
+          .map(this::toResponse)
+          .toList();
     } catch (Exception e) {
       throw new StorageOperationException("findByRuleSetId", e.getMessage(), e);
     }
@@ -125,7 +131,11 @@ public class RuleService {
    */
   public RuleResponse getRuleById(String id) {
     log.debug("Fetching rule: {}", id);
-    return toResponse(findRuleOrThrow(id));
+    return toResponse(findRuleOrThrow(id, null, false));
+  }
+
+  public RuleResponse getRuleById(String ruleSetId, String id) {
+    return toResponse(findRuleOrThrow(id, ruleSetId, true));
   }
 
   /**
@@ -136,12 +146,15 @@ public class RuleService {
    * @throws RuleAlreadyExistsException if rule already exists
    * @throws InvalidRuleException if the rule bands are not consistent
    */
-  @NotifyRuleChange(ruleSetId = "#request.ruleSetId")
+  @NotifyFullReload
   public RuleResponse createRule(CreateRuleRequest request) {
     log.debug("Creating rule: {}", request.id());
     validateBands(request.bands());
+    validateCreationSet(request.ruleSetId());
     try {
-      if (ruleRepository.existsById(request.id())) {
+      if (studioRuleRepository
+          .findById(studioRuleRepository.normalizeRuleSetId(request.ruleSetId()), request.id())
+          .isPresent()) {
         throw new RuleAlreadyExistsException(request.id());
       }
 
@@ -173,23 +186,40 @@ public class RuleService {
    * @throws InvalidRuleException if no version was supplied or the bands are inconsistent
    * @throws RuleVersionMismatchException if the rule was modified concurrently
    */
-  @NotifyRuleChange(ruleSetId = "#request.ruleSetId")
+  @NotifyFullReload
   public RuleResponse updateRule(String id, UpdateRuleRequest request, Long ifMatchVersion) {
+    return updateRuleInternal(id, request, ifMatchVersion, null, false);
+  }
+
+  @NotifyFullReload
+  public RuleResponse updateRule(
+      String ruleSetId, String id, UpdateRuleRequest request, Long ifMatchVersion) {
+    return updateRuleInternal(id, request, ifMatchVersion, ruleSetId, true);
+  }
+
+  private RuleResponse updateRuleInternal(
+      String id, UpdateRuleRequest request, Long ifMatchVersion, String ruleSetId, boolean scoped) {
     log.debug("Updating rule: {}", id);
     validateBands(request.bands());
 
     long expectedVersion = resolveExpectedVersion(request.version(), ifMatchVersion);
-    RateLimitRule existing = findRuleOrThrow(id);
+    RateLimitRule existing = findRuleOrThrow(id, ruleSetId, scoped);
     long currentVersion = RuleVersions.versionOf(existing);
     if (currentVersion != expectedVersion) {
       throw new RuleVersionMismatchException(id, expectedVersion, currentVersion);
     }
 
-    RateLimitRule rule = toEntity(id, request, currentVersion + 1);
+    if (request.ruleSetId() != null
+        && !Objects.equals(request.ruleSetId(), existing.getRuleSetIdOrNull())) {
+      throw new InvalidRuleException("ruleSetId", "cannot move a rule to another rule set");
+    }
+    RateLimitRule rule = toEntity(id, request, currentVersion + 1, existing.getRuleSetIdOrNull());
     if (!replaceOrThrow(rule, expectedVersion)) {
       // Lost the compare-and-set race: report the version that is stored now.
       throw new RuleVersionMismatchException(
-          id, expectedVersion, RuleVersions.versionOf(findRuleOrThrow(id)));
+          id,
+          expectedVersion,
+          RuleVersions.versionOf(findRuleOrThrow(id, existing.getRuleSetIdOrNull(), true)));
     }
     log.info("Rule updated: {} (version {} -> {})", id, currentVersion, currentVersion + 1);
     return toResponse(rule);
@@ -203,13 +233,23 @@ public class RuleService {
    */
   @NotifyFullReload
   public void deleteRule(String id) {
+    deleteRuleInternal(id, null, false);
+  }
+
+  @NotifyFullReload
+  public void deleteRule(String ruleSetId, String id) {
+    deleteRuleInternal(id, ruleSetId, true);
+  }
+
+  private void deleteRuleInternal(String id, String ruleSetId, boolean scoped) {
     log.debug("Deleting rule: {}", id);
     try {
-      if (!ruleRepository.deleteById(id)) {
+      RateLimitRule existing = findRuleOrThrow(id, ruleSetId, scoped);
+      if (!studioRuleRepository.deleteById(existing.getRuleSetIdOrNull(), id)) {
         throw new RuleNotFoundException(id);
       }
       log.info("Rule deleted: {}", id);
-    } catch (RuleNotFoundException e) {
+    } catch (RuleNotFoundException | AmbiguousRuleException e) {
       throw e;
     } catch (Exception e) {
       throw new StorageOperationException("delete", e.getMessage(), e);
@@ -228,10 +268,19 @@ public class RuleService {
    * @throws RuleNotFoundException if rule not found
    * @throws RuleVersionMismatchException if the rule changed concurrently
    */
-  @NotifyRuleChange(ruleSetId = "#result.ruleSetId")
+  @NotifyFullReload
   public RuleResponse toggleRule(String id) {
+    return toggleRuleInternal(id, null, false);
+  }
+
+  @NotifyFullReload
+  public RuleResponse toggleRule(String ruleSetId, String id) {
+    return toggleRuleInternal(id, ruleSetId, true);
+  }
+
+  private RuleResponse toggleRuleInternal(String id, String ruleSetId, boolean scoped) {
     log.debug("Toggling rule: {}", id);
-    RateLimitRule rule = findRuleOrThrow(id);
+    RateLimitRule rule = findRuleOrThrow(id, ruleSetId, scoped);
     long currentVersion = RuleVersions.versionOf(rule);
 
     Map<String, Object> attributes = new HashMap<>(rule.getAttributes());
@@ -252,7 +301,9 @@ public class RuleService {
     if (!replaceOrThrow(toggled, currentVersion)) {
       // Lost the compare-and-set race: report the version that is stored now.
       throw new RuleVersionMismatchException(
-          id, currentVersion, RuleVersions.versionOf(findRuleOrThrow(id)));
+          id,
+          currentVersion,
+          RuleVersions.versionOf(findRuleOrThrow(id, rule.getRuleSetIdOrNull(), true)));
     }
     log.info(
         "Rule toggled: {} -> enabled={} (version {} -> {})",
@@ -297,7 +348,9 @@ public class RuleService {
     int updated = 0;
     try {
       for (CreateRuleRequest request : requests) {
-        Optional<RateLimitRule> existing = ruleRepository.findById(request.id());
+        Optional<RateLimitRule> existing =
+            studioRuleRepository.findById(
+                studioRuleRepository.normalizeRuleSetId(request.ruleSetId()), request.id());
         long nextVersion =
             existing
                 .map(rule -> RuleVersions.versionOf(rule) + 1)
@@ -308,7 +361,11 @@ public class RuleService {
             throw new RuleVersionMismatchException(
                 request.id(),
                 expectedVersion,
-                RuleVersions.versionOf(findRuleOrThrow(request.id())));
+                RuleVersions.versionOf(
+                    findRuleOrThrow(
+                        request.id(),
+                        studioRuleRepository.normalizeRuleSetId(request.ruleSetId()),
+                        true)));
           }
           updated++;
         } else {
@@ -342,9 +399,18 @@ public class RuleService {
    * @throws RuleNotFoundException if rule not found
    */
   public SimulationResponse simulate(String id, SimulateRequest request) {
+    return simulateInternal(id, request, null, false);
+  }
+
+  public SimulationResponse simulate(String ruleSetId, String id, SimulateRequest request) {
+    return simulateInternal(id, request, ruleSetId, true);
+  }
+
+  private SimulationResponse simulateInternal(
+      String id, SimulateRequest request, String ruleSetId, boolean scoped) {
     log.debug(
         "Simulating rule {} with {} requests over {}s", id, request.requests(), request.seconds());
-    RateLimitRule rule = findRuleOrThrow(id);
+    RateLimitRule rule = findRuleOrThrow(id, ruleSetId, scoped);
 
     long requests = request.requests();
     long seconds = request.seconds();
@@ -400,10 +466,13 @@ public class RuleService {
     }
   }
 
-  private RateLimitRule findRuleOrThrow(String id) {
+  private RateLimitRule findRuleOrThrow(String id, String ruleSetId, boolean scoped) {
     try {
-      return ruleRepository.findById(id).orElseThrow(() -> new RuleNotFoundException(id));
-    } catch (RuleNotFoundException e) {
+      return (scoped
+              ? studioRuleRepository.findById(ruleSetId, id)
+              : studioRuleRepository.findById(id))
+          .orElseThrow(() -> new RuleNotFoundException(id));
+    } catch (RuleNotFoundException | AmbiguousRuleException e) {
       throw e;
     } catch (Exception e) {
       throw new StorageOperationException("findById", e.getMessage(), e);
@@ -431,11 +500,23 @@ public class RuleService {
         "version", "is required for updates; send it in the body or as an If-Match header");
   }
 
+  private record RuleIdentity(String ruleSetId, String id) {}
+
+  private void validateCreationSet(String ruleSetId) {
+    if (ruleSetId != null && ruleSetId.isBlank()) {
+      throw new InvalidRuleException("ruleSetId", "must not be blank");
+    }
+  }
+
   private void validateImport(List<CreateRuleRequest> requests) {
-    Set<String> ids = new HashSet<>();
+    Set<RuleIdentity> ids = new HashSet<>();
     for (CreateRuleRequest request : requests) {
-      if (!ids.add(request.id())) {
-        throw new InvalidRuleException("rules", "duplicate rule id in import: " + request.id());
+      validateCreationSet(request.ruleSetId());
+      if (!ids.add(
+          new RuleIdentity(
+              studioRuleRepository.normalizeRuleSetId(request.ruleSetId()), request.id()))) {
+        throw new InvalidRuleException(
+            "rules", "duplicate rule identity in import: " + request.id());
       }
       validateBands(request.bands());
     }
@@ -489,13 +570,14 @@ public class RuleService {
         request.keyStrategyId(),
         request.onLimitExceedPolicy(),
         request.bands(),
-        request.ruleSetId(),
+        studioRuleRepository.normalizeRuleSetId(request.ruleSetId()),
         request.tags(),
         request.attributes(),
         version);
   }
 
-  private RateLimitRule toEntity(String id, UpdateRuleRequest request, long version) {
+  private RateLimitRule toEntity(
+      String id, UpdateRuleRequest request, long version, String ruleSetId) {
     return toEntity(
         id,
         request.name(),
@@ -504,7 +586,7 @@ public class RuleService {
         request.keyStrategyId(),
         request.onLimitExceedPolicy(),
         request.bands(),
-        request.ruleSetId(),
+        ruleSetId,
         request.tags(),
         request.attributes(),
         version);

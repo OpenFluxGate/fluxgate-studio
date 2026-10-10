@@ -25,6 +25,6 @@ public record CreateRuleRequest(
         @EnumValue(enumClass = OnLimitExceedPolicy.class)
         String onLimitExceedPolicy,
     @NotEmpty(message = "bands must not be empty") @Valid List<RateBandRequest> bands,
-    String ruleSetId,
+    @Pattern(regexp = "(?s).*\\S.*", message = "must not be blank") String ruleSetId,
     List<String> tags,
     Map<String, Object> attributes) {}

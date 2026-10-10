@@ -51,6 +51,9 @@ class RuleServiceTest {
 
   @BeforeEach
   void setUp() {
+    org.mockito.Mockito.lenient()
+        .when(studioRuleRepository.normalizeRuleSetId(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
     ruleService = new RuleService(ruleRepository, studioRuleRepository);
   }
 
@@ -97,7 +100,7 @@ class RuleServiceTest {
         "userId",
         "REJECT_REQUEST",
         List.of(new RateBandRequest(120L, 50L, "50-per-2minutes")),
-        "updated-ruleset",
+        "test-ruleset",
         null,
         null,
         version);
@@ -114,7 +117,7 @@ class RuleServiceTest {
       List<RateLimitRule> rules =
           List.of(
               createTestRule("rule-1", "Rule 1", true), createTestRule("rule-2", "Rule 2", false));
-      when(ruleRepository.findAll()).thenReturn(rules);
+      when(studioRuleRepository.findPage(null, 0, Integer.MAX_VALUE)).thenReturn(rules);
 
       // when
       List<RuleResponse> result = ruleService.getAllRules();
@@ -123,14 +126,14 @@ class RuleServiceTest {
       assertThat(result).hasSize(2);
       assertThat(result.get(0).id()).isEqualTo("rule-1");
       assertThat(result.get(1).id()).isEqualTo("rule-2");
-      verify(ruleRepository).findAll();
+      verify(studioRuleRepository).findPage(null, 0, Integer.MAX_VALUE);
     }
 
     @Test
     @DisplayName("should return empty list when no rules exist")
     void shouldReturnEmptyListWhenNoRulesExist() {
       // given
-      when(ruleRepository.findAll()).thenReturn(List.of());
+      when(studioRuleRepository.findPage(null, 0, Integer.MAX_VALUE)).thenReturn(List.of());
 
       // when
       List<RuleResponse> result = ruleService.getAllRules();
@@ -143,7 +146,8 @@ class RuleServiceTest {
     @DisplayName("should wrap storage failures")
     void shouldWrapStorageFailures() {
       // given
-      when(ruleRepository.findAll()).thenThrow(new IllegalStateException("mongo down"));
+      when(studioRuleRepository.findPage(null, 0, Integer.MAX_VALUE))
+          .thenThrow(new IllegalStateException("mongo down"));
 
       // when/then
       assertThatThrownBy(() -> ruleService.getAllRules())
@@ -154,7 +158,7 @@ class RuleServiceTest {
     @DisplayName("should expose the version and hide it from attributes")
     void shouldExposeVersionAndHideItFromAttributes() {
       // given
-      when(ruleRepository.findAll())
+      when(studioRuleRepository.findPage(null, 0, Integer.MAX_VALUE))
           .thenReturn(List.of(createTestRule("rule-1", "Rule 1", true, 7L)));
 
       // when
@@ -234,7 +238,7 @@ class RuleServiceTest {
     void shouldReturnRuleWhenFound() {
       // given
       RateLimitRule rule = createTestRule("test-rule", "Test Rule", true);
-      when(ruleRepository.findById("test-rule")).thenReturn(Optional.of(rule));
+      when(studioRuleRepository.findById("test-rule")).thenReturn(Optional.of(rule));
 
       // when
       RuleResponse result = ruleService.getRuleById("test-rule");
@@ -249,7 +253,7 @@ class RuleServiceTest {
     @DisplayName("should throw RuleNotFoundException when not found")
     void shouldThrowWhenNotFound() {
       // given
-      when(ruleRepository.findById("non-existent")).thenReturn(Optional.empty());
+      when(studioRuleRepository.findById("non-existent")).thenReturn(Optional.empty());
 
       // when/then
       assertThatThrownBy(() -> ruleService.getRuleById("non-existent"))
@@ -261,7 +265,8 @@ class RuleServiceTest {
     @DisplayName("should wrap storage failures")
     void shouldWrapStorageFailures() {
       // given
-      when(ruleRepository.findById("test-rule")).thenThrow(new IllegalStateException("mongo down"));
+      when(studioRuleRepository.findById("test-rule"))
+          .thenThrow(new IllegalStateException("mongo down"));
 
       // when/then
       assertThatThrownBy(() -> ruleService.getRuleById("test-rule"))
@@ -289,7 +294,7 @@ class RuleServiceTest {
               "test-ruleset",
               List.of("api", "v1"),
               null);
-      when(ruleRepository.existsById("new-rule")).thenReturn(false);
+      when(studioRuleRepository.findById("test-ruleset", "new-rule")).thenReturn(Optional.empty());
       when(studioRuleRepository.insertIfAbsent(any())).thenReturn(true);
 
       // when
@@ -309,7 +314,8 @@ class RuleServiceTest {
       // given
       CreateRuleRequest request =
           createRequest("existing-rule", List.of(new RateBandRequest(60L, 100L, null)));
-      when(ruleRepository.existsById("existing-rule")).thenReturn(true);
+      when(studioRuleRepository.findById("test-ruleset", "existing-rule"))
+          .thenReturn(Optional.of(createTestRule("existing-rule", "Existing", true)));
 
       // when/then
       assertThatThrownBy(() -> ruleService.createRule(request))
@@ -340,7 +346,7 @@ class RuleServiceTest {
       // given
       CreateRuleRequest request =
           createRequest("new-rule", List.of(new RateBandRequest(60L, 100L, null)));
-      when(ruleRepository.existsById("new-rule"))
+      when(studioRuleRepository.findById("test-ruleset", "new-rule"))
           .thenThrow(new IllegalStateException("mongo down"));
 
       // when/then
@@ -357,7 +363,7 @@ class RuleServiceTest {
     @DisplayName("should update rule when the version matches")
     void shouldUpdateRuleWhenVersionMatches() {
       // given
-      when(ruleRepository.findById("test-rule"))
+      when(studioRuleRepository.findById("test-rule"))
           .thenReturn(Optional.of(createTestRule("test-rule", "Test Rule", true, 3L)));
       when(studioRuleRepository.replaceIfVersionMatches(any(RateLimitRule.class), eq(3L)))
           .thenReturn(true);
@@ -376,7 +382,7 @@ class RuleServiceTest {
     @DisplayName("should accept the version from the If-Match header")
     void shouldAcceptVersionFromIfMatchHeader() {
       // given
-      when(ruleRepository.findById("test-rule"))
+      when(studioRuleRepository.findById("test-rule"))
           .thenReturn(Optional.of(createTestRule("test-rule", "Test Rule", true, 2L)));
       when(studioRuleRepository.replaceIfVersionMatches(any(RateLimitRule.class), eq(2L)))
           .thenReturn(true);
@@ -401,7 +407,7 @@ class RuleServiceTest {
     @DisplayName("should return 409 semantics when the stored version differs")
     void shouldThrowWhenStoredVersionDiffers() {
       // given
-      when(ruleRepository.findById("test-rule"))
+      when(studioRuleRepository.findById("test-rule"))
           .thenReturn(Optional.of(createTestRule("test-rule", "Test Rule", true, 5L)));
 
       // when/then
@@ -416,10 +422,10 @@ class RuleServiceTest {
     @DisplayName("should report the mismatch when the conditional write loses the race")
     void shouldReportMismatchWhenConditionalWriteFails() {
       // given
-      when(ruleRepository.findById("test-rule"))
-          .thenReturn(
-              Optional.of(createTestRule("test-rule", "Test Rule", true, 3L)),
-              Optional.of(createTestRule("test-rule", "Test Rule", true, 9L)));
+      when(studioRuleRepository.findById("test-rule"))
+          .thenReturn(Optional.of(createTestRule("test-rule", "Test Rule", true, 3L)));
+      when(studioRuleRepository.findById("test-ruleset", "test-rule"))
+          .thenReturn(Optional.of(createTestRule("test-rule", "Test Rule", true, 9L)));
       when(studioRuleRepository.replaceIfVersionMatches(any(RateLimitRule.class), eq(3L)))
           .thenReturn(false);
 
@@ -433,7 +439,7 @@ class RuleServiceTest {
     @DisplayName("should throw RuleNotFoundException when rule does not exist")
     void shouldThrowWhenRuleDoesNotExist() {
       // given
-      when(ruleRepository.findById("non-existent")).thenReturn(Optional.empty());
+      when(studioRuleRepository.findById("non-existent")).thenReturn(Optional.empty());
 
       // when/then
       assertThatThrownBy(() -> ruleService.updateRule("non-existent", updateRequest(1L), null))
@@ -468,7 +474,7 @@ class RuleServiceTest {
     @DisplayName("should wrap storage failures of the conditional write")
     void shouldWrapStorageFailures() {
       // given
-      when(ruleRepository.findById("test-rule"))
+      when(studioRuleRepository.findById("test-rule"))
           .thenReturn(Optional.of(createTestRule("test-rule", "Test Rule", true, 1L)));
       when(studioRuleRepository.replaceIfVersionMatches(any(RateLimitRule.class), eq(1L)))
           .thenThrow(new IllegalStateException("mongo down"));
@@ -487,20 +493,22 @@ class RuleServiceTest {
     @DisplayName("should delete rule successfully")
     void shouldDeleteRuleSuccessfully() {
       // given
-      when(ruleRepository.deleteById("test-rule")).thenReturn(true);
+      when(studioRuleRepository.findById("test-rule"))
+          .thenReturn(Optional.of(createTestRule("test-rule", "Test", true)));
+      when(studioRuleRepository.deleteById("test-ruleset", "test-rule")).thenReturn(true);
 
       // when
       ruleService.deleteRule("test-rule");
 
       // then
-      verify(ruleRepository).deleteById("test-rule");
+      verify(studioRuleRepository).deleteById("test-ruleset", "test-rule");
     }
 
     @Test
     @DisplayName("should throw RuleNotFoundException when rule does not exist")
     void shouldThrowWhenRuleDoesNotExist() {
       // given
-      when(ruleRepository.deleteById("non-existent")).thenReturn(false);
+      when(studioRuleRepository.findById("non-existent")).thenReturn(Optional.empty());
 
       // when/then
       assertThatThrownBy(() -> ruleService.deleteRule("non-existent"))
@@ -511,7 +519,9 @@ class RuleServiceTest {
     @DisplayName("should wrap storage failures")
     void shouldWrapStorageFailures() {
       // given
-      when(ruleRepository.deleteById("test-rule"))
+      when(studioRuleRepository.findById("test-rule"))
+          .thenReturn(Optional.of(createTestRule("test-rule", "Test", true)));
+      when(studioRuleRepository.deleteById("test-ruleset", "test-rule"))
           .thenThrow(new IllegalStateException("mongo down"));
 
       // when/then
@@ -529,7 +539,7 @@ class RuleServiceTest {
     void shouldToggleFromEnabledToDisabled() {
       // given
       RateLimitRule rule = createTestRule("test-rule", "Test Rule", true, 4L);
-      when(ruleRepository.findById("test-rule")).thenReturn(Optional.of(rule));
+      when(studioRuleRepository.findById("test-rule")).thenReturn(Optional.of(rule));
       when(studioRuleRepository.replaceIfVersionMatches(any(RateLimitRule.class), eq(4L)))
           .thenReturn(true);
 
@@ -547,7 +557,7 @@ class RuleServiceTest {
     void shouldToggleFromDisabledToEnabled() {
       // given
       RateLimitRule rule = createTestRule("test-rule", "Test Rule", false);
-      when(ruleRepository.findById("test-rule")).thenReturn(Optional.of(rule));
+      when(studioRuleRepository.findById("test-rule")).thenReturn(Optional.of(rule));
       when(studioRuleRepository.replaceIfVersionMatches(any(RateLimitRule.class), eq(1L)))
           .thenReturn(true);
 
@@ -563,7 +573,7 @@ class RuleServiceTest {
     void shouldTreatMissingVersionAsZero() {
       // given
       RateLimitRule rule = createTestRule("legacy-rule", "Legacy", true, null);
-      when(ruleRepository.findById("legacy-rule")).thenReturn(Optional.of(rule));
+      when(studioRuleRepository.findById("legacy-rule")).thenReturn(Optional.of(rule));
       when(studioRuleRepository.replaceIfVersionMatches(
               any(RateLimitRule.class), eq(RuleVersions.INITIAL_VERSION)))
           .thenReturn(true);
@@ -579,7 +589,7 @@ class RuleServiceTest {
     @DisplayName("should throw RuleNotFoundException when rule does not exist")
     void shouldThrowWhenRuleDoesNotExist() {
       // given
-      when(ruleRepository.findById("non-existent")).thenReturn(Optional.empty());
+      when(studioRuleRepository.findById("non-existent")).thenReturn(Optional.empty());
 
       // when/then
       assertThatThrownBy(() -> ruleService.toggleRule("non-existent"))
@@ -591,8 +601,9 @@ class RuleServiceTest {
     @DisplayName("should report 409 semantics when the compare-and-set loses the race")
     void shouldReportConflictWhenCompareAndSetFails() {
       // given - the rule is read at version 4 but stored at 7 by the time the write happens
-      when(ruleRepository.findById("test-rule"))
-          .thenReturn(Optional.of(createTestRule("test-rule", "Test Rule", true, 4L)))
+      when(studioRuleRepository.findById("test-rule"))
+          .thenReturn(Optional.of(createTestRule("test-rule", "Test Rule", true, 4L)));
+      when(studioRuleRepository.findById("test-ruleset", "test-rule"))
           .thenReturn(Optional.of(createTestRule("test-rule", "Test Rule", false, 7L)));
       when(studioRuleRepository.replaceIfVersionMatches(any(RateLimitRule.class), eq(4L)))
           .thenReturn(false);
@@ -613,7 +624,7 @@ class RuleServiceTest {
     @DisplayName("should wrap storage failures of the compare-and-set write")
     void shouldWrapStorageFailures() {
       // given
-      when(ruleRepository.findById("test-rule"))
+      when(studioRuleRepository.findById("test-rule"))
           .thenReturn(Optional.of(createTestRule("test-rule", "Test Rule", true, 4L)));
       when(studioRuleRepository.replaceIfVersionMatches(any(RateLimitRule.class), eq(4L)))
           .thenThrow(new IllegalStateException("mongo down"));
@@ -635,7 +646,7 @@ class RuleServiceTest {
       List<RateLimitRule> rules =
           List.of(
               createTestRule("rule-1", "Rule 1", true), createTestRule("rule-2", "Rule 2", true));
-      when(ruleRepository.findByRuleSetId("test-ruleset")).thenReturn(rules);
+      when(studioRuleRepository.findPage("test-ruleset", 0, Integer.MAX_VALUE)).thenReturn(rules);
 
       // when
       List<RuleResponse> result = ruleService.getRulesByRuleSetId("test-ruleset");
@@ -648,7 +659,7 @@ class RuleServiceTest {
     @DisplayName("should wrap storage failures")
     void shouldWrapStorageFailures() {
       // given
-      when(ruleRepository.findByRuleSetId("set"))
+      when(studioRuleRepository.findPage("set", 0, Integer.MAX_VALUE))
           .thenThrow(new IllegalStateException("mongo down"));
 
       // when/then
@@ -699,8 +710,8 @@ class RuleServiceTest {
           createRequest("new-rule", List.of(new RateBandRequest(60L, 100L, null)));
       CreateRuleRequest existingRule =
           createRequest("existing-rule", List.of(new RateBandRequest(60L, 100L, null)));
-      when(ruleRepository.findById("new-rule")).thenReturn(Optional.empty());
-      when(ruleRepository.findById("existing-rule"))
+      when(studioRuleRepository.findById("test-ruleset", "new-rule")).thenReturn(Optional.empty());
+      when(studioRuleRepository.findById("test-ruleset", "existing-rule"))
           .thenReturn(Optional.of(createTestRule("existing-rule", "Existing", true, 6L)));
 
       when(studioRuleRepository.insertIfAbsent(any())).thenReturn(true);
@@ -753,7 +764,8 @@ class RuleServiceTest {
       // given
       CreateRuleRequest rule =
           createRequest("rule-1", List.of(new RateBandRequest(60L, 100L, null)));
-      when(ruleRepository.findById("rule-1")).thenThrow(new IllegalStateException("mongo down"));
+      when(studioRuleRepository.findById("test-ruleset", "rule-1"))
+          .thenThrow(new IllegalStateException("mongo down"));
 
       // when/then
       assertThatThrownBy(() -> ruleService.importRules(List.of(rule)))
@@ -783,7 +795,7 @@ class RuleServiceTest {
     @DisplayName("should allow a burst that fits into every band")
     void shouldAllowBurstWithinCapacity() {
       // given
-      when(ruleRepository.findById("multi")).thenReturn(Optional.of(multiBandRule()));
+      when(studioRuleRepository.findById("multi")).thenReturn(Optional.of(multiBandRule()));
 
       // when - 1 second window: burst band offers 10 + 10 = 20 tokens, minute band 100 + 1 = 101
       SimulationResponse result = ruleService.simulate("multi", new SimulateRequest(15L, 1L));
@@ -801,7 +813,7 @@ class RuleServiceTest {
     @DisplayName("should deny a burst that exceeds the most restrictive band")
     void shouldDenyBurstAboveCapacity() {
       // given
-      when(ruleRepository.findById("multi")).thenReturn(Optional.of(multiBandRule()));
+      when(studioRuleRepository.findById("multi")).thenReturn(Optional.of(multiBandRule()));
 
       // when
       SimulationResponse result = ruleService.simulate("multi", new SimulateRequest(50L, 1L));
@@ -818,7 +830,7 @@ class RuleServiceTest {
     @DisplayName("should scale the allowance with the simulated window")
     void shouldScaleWithWindow() {
       // given
-      when(ruleRepository.findById("multi")).thenReturn(Optional.of(multiBandRule()));
+      when(studioRuleRepository.findById("multi")).thenReturn(Optional.of(multiBandRule()));
 
       // when - 60 seconds: burst band refills 600 tokens, minute band 100
       SimulationResponse result = ruleService.simulate("multi", new SimulateRequest(150L, 60L));
@@ -833,7 +845,7 @@ class RuleServiceTest {
     @DisplayName("should throw RuleNotFoundException when rule does not exist")
     void shouldThrowWhenRuleDoesNotExist() {
       // given
-      when(ruleRepository.findById("missing")).thenReturn(Optional.empty());
+      when(studioRuleRepository.findById("missing")).thenReturn(Optional.empty());
 
       // when/then
       assertThatThrownBy(() -> ruleService.simulate("missing", new SimulateRequest(1L, 1L)))

@@ -3,19 +3,20 @@ package org.fluxgate.studio.admin.repository;
 import com.mongodb.MongoWriteException;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
-import com.mongodb.client.model.IndexOptions;
-import com.mongodb.client.model.Indexes;
 import com.mongodb.client.model.Sorts;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.fluxgate.adapter.mongo.converter.RateLimitRuleConverter;
 import org.fluxgate.adapter.mongo.converter.RateLimitRuleMongoConverter;
+import org.fluxgate.adapter.mongo.repository.MongoRateLimitRuleRepository;
 import org.fluxgate.core.config.RateLimitRule;
+import org.fluxgate.studio.admin.exception.AmbiguousRuleException;
 import org.fluxgate.studio.admin.exception.InvalidRuleException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,9 +40,7 @@ public class MongoStudioRuleRepository implements StudioRuleRepository {
 
   public MongoStudioRuleRepository(MongoCollection<Document> collection) {
     this.collection = collection;
-    // The public API addresses a rule by id, independent of ruleSetId. Enforce that identity
-    // atomically so two concurrent creates cannot insert duplicates or replace another policy.
-    collection.createIndex(Indexes.ascending(FIELD_ID), new IndexOptions().unique(true));
+    new MongoRateLimitRuleRepository(collection).ensureIndexes();
   }
 
   @Override
@@ -49,14 +48,14 @@ public class MongoStudioRuleRepository implements StudioRuleRepository {
     List<Document> documents =
         collection
             .find(filter(ruleSetId))
-            .sort(Sorts.ascending(FIELD_ID))
+            .sort(Sorts.ascending(FIELD_ID, FIELD_RULE_SET_ID))
             .skip(offset)
             .limit(limit)
             .into(new ArrayList<>());
 
     List<RateLimitRule> rules = new ArrayList<>(documents.size());
     for (Document document : documents) {
-      rules.add(RateLimitRuleConverter.toDomain(RateLimitRuleMongoConverter.fromBson(document)));
+      rules.add(domain(document));
     }
     return rules;
   }
@@ -72,6 +71,38 @@ public class MongoStudioRuleRepository implements StudioRuleRepository {
     long activeRules = collection.countDocuments(Filters.eq(FIELD_ENABLED, true));
     long totalRuleSets = countRuleSets();
     return new RuleStatistics(totalRules, activeRules, totalRules - activeRules, totalRuleSets);
+  }
+
+  @Override
+  public Optional<RateLimitRule> findById(String id) {
+    List<Document> matches =
+        collection.find(Filters.eq(FIELD_ID, id)).limit(2).into(new ArrayList<>());
+    if (matches.size() > 1) throw new AmbiguousRuleException();
+    return matches.isEmpty() ? Optional.empty() : Optional.of(domain(matches.getFirst()));
+  }
+
+  @Override
+  public Optional<RateLimitRule> findById(String ruleSetId, String id) {
+    Document document = collection.find(identity(ruleSetId, id)).first();
+    return document == null ? Optional.empty() : Optional.of(domain(document));
+  }
+
+  @Override
+  public boolean deleteById(String ruleSetId, String id) {
+    return collection.deleteOne(identity(ruleSetId, id)).getDeletedCount() > 0;
+  }
+
+  private Bson identity(String ruleSetId, String id) {
+    return Filters.and(Filters.eq(FIELD_RULE_SET_ID, ruleSetId), Filters.eq(FIELD_ID, id));
+  }
+
+  private RateLimitRule domain(Document document) {
+    return RateLimitRuleConverter.toDomain(RateLimitRuleMongoConverter.fromBson(document));
+  }
+
+  @Override
+  public String normalizeRuleSetId(String ruleSetId) {
+    return ruleSetId == null ? "default" : ruleSetId;
   }
 
   @Override
@@ -91,7 +122,7 @@ public class MongoStudioRuleRepository implements StudioRuleRepository {
   @Override
   @SuppressWarnings("unchecked")
   public boolean replaceIfVersionMatches(RateLimitRule rule, long expectedVersion) {
-    Document current = collection.find(Filters.eq(FIELD_ID, rule.getId())).first();
+    Document current = collection.find(identity(rule.getRuleSetIdOrNull(), rule.getId())).first();
     if (current == null) {
       return false;
     }
@@ -123,7 +154,7 @@ public class MongoStudioRuleRepository implements StudioRuleRepository {
     // version. Otherwise a read/merge/replace could erase their concurrent ACL or matcher change.
     Bson filter =
         Filters.and(
-            Filters.eq(FIELD_ID, rule.getId()),
+            identity(rule.getRuleSetIdOrNull(), rule.getId()),
             new Document(
                 "$expr",
                 new Document("$eq", List.of("$$ROOT", new Document("$literal", current)))));

@@ -16,6 +16,16 @@ After the matching core installation completes, run from `fluxgate-studio-admin-
 
 This builds `target/fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar`. The repository path is a local proof convention, not a production dependency source.
 
+## Mutable draft identity
+
+Draft rules use `(ruleSetId, id)` identity. Existing `/api/rules/{id}` paths accept a `ruleSetId` query parameter for read, update, delete, toggle and simulation. An ID-only request remains compatible when exactly one rule matches; multiple matches return 409 before any write. Blank creation/import sets, empty selectors and supplying both `ruleSetId` and `unassigned=true` return 400.
+
+Mongo creation and import normalize an omitted or null `ruleSetId` to `default`, matching the shared FluxGate converter. Null and `default` therefore refer to the same creation/import identity and cannot bypass duplicate checks. `unassigned=true` explicitly selects a null pair for compatible non-Mongo backends; Mongo stores normalized sets and returns 404 for that selector. Generic SPI backends may support nullable sets but cannot guarantee duplicate global IDs, so Studio refuses unsupported collisions instead of overwriting another set.
+
+Updates preserve the existing set when the body omits `ruleSetId`. An explicit different set returns 400: this editor never performs an implicit identity migration. Pair updates retain optimistic version checks, full-document CAS, and stored ACL/matcher/extension BSON. Successful create, update and toggle operations emit a conservative full-reload hint, including nullable SPI rules; failed writes do not emit a hint. Draft changes remain separate from immutable policy publication.
+
+Studio reuses the core compound index contract and never creates a global unique ID constraint or drops an existing index at startup. A legacy global unique index requires the core's explicit maintenance migration before Studio can start.
+
 ## Publication API
 
 Every endpoint requires a verified Bearer JWT with the configured issuer and audience. `USER` and `ADMIN` may read. Publication and rollback require `ADMIN` at both the URL authorization layer and the controller method layer.

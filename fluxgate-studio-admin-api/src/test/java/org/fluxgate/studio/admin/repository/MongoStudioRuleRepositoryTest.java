@@ -9,7 +9,9 @@ import static org.mockito.Mockito.when;
 
 import com.mongodb.client.DistinctIterable;
 import com.mongodb.client.FindIterable;
+import com.mongodb.client.ListIndexesIterable;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoCursor;
 import com.mongodb.client.result.UpdateResult;
 import java.time.Duration;
 import java.util.Arrays;
@@ -36,6 +38,10 @@ class MongoStudioRuleRepositoryTest {
   @SuppressWarnings("unchecked")
   void setUp() {
     collection = mock(MongoCollection.class);
+    ListIndexesIterable<Document> indexes = mock(ListIndexesIterable.class);
+    MongoCursor<Document> cursor = mock(MongoCursor.class);
+    when(collection.listIndexes()).thenReturn(indexes);
+    when(indexes.iterator()).thenReturn(cursor);
     repository = new MongoStudioRuleRepository(collection);
   }
 
