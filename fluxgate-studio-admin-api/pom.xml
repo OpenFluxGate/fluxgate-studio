@@ -31,8 +31,8 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
 
-        <!-- FluxGate dependency (latest published release) -->
-        <fluxgate.version>0.3.7</fluxgate.version>
+        <!-- FluxGate dependency (local LTS / Envoy integration artifacts) -->
+        <fluxgate.version>0.4.0-SNAPSHOT</fluxgate.version>
 
         <!-- Plugin versions (aligned with fluxgate engine) -->
         <jacoco.version>0.8.12</jacoco.version>

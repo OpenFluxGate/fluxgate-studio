@@ -4,12 +4,14 @@ Studio manages mutable rule drafts and publishes authoritative policy generation
 
 ## Paired core artifacts
 
-This worktree uses the new `MongoPolicyRepository` API from the paired FluxGate core worktree. Although the current dependency coordinates still say `0.3.7`, this new API is **not available in the published 0.3.7 artifacts**. Install the matching core changes into an isolated Maven repository before building Studio. Do not substitute an older cached or public `0.3.7` jar. The deployment must pair the Studio API and Envoy reader with the same policy schema and repository implementation.
+This worktree uses the `MongoPolicyRepository` API from the paired FluxGate LTS / Envoy integration worktree and pins `0.4.0-SNAPSHOT`. This API is **not available in the published 0.3.7 artifacts**. Install the matching integration changes into an isolated Maven repository before building Studio. The deployment must pair the Studio API and Envoy reader with the same policy schema and repository implementation.
+
+Studio obtains policy collections from the qualified `fluxgateMongoDatabase` bean. The starter supplies this database through `FluxgateMongoClientHolder`, which isolates the FluxGate client from any application `MongoClient` bean. The holder closes its own client at shutdown and leaves an application-supplied legacy `fluxgateMongoClient` open for its owner.
 
 After the matching core installation completes, run from `fluxgate-studio-admin-api` with Java 21:
 
 ```bash
-./mvnw -B -Dmaven.repo.local=/tmp/fluxgate-enterprise-m2/repository clean verify spotless:check
+./mvnw -B -Dmaven.repo.local=/tmp/fluxgate-lts-integration-m2/repository clean verify spotless:check
 ```
 
 This builds `target/fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar`. The repository path is a local proof convention, not a production dependency source.
