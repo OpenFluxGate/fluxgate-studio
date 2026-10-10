@@ -4,6 +4,8 @@
 
 [한국어](README.ko.md)
 
+This repository owns `fluxgate-studio-admin-api` and `fluxgate-studio-ui-nextjs`. It uses the engine and MongoDB repository supplied by the separate FluxGate core repository. The Envoy authorization service belongs to the core repository. Draft rule editing and immutable-policy publication are separate operations; see [deploy/README.md](deploy/README.md) for the paired LTS / Envoy build contract and publication API. Local Git worktree names are development checkout names, not product components.
+
 > **🚀 Live Demo** - Try FluxGate without installation:
 >
 > | Demo | Description | Link |

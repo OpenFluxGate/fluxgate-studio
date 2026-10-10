@@ -4,6 +4,8 @@
 
 [English](README.md)
 
+이 저장소는 `fluxgate-studio-admin-api`와 `fluxgate-studio-ui-nextjs`를 담당합니다. 별도 FluxGate core 저장소가 제공하는 엔진·MongoDB repository를 사용하며 Envoy 판정 서비스는 core 저장소에 있습니다. draft 규칙 편집과 immutable policy의 게시는 별도 작업입니다. LTS / Envoy와 함께 사용하는 빌드 계약 및 게시 API는 [deploy/README.md](deploy/README.md)를 참고하세요. 로컬 Git worktree 이름은 개발용 checkout 이름이며 제품 구성요소가 아닙니다.
+
 > **🚀 라이브 데모** - 설치 없이 바로 체험:
 >
 > | 데모 | 설명 | 링크 |
