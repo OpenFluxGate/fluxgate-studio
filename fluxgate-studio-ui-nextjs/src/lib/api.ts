@@ -177,7 +177,44 @@ export async function fetchRuleById(id: string, ruleSetId?: string | null): Prom
   return handleResponse<ApiRule>(response);
 }
 
+/** Reject values that JSON.stringify would silently round or replace with null before a write. */
+export function assertSafeRuleNumbers(rule: unknown): void {
+  const visit = (value: unknown, path: string): void => {
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) throw new Error(`${path} must be finite.`);
+      if (Number.isInteger(value) && !Number.isSafeInteger(value)) {
+        throw new Error(`${path} exceeds the safe integer range; use a lossless API client.`);
+      }
+    } else if (Array.isArray(value)) {
+      value.forEach((entry, index) => visit(entry, `${path}[${index}]`));
+    } else if (value !== null && typeof value === 'object') {
+      Object.entries(value).forEach(([key, entry]) => visit(entry, `${path}.${key}`));
+    }
+  };
+  visit(rule, 'rule');
+  if (rule === null || typeof rule !== 'object') return;
+  const fields = rule as Record<string, unknown>;
+  if (
+    fields.version !== undefined &&
+    fields.version !== null &&
+    (!Number.isSafeInteger(fields.version) || Number(fields.version) < 0)
+  ) {
+    throw new Error('version must be a nonnegative safe integer.');
+  }
+  if (Array.isArray(fields.bands)) {
+    fields.bands.forEach((band, index) => {
+      for (const field of ['capacity', 'windowSeconds']) {
+        const value = band?.[field];
+        if (!Number.isSafeInteger(value) || value < 1) {
+          throw new Error(`bands[${index}].${field} must be a positive safe integer.`);
+        }
+      }
+    });
+  }
+}
+
 export async function createRule(request: CreateRuleRequest): Promise<ApiRule> {
+  assertSafeRuleNumbers(request);
   const response = await fetch(`${API_BASE_PATH}/api/rules`, {
     method: 'POST',
     headers: JSON_HEADERS,
@@ -191,6 +228,7 @@ export async function updateRule(
   request: UpdateRuleRequest,
   ruleSetId?: string | null
 ): Promise<ApiRule> {
+  assertSafeRuleNumbers(request);
   const response = await fetch(ruleUrl(id, ruleSetId), {
     method: 'PUT',
     headers: { ...JSON_HEADERS, 'If-Match': String(request.version) },
@@ -222,13 +260,15 @@ export async function deleteRulesByRuleSetId(ruleSetId: string): Promise<{ delet
 }
 
 /** Download every rule as a JSON array, ready to be fed back into {@link importRules}. */
-export async function exportRules(): Promise<ApiRule[]> {
+export async function exportRules(): Promise<string> {
   const response = await fetch(`${API_BASE_PATH}/api/rules/export`);
-  return handleResponse<ApiRule[]>(response);
+  if (!response.ok) await handleResponse<never>(response);
+  return response.text();
 }
 
 /** Upsert a batch of rules. Admin only; the server validates every entry before writing. */
 export async function importRules(rules: CreateRuleRequest[]): Promise<ApiImportResult> {
+  rules.forEach(assertSafeRuleNumbers);
   const response = await fetch(`${API_BASE_PATH}/api/rules/import`, {
     method: 'POST',
     headers: JSON_HEADERS,

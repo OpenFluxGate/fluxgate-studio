@@ -16,6 +16,7 @@ import org.fluxgate.core.config.LimitScope;
 import org.fluxgate.core.config.OnLimitExceedPolicy;
 import org.fluxgate.core.config.RateLimitBand;
 import org.fluxgate.core.config.RateLimitRule;
+import org.fluxgate.core.exception.InvalidRuleConfigException;
 import org.fluxgate.core.spi.RateLimitRuleRepository;
 import org.fluxgate.studio.admin.dto.request.CreateRuleRequest;
 import org.fluxgate.studio.admin.dto.request.RateBandRequest;
@@ -347,30 +348,41 @@ public class RuleService {
     int created = 0;
     int updated = 0;
     try {
-      for (CreateRuleRequest request : requests) {
+      // Finish domain and storage preservation validation before the first write: DTO validation
+      // alone does not cover engine invariants or existing extended policy fields.
+      List<PreparedImport> prepared = new ArrayList<>(requests.size());
+      for (int index = 0; index < requests.size(); index++) {
+        CreateRuleRequest request = requests.get(index);
         Optional<RateLimitRule> existing =
             studioRuleRepository.findById(
                 studioRuleRepository.normalizeRuleSetId(request.ruleSetId()), request.id());
+        Long expectedVersion = existing.map(RuleVersions::versionOf).orElse(null);
         long nextVersion =
-            existing
-                .map(rule -> RuleVersions.versionOf(rule) + 1)
-                .orElse(RuleVersions.INITIAL_VERSION + 1);
-        if (existing.isPresent()) {
-          long expectedVersion = RuleVersions.versionOf(existing.get());
-          if (!replaceOrThrow(toEntity(request, nextVersion), expectedVersion)) {
+            expectedVersion == null ? RuleVersions.INITIAL_VERSION + 1 : expectedVersion + 1;
+        try {
+          RateLimitRule rule = toEntity(request, nextVersion);
+          if (expectedVersion != null) {
+            studioRuleRepository.validateReplace(rule, expectedVersion);
+          }
+          prepared.add(new PreparedImport(rule, expectedVersion));
+        } catch (IllegalArgumentException | InvalidRuleConfigException invalid) {
+          throw new InvalidRuleException("rules[" + index + "]", invalid.getMessage());
+        }
+      }
+      for (PreparedImport item : prepared) {
+        RateLimitRule rule = item.rule();
+        if (item.expectedVersion() != null) {
+          if (!replaceOrThrow(rule, item.expectedVersion())) {
             throw new RuleVersionMismatchException(
-                request.id(),
-                expectedVersion,
+                rule.getId(),
+                item.expectedVersion(),
                 RuleVersions.versionOf(
-                    findRuleOrThrow(
-                        request.id(),
-                        studioRuleRepository.normalizeRuleSetId(request.ruleSetId()),
-                        true)));
+                    findRuleOrThrow(rule.getId(), rule.getRuleSetIdOrNull(), true)));
           }
           updated++;
         } else {
-          if (!studioRuleRepository.insertIfAbsent(toEntity(request, nextVersion))) {
-            throw new RuleAlreadyExistsException(request.id());
+          if (!studioRuleRepository.insertIfAbsent(rule)) {
+            throw new RuleAlreadyExistsException(rule.getId());
           }
           created++;
         }
@@ -500,6 +512,8 @@ public class RuleService {
         "version", "is required for updates; send it in the body or as an If-Match header");
   }
 
+  private record PreparedImport(RateLimitRule rule, Long expectedVersion) {}
+
   private record RuleIdentity(String ruleSetId, String id) {}
 
   private void validateCreationSet(String ruleSetId) {
@@ -606,7 +620,7 @@ public class RuleService {
       long version) {
 
     Map<String, Object> attrs = attributes != null ? new HashMap<>(attributes) : new HashMap<>();
-    if (tags != null && !tags.isEmpty()) {
+    if (tags != null) {
       attrs.put("tags", tags);
     }
     attrs.put(RuleVersions.VERSION_ATTRIBUTE, version);

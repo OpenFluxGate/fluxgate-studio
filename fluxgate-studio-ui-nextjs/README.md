@@ -6,7 +6,7 @@ the full stack setup.
 ## Getting Started
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -51,8 +51,13 @@ NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=your-secret-key
 KEYCLOAK_CLIENT_ID=fluxgate-studio
 KEYCLOAK_CLIENT_SECRET=fluxgate-studio-secret
-KEYCLOAK_ISSUER=http://localhost:18080/realms/fluxgate
+KEYCLOAK_ISSUER=http://keycloak:8080/realms/fluxgate
 ```
+
+Use Node 22. For the root Compose fixture, map `keycloak` to `127.0.0.1` on the host as
+described in the repository README. Both NextAuth and the Admin API must use the exact
+same issuer published by Keycloak; changing only the browser-facing hostname causes token rejection.
+The credentials above are public local fixtures. Production requires private credentials.
 
 ## Scripts
 
@@ -67,6 +72,11 @@ KEYCLOAK_ISSUER=http://localhost:18080/realms/fluxgate
 
 ## Known gaps
 
+- On 2026-10-12, `npm audit --omit=dev` reported zero production advisories after the Next 16.3.8
+  and source-map-js 1.2.2 patches. The full audit still reports the development-only `braces` stack
+  exhaustion advisory through the ESLint glob chain (five affected package entries, one root
+  advisory). The registry's latest braces version is still 3.0.3. Audit remains advisory in CI;
+  do not apply `npm audit fix --force`'s incompatible Next ESLint downgrade. Recheck before release.
 - **Multi-environment (dev/stage/prod) switching is not supported.** The unused `EnvSwitcher`
   component was removed instead of being left as decorative UI. Reintroducing it needs a backend
   concept first: an `environment` field on the rule DTOs plus per-environment MongoDB collections or

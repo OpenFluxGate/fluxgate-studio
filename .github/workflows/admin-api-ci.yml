@@ -4,15 +4,17 @@ name: Admin API CI
 # file and ui-ci.yml, so spotless and the full verify with the coverage gate always run together).
 on:
   push:
-    branches: [ "main", "development/**" ]
+    branches: [ "main", "development/**", "feature/lts-*", "fix/main-review-findings" ]
     paths:
       - 'fluxgate-studio-admin-api/**'
       - '.github/workflows/admin-api-ci.yml'
+      - 'docker-compose.yml'
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "feature/lts-*" ]
     paths:
       - 'fluxgate-studio-admin-api/**'
       - '.github/workflows/admin-api-ci.yml'
+      - 'docker-compose.yml'
 
 defaults:
   run:
@@ -44,6 +46,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Keep this revision paired with docker-compose.yml and deploy/README.md.
+      - name: Check out paired core policy source
+        uses: actions/checkout@v4
+        with:
+          repository: OpenFluxGate/openfluxgate-core
+          ref: b52e0787707232b62b5aa4afe285170fc78eeb97
+          path: .paired-core
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
@@ -51,14 +61,22 @@ jobs:
           distribution: temurin
           cache: maven
 
+      - name: Install paired core artifacts into a clean repository
+        working-directory: .paired-core
+        run: >-
+          ./mvnw -B -ntp
+          -Dmaven.repo.local="$RUNNER_TEMP/fluxgate-m2"
+          -pl fluxgate-spring-boot3-starter,fluxgate-control-support -am
+          -Dmaven.test.skip=true -Djacoco.skip=true -Dspotless.skip=true install
+
       - name: Check code style
-        run: ./mvnw -B -ntp spotless:check
+        run: ./mvnw -B -ntp -Dmaven.repo.local="$RUNNER_TEMP/fluxgate-m2" spotless:check
 
       - name: Build (skip tests first)
-        run: ./mvnw -B -ntp compile -DskipTests
+        run: ./mvnw -B -ntp -Dmaven.repo.local="$RUNNER_TEMP/fluxgate-m2" compile -DskipTests
 
       - name: Run tests with coverage gate
-        run: ./mvnw -B -ntp verify
+        run: ./mvnw -B -ntp -Dmaven.repo.local="$RUNNER_TEMP/fluxgate-m2" verify
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

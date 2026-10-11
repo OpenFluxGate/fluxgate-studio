@@ -1,15 +1,13 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { getToken } from 'next-auth/jwt';
 
-import { authOptions } from '@/lib/auth';
+import { backendSession } from '@/lib/backend-session';
 
 /**
  * Backend-for-frontend proxy.
  *
  * The Keycloak access token never leaves the server: the browser calls `/api/proxy/...` with its
- * NextAuth session cookie, this handler resolves the session with `getServerSession` and reads the
- * access token out of the encrypted NextAuth JWT, then forwards the request to the Admin API with an
+ * NextAuth session cookie, this handler refreshes it once through the real NextAuth callbacks,
+ * persists the encrypted cookie, then forwards the request to the Admin API with an
  * `Authorization` header. The token is deliberately absent from the session object so that
  * `/api/auth/session` cannot leak it to client-side JavaScript.
  */
@@ -100,26 +98,24 @@ async function proxy(
     return errorResponse(405, `Method ${request.method} is not supported.`);
   }
 
-  const session = await getServerSession(authOptions);
-  if (!session || session.error) {
-    return errorResponse(401, 'Session expired. Please sign in again.');
-  }
-
-  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
-  const accessToken = token?.accessToken;
+  const { accessToken, cookies } = await backendSession(request);
+  const withCookies = (response: NextResponse) => {
+    for (const cookie of cookies) response.headers.append('Set-Cookie', cookie);
+    return response;
+  };
   if (!accessToken) {
-    return errorResponse(401, 'Session expired. Please sign in again.');
+    return withCookies(errorResponse(401, 'Session expired. Please sign in again.'));
   }
 
   const { path } = await context.params;
   const segments = path ?? [];
   if (hasInvalidSegment(segments)) {
-    return errorResponse(404, 'Unknown API path');
+    return withCookies(errorResponse(404, 'Unknown API path'));
   }
 
   const targetPath = segments.join('/');
   if (!isAllowed(targetPath)) {
-    return errorResponse(404, `Unknown API path: /${targetPath}`);
+    return withCookies(errorResponse(404, `Unknown API path: /${targetPath}`));
   }
 
   const target = new URL(
@@ -128,19 +124,19 @@ async function proxy(
   );
   const resolvedPath = resolveTargetPath(target);
   if (resolvedPath === null || !isAllowed(resolvedPath)) {
-    return errorResponse(404, 'Unknown API path');
+    return withCookies(errorResponse(404, 'Unknown API path'));
   }
 
   let body: string | undefined;
   if (METHODS_WITH_BODY.includes(request.method)) {
     const declared = Number(request.headers.get('content-length') ?? '0');
     if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
-      return errorResponse(413, 'Request body too large.');
+      return withCookies(errorResponse(413, 'Request body too large.'));
     }
     body = await request.text();
     // content-length is client supplied, so the actual payload is measured as well.
     if (new TextEncoder().encode(body).byteLength > MAX_BODY_BYTES) {
-      return errorResponse(413, 'Request body too large.');
+      return withCookies(errorResponse(413, 'Request body too large.'));
     }
   }
 
@@ -167,7 +163,7 @@ async function proxy(
     });
   } catch (error) {
     console.error('Admin API is unreachable', error);
-    return errorResponse(502, 'The Admin API is unreachable.');
+    return withCookies(errorResponse(502, 'The Admin API is unreachable.'));
   }
 
   const responseHeaders = new Headers();
@@ -179,13 +175,15 @@ async function proxy(
   }
 
   if (upstream.status === 204) {
-    return new NextResponse(null, { status: 204, headers: responseHeaders });
+    return withCookies(new NextResponse(null, { status: 204, headers: responseHeaders }));
   }
 
-  return new NextResponse(await upstream.text(), {
-    status: upstream.status,
-    headers: responseHeaders,
-  });
+  return withCookies(
+    new NextResponse(await upstream.text(), {
+      status: upstream.status,
+      headers: responseHeaders,
+    })
+  );
 }
 
 export const GET = proxy;

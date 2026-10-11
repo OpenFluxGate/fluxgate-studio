@@ -2,10 +2,17 @@ package org.fluxgate.studio.admin.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
@@ -21,12 +28,17 @@ import org.bson.conversions.Bson;
 import org.fluxgate.adapter.mongo.converter.RateLimitRuleConverter;
 import org.fluxgate.adapter.mongo.converter.RateLimitRuleMongoConverter;
 import org.fluxgate.adapter.mongo.repository.MongoRateLimitRuleRepository;
+import org.fluxgate.control.aop.RuleChangeAspect;
+import org.fluxgate.control.notify.RuleChangeNotifier;
 import org.fluxgate.core.config.RateLimitRule;
+import org.fluxgate.studio.admin.controller.RuleController;
 import org.fluxgate.studio.admin.dto.request.CreateRuleRequest;
+import org.fluxgate.studio.admin.dto.request.ImportRulesRequest;
 import org.fluxgate.studio.admin.dto.request.RateBandRequest;
 import org.fluxgate.studio.admin.dto.request.SimulateRequest;
 import org.fluxgate.studio.admin.dto.request.UpdateRuleRequest;
 import org.fluxgate.studio.admin.exception.AmbiguousRuleException;
+import org.fluxgate.studio.admin.exception.GlobalExceptionHandler;
 import org.fluxgate.studio.admin.exception.InvalidRuleException;
 import org.fluxgate.studio.admin.exception.RuleAlreadyExistsException;
 import org.fluxgate.studio.admin.exception.RuleVersionMismatchException;
@@ -34,6 +46,11 @@ import org.fluxgate.studio.admin.service.RuleService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.aop.aspectj.annotation.AspectJProxyFactory;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -173,6 +190,71 @@ class MongoPolicyPreservationTest {
     assertThatThrownBy(() -> service.updateRule("policy", update("renamed-band", 1), null))
         .isInstanceOf(InvalidRuleException.class);
     assertThat(stored()).isEqualTo(original);
+  }
+
+  @ParameterizedTest
+  @CsvSource({"renamed-band,2592000", "monthly,60"})
+  void laterStoredBandPreservationFailureRejectsImportBeforeAnyWrite(
+      String editedLabel, long editedWindow) throws Exception {
+    Document before = stored();
+    CreateRuleRequest normal =
+        new CreateRuleRequest(
+            "normal-first",
+            "Normal",
+            true,
+            "PER_IP",
+            "ip",
+            "REJECT_REQUEST",
+            List.of(new RateBandRequest(60L, 100L, "minute")),
+            "set",
+            null,
+            null);
+    CreateRuleRequest invalid =
+        new CreateRuleRequest(
+            "policy",
+            "Unsafe edit",
+            true,
+            "PER_IP",
+            "ip",
+            "REJECT_REQUEST",
+            List.of(new RateBandRequest(editedWindow, 200L, editedLabel)),
+            "set",
+            null,
+            null);
+    var studio = spy(new MongoStudioRuleRepository(collection));
+    var notifier = org.mockito.Mockito.mock(RuleChangeNotifier.class);
+    var aspect = new RuleChangeAspect(notifier);
+    var factory =
+        new AspectJProxyFactory(
+            new RuleService(new MongoRateLimitRuleRepository(collection), studio));
+    factory.addAspect(aspect);
+    RuleService proxied = factory.getProxy();
+    try {
+      var mvc =
+          MockMvcBuilders.standaloneSetup(new RuleController(proxied))
+              .setControllerAdvice(new GlobalExceptionHandler())
+              .build();
+      var response =
+          mvc.perform(
+                  post("/api/rules/import")
+                      .contentType(MediaType.APPLICATION_JSON)
+                      .content(
+                          new ObjectMapper()
+                              .writeValueAsString(
+                                  new ImportRulesRequest(List.of(normal, invalid)))))
+              .andReturn()
+              .getResponse();
+      assertAll(
+          () -> assertThat(response.getStatus()).isEqualTo(400),
+          () -> assertThat(response.getContentAsString()).contains("bands"),
+          () -> assertThat(collection.find(Filters.eq("id", "normal-first")).first()).isNull(),
+          () -> assertThat(stored()).isEqualTo(before),
+          () -> verify(studio, never()).insertIfAbsent(any()),
+          () -> verify(studio, never()).replaceIfVersionMatches(any(), anyLong()),
+          () -> verifyNoInteractions(notifier));
+    } finally {
+      aspect.shutdown();
+    }
   }
 
   @Test

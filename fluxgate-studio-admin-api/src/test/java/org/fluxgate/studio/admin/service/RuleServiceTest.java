@@ -2,23 +2,31 @@ package org.fluxgate.studio.admin.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.fluxgate.control.aop.RuleChangeAspect;
+import org.fluxgate.control.notify.RuleChangeNotifier;
 import org.fluxgate.core.config.LimitScope;
 import org.fluxgate.core.config.OnLimitExceedPolicy;
 import org.fluxgate.core.config.RateLimitBand;
 import org.fluxgate.core.config.RateLimitRule;
 import org.fluxgate.core.spi.RateLimitRuleRepository;
+import org.fluxgate.studio.admin.controller.RuleController;
 import org.fluxgate.studio.admin.dto.request.CreateRuleRequest;
+import org.fluxgate.studio.admin.dto.request.ImportRulesRequest;
 import org.fluxgate.studio.admin.dto.request.RateBandRequest;
 import org.fluxgate.studio.admin.dto.request.SimulateRequest;
 import org.fluxgate.studio.admin.dto.request.UpdateRuleRequest;
@@ -26,6 +34,7 @@ import org.fluxgate.studio.admin.dto.response.ImportResultResponse;
 import org.fluxgate.studio.admin.dto.response.PageResponse;
 import org.fluxgate.studio.admin.dto.response.RuleResponse;
 import org.fluxgate.studio.admin.dto.response.SimulationResponse;
+import org.fluxgate.studio.admin.exception.GlobalExceptionHandler;
 import org.fluxgate.studio.admin.exception.InvalidRuleException;
 import org.fluxgate.studio.admin.exception.RuleAlreadyExistsException;
 import org.fluxgate.studio.admin.exception.RuleNotFoundException;
@@ -40,6 +49,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.aop.aspectj.annotation.AspectJProxyFactory;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 @ExtendWith(MockitoExtension.class)
 class RuleServiceTest {
@@ -701,6 +713,54 @@ class RuleServiceTest {
   @Nested
   @DisplayName("importRules")
   class ImportRulesTests {
+
+    @Test
+    void laterDomainValidationFailureReturns400WithoutAnyWriteOrReload() throws Exception {
+      CreateRuleRequest normal =
+          createRequest("normal-first", List.of(new RateBandRequest(60L, 100L, "minute")));
+      CreateRuleRequest invalid =
+          createRequest(
+              "invalid-second",
+              List.of(
+                  new RateBandRequest(60L, 100L, "same-key"),
+                  new RateBandRequest(120L, 100L, "same-key")));
+      // Let a premature insert succeed, so the regression detects partial writes too.
+      org.mockito.Mockito.lenient()
+          .when(studioRuleRepository.insertIfAbsent(any()))
+          .thenReturn(true);
+      RuleChangeNotifier notifier = org.mockito.Mockito.mock(RuleChangeNotifier.class);
+      RuleChangeAspect aspect = new RuleChangeAspect(notifier);
+      AspectJProxyFactory proxyFactory = new AspectJProxyFactory(ruleService);
+      proxyFactory.addAspect(aspect);
+      RuleService proxied = proxyFactory.getProxy();
+      try {
+        var mvc =
+            MockMvcBuilders.standaloneSetup(new RuleController(proxied))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+        var response =
+            mvc.perform(
+                    post("/api/rules/import")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                            new ObjectMapper()
+                                .writeValueAsString(
+                                    new ImportRulesRequest(List.of(normal, invalid)))))
+                .andReturn()
+                .getResponse();
+        assertAll(
+            () -> assertThat(response.getStatus()).isEqualTo(400),
+            () ->
+                assertThat(response.getContentAsString())
+                    .contains("rules[1]", "Duplicate band key label"),
+            () -> verify(studioRuleRepository, never()).insertIfAbsent(any()),
+            () -> verify(studioRuleRepository, never()).replaceIfVersionMatches(any(), anyLong()),
+            () -> verify(ruleRepository, never()).save(any()),
+            () -> verifyNoInteractions(notifier));
+      } finally {
+        aspect.shutdown();
+      }
+    }
 
     @Test
     @DisplayName("should create unknown rules and update existing ones")

@@ -120,16 +120,51 @@ public class MongoStudioRuleRepository implements StudioRuleRepository {
   }
 
   @Override
-  @SuppressWarnings("unchecked")
+  public void validateReplace(RateLimitRule rule, long expectedVersion) {
+    Document current = currentAtVersion(rule, expectedVersion);
+    if (current != null) {
+      mergeReplacement(current, rule);
+    }
+  }
+
+  @Override
   public boolean replaceIfVersionMatches(RateLimitRule rule, long expectedVersion) {
-    Document current = collection.find(identity(rule.getRuleSetIdOrNull(), rule.getId())).first();
+    Document current = currentAtVersion(rule, expectedVersion);
     if (current == null) {
       return false;
     }
-    Map<String, Object> attributes = current.get("attributes", Map.class);
-    if (RuleVersions.versionOf(attributes) != expectedVersion) {
-      return false;
+    Document replacement = mergeReplacement(current, rule);
+
+    // Matching the entire snapshot also detects writers that change BSON without bumping Studio's
+    // version. Otherwise a read/merge/replace could erase their concurrent ACL or matcher change.
+    Bson filter =
+        Filters.and(
+            identity(rule.getRuleSetIdOrNull(), rule.getId()),
+            new Document(
+                "$expr",
+                new Document("$eq", List.of("$$ROOT", new Document("$literal", current)))));
+    long matched = collection.replaceOne(filter, replacement).getMatchedCount();
+    log.debug(
+        "Conditional replace of rule {} at version {}: matched={}",
+        rule.getId(),
+        expectedVersion,
+        matched);
+    return matched > 0;
+  }
+
+  @SuppressWarnings("unchecked")
+  private Document currentAtVersion(RateLimitRule rule, long expectedVersion) {
+    Document current = collection.find(identity(rule.getRuleSetIdOrNull(), rule.getId())).first();
+    if (current == null
+        || RuleVersions.versionOf(current.get("attributes", Map.class)) != expectedVersion) {
+      return null;
     }
+    return current;
+  }
+
+  @SuppressWarnings("unchecked")
+  private Document mergeReplacement(Document current, RateLimitRule rule) {
+    Map<String, Object> attributes = current.get("attributes", Map.class);
     Document editable = RateLimitRuleMongoConverter.toBson(RateLimitRuleConverter.toDocument(rule));
     Document replacement = new Document(current);
     // DTOs intentionally expose only this subset. A converter built against an older model can
@@ -150,21 +185,7 @@ public class MongoStudioRuleRepository implements StudioRuleRepository {
         mergeBands(
             current.getList("bands", Document.class), editable.getList("bands", Document.class)));
 
-    // Matching the entire snapshot also detects writers that change BSON without bumping Studio's
-    // version. Otherwise a read/merge/replace could erase their concurrent ACL or matcher change.
-    Bson filter =
-        Filters.and(
-            identity(rule.getRuleSetIdOrNull(), rule.getId()),
-            new Document(
-                "$expr",
-                new Document("$eq", List.of("$$ROOT", new Document("$literal", current)))));
-    long matched = collection.replaceOne(filter, replacement).getMatchedCount();
-    log.debug(
-        "Conditional replace of rule {} at version {}: matched={}",
-        rule.getId(),
-        expectedVersion,
-        matched);
-    return matched > 0;
+    return replacement;
   }
 
   private List<Document> mergeBands(List<Document> stored, List<Document> edited) {

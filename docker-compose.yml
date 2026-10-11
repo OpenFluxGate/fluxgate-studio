@@ -81,6 +81,8 @@ services:
   admin-api:
     build:
       context: ./fluxgate-studio-admin-api
+      additional_contexts:
+        fluxgate_core: ${FLUXGATE_CORE_SOURCE:-https://github.com/OpenFluxGate/openfluxgate-core.git#b52e0787707232b62b5aa4afe285170fc78eeb97}
     container_name: fluxgate-admin-api
     depends_on:
       mongo:
@@ -102,6 +104,7 @@ services:
       FLUXGATE_MONGO_URI: mongodb://fluxgate:fluxgate123@mongo:27017/fluxgate?authSource=admin
       FLUXGATE_MONGO_DB: fluxgate
       FLUXGATE_REDIS_URI: redis://redis:6379
+      FLUXGATE_CONTROL_SECRET: ${FLUXGATE_CONTROL_SECRET:-local-dev-notifier-secret-change-me}
     ports:
       - '8090:8090'
     healthcheck:

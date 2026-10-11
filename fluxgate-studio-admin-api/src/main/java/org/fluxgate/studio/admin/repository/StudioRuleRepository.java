@@ -56,6 +56,17 @@ public interface StudioRuleRepository {
   boolean insertIfAbsent(RateLimitRule rule);
 
   /**
+   * Validate storage-specific preservation rules without writing, before a batch starts its writes.
+   *
+   * <p>Repositories without extra preservation constraints need no preflight. This does not reserve
+   * a version: the conditional write must still validate its current snapshot and enforce CAS.
+   *
+   * @param rule the replacement, already carrying the next version
+   * @param expectedVersion the version the caller read before editing
+   */
+  default void validateReplace(RateLimitRule rule, long expectedVersion) {}
+
+  /**
    * Replace a rule only when the stored optimistic locking token still matches.
    *
    * @param rule the rule to store, already carrying the next version

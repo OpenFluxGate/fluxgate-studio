@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mongodb.client.DistinctIterable;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.ListIndexesIterable;
@@ -24,9 +25,15 @@ import org.fluxgate.core.config.LimitScope;
 import org.fluxgate.core.config.OnLimitExceedPolicy;
 import org.fluxgate.core.config.RateLimitBand;
 import org.fluxgate.core.config.RateLimitRule;
+import org.fluxgate.core.spi.RateLimitRuleRepository;
+import org.fluxgate.studio.admin.dto.request.RateBandRequest;
+import org.fluxgate.studio.admin.dto.request.UpdateRuleRequest;
+import org.fluxgate.studio.admin.service.RuleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 class MongoStudioRuleRepositoryTest {
@@ -110,6 +117,56 @@ class MongoStudioRuleRepositoryTest {
               target.addAll(Arrays.asList(ruleSetIds));
               return target;
             });
+  }
+
+  @Test
+  void explicitEmptyTagsClearStoredTagsWhilePreservingExtensions() {
+    assertTagsUpdate(List.of(), List.of());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"{}", "{\"tags\":null}"})
+  void omittedOrNullTagsPreserveStoredTagsAndExtensions(String json) throws Exception {
+    UpdateRuleRequest decoded = new ObjectMapper().readValue(json, UpdateRuleRequest.class);
+    assertTagsUpdate(decoded.tags(), List.of("existing"));
+  }
+
+  @Test
+  void explicitTagsReplaceStoredTagsWhilePreservingExtensions() {
+    assertTagsUpdate(List.of("replacement"), List.of("replacement"));
+  }
+
+  private void assertTagsUpdate(List<String> submittedTags, List<String> expectedTags) {
+    Document stored = ruleDocument("rule-tags", true, 1L);
+    stored
+        .get("attributes", Document.class)
+        .append("tags", List.of("existing"))
+        .append("vendor", new Document("nested", "preserve"));
+    stubFind(List.of(stored));
+    when(collection.replaceOne(any(Bson.class), any(Document.class)))
+        .thenReturn(UpdateResult.acknowledged(1, 1L, null));
+    RuleService service = new RuleService(mock(RateLimitRuleRepository.class), repository);
+    service.updateRule(
+        "set-1",
+        "rule-tags",
+        new UpdateRuleRequest(
+            "Edited",
+            true,
+            "PER_IP",
+            "ip",
+            "REJECT_REQUEST",
+            List.of(new RateBandRequest(60L, 100L, "per-minute")),
+            "set-1",
+            submittedTags,
+            null,
+            1L),
+        null);
+    ArgumentCaptor<Document> replacement = ArgumentCaptor.forClass(Document.class);
+    verify(collection).replaceOne(any(Bson.class), replacement.capture());
+    Document attributes = replacement.getValue().get("attributes", Document.class);
+    assertThat(attributes.getList("tags", String.class)).isEqualTo(expectedTags);
+    assertThat(attributes.get("vendor")).isEqualTo(new Document("nested", "preserve"));
+    assertThat(attributes.getLong("version")).isEqualTo(2L);
   }
 
   @Test

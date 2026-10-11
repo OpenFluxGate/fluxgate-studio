@@ -54,8 +54,8 @@ export function validateRule(formData: FormData): FieldErrors {
 
   const seenWindows = new Set<number>();
   formData.bands.forEach((band, index) => {
-    if (!Number.isFinite(band.windowSeconds) || band.windowSeconds < 1) {
-      errors[`bands[${index}].windowSeconds`] = 'windowSeconds must be at least 1';
+    if (!Number.isSafeInteger(band.windowSeconds) || band.windowSeconds < 1) {
+      errors[`bands[${index}].windowSeconds`] = 'windowSeconds must be a positive safe integer';
     } else if (seenWindows.has(band.windowSeconds)) {
       errors[`bands[${index}].windowSeconds`] =
         `duplicate band window: ${band.windowSeconds} seconds`;
@@ -63,10 +63,14 @@ export function validateRule(formData: FormData): FieldErrors {
       seenWindows.add(band.windowSeconds);
     }
 
-    if (!Number.isFinite(band.capacity) || band.capacity < 1) {
-      errors[`bands[${index}].capacity`] = 'capacity must be at least 1';
+    if (!Number.isSafeInteger(band.capacity) || band.capacity < 1) {
+      errors[`bands[${index}].capacity`] = 'capacity must be a positive safe integer';
     }
   });
+
+  if (!Number.isSafeInteger(formData.version) || formData.version < 0) {
+    errors.version = 'version must be a nonnegative safe integer; use a lossless API client';
+  }
 
   return errors;
 }
@@ -328,9 +332,7 @@ export const RuleFormPanel = ({ rule, onClose, onSave, serverErrors }: RuleFormP
                           type="number"
                           min={1}
                           value={band.windowSeconds}
-                          onChange={(e) =>
-                            updateBand(idx, 'windowSeconds', parseInt(e.target.value, 10))
-                          }
+                          onChange={(e) => updateBand(idx, 'windowSeconds', Number(e.target.value))}
                           aria-invalid={!!errors[`bands[${idx}].windowSeconds`]}
                           className={`w-full px-2 py-1.5 ${theme.colors.bgInput} ${inputBorder(`bands[${idx}].windowSeconds`)} rounded border text-xs ${theme.colors.textPrimary} focus:outline-none ${theme.colors.borderFocus}`}
                         />
@@ -348,9 +350,7 @@ export const RuleFormPanel = ({ rule, onClose, onSave, serverErrors }: RuleFormP
                           type="number"
                           min={1}
                           value={band.capacity}
-                          onChange={(e) =>
-                            updateBand(idx, 'capacity', parseInt(e.target.value, 10))
-                          }
+                          onChange={(e) => updateBand(idx, 'capacity', Number(e.target.value))}
                           aria-invalid={!!errors[`bands[${idx}].capacity`]}
                           className={`w-full px-2 py-1.5 ${theme.colors.bgInput} ${inputBorder(`bands[${idx}].capacity`)} rounded border text-xs ${theme.colors.textPrimary} focus:outline-none ${theme.colors.borderFocus}`}
                         />
@@ -388,6 +388,7 @@ export const RuleFormPanel = ({ rule, onClose, onSave, serverErrors }: RuleFormP
               </div>
             </div>
 
+            {fieldError('version')}
             <div className="flex gap-2 pt-2">
               <button
                 type="button"

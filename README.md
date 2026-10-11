@@ -1,6 +1,6 @@
 # FluxGate Studio
 
-**FluxGate Studio** is a web-based administration platform for managing rate limit rules in [FluxGate](https://github.com/openfluxgate/fluxgate) distributed rate limiting system.
+**FluxGate Studio** is a web-based administration platform for managing rate limit rules in [FluxGate](https://github.com/OpenFluxGate/openfluxgate-core) distributed rate limiting system.
 
 [한국어](README.ko.md)
 
@@ -48,7 +48,7 @@ This repository owns `fluxgate-studio-admin-api` and `fluxgate-studio-ui-nextjs`
 - NextAuth.js (Keycloak OAuth2)
 
 ### Backend (fluxgate-studio-admin-api)
-- Spring Boot 3.3
+- Spring Boot 3.5.16
 - Spring Security OAuth2 Resource Server
 - FluxGate Core Library
 - MongoDB
@@ -62,84 +62,70 @@ This repository owns `fluxgate-studio-admin-api` and `fluxgate-studio-ui-nextjs`
 
 ### Prerequisites
 
-- Node.js 18+
-- Java 21+
-- Docker & Docker Compose
-- Maven
+For the container stack, use Docker with BuildKit and Docker Compose 2.17 or newer
+([named build contexts](https://docs.docker.com/reference/compose-file/build/#additional_contexts)).
+For native development, also use Java 21 and Node.js 22 LTS. Maven is provided by `./mvnw`.
+Run the following commands from the **Studio repository root** unless a different directory is stated.
 
-### Option A - the whole stack with Docker Compose
+### Option A — Docker Compose
+
+The Admin API image builds the paired `0.4.0-SNAPSHOT` core dependencies from a pinned Git revision;
+a warm host Maven cache or separately installed core JARs are not required.
+
+1. Add `127.0.0.1 keycloak` to your hosts file. The browser and containers must use the same
+   Keycloak issuer URL, including port, for token validation to work.
+2. Start the stack:
 
 ```bash
-# Keycloak + MongoDB + Redis + Admin API + UI
 docker compose up --build
 ```
 
-Before the first run, add this line to your hosts file so the browser and the containers agree on
-the Keycloak URL (the access token `iss` claim has to match what the Admin API validates):
+Open `http://localhost:3000` and sign in with `admin/admin` (full access) or `user/user` (read only).
+Swagger is at `http://localhost:8090/swagger-ui.html`, and Keycloak administration is at
+`http://keycloak:8080/admin`. Ports 3000, 8080, 8090, 18080, 27017 and 6379 must be available.
 
-```
-127.0.0.1 keycloak
-```
-
-Then open `http://localhost:3000` and sign in with `admin/admin` (full access) or `user/user`
-(read-only). See the comments at the top of `docker-compose.yml` for details.
-
-The Admin API container runs with `SPRING_PROFILES_ACTIVE=dev`. That profile exists only so the
-shipped defaults can be the safe ones: the bundled dev realm has no audience protocol mapper for this
-API, and Swagger UI has to read `/api-docs` without a token. It relaxes exactly those two settings and
-logs a `WARN` for each at startup. Never activate it in a deployment - see
-[Production checklist](#production-checklist).
-
-### Option B - run the services yourself
-
-#### 1. Start Infrastructure
+To build against your own matching core checkout instead of the pinned Git source:
 
 ```bash
-cd docker
-
-# Start Keycloak only
-docker compose -f key-cloak.yml up -d
+FLUXGATE_CORE_SOURCE=/absolute/path/to/core docker compose build admin-api
 ```
 
-MongoDB and Redis come from the root `docker-compose.yml`:
+This stack uses the `dev` API profile, public fixture credentials and a development notification
+signing key. Supply the same `FLUXGATE_CONTROL_SECRET` to any Java SDK readers using its reload
+notifications. Published Envoy readers use the active Mongo policy independently of these hints.
+Replace development values before deployment; see [Production checklist](#production-checklist).
+Stop with `docker compose down`; stored data remains in the named volumes.
+
+### Option B — native API and UI
+
+First build the matching core dependencies into a private Maven repository, as described in
+[Paired core artifacts](deploy/README.md#paired-core-artifacts). Keep `FLUXGATE_M2_DIR` available
+in the API terminal. Do not replace these dependencies with the published 0.3.7 artifacts.
+
+From the Studio repository root, with the same hosts entry as Option A:
 
 ```bash
-docker compose up -d mongo redis
-```
-
-#### 2. Start Admin API
-
-```bash
+docker compose up -d keycloak mongo redis
 cd fluxgate-studio-admin-api
-
-# Build
-./mvnw clean package -DskipTests
-
-# Run against the local Keycloak dev realm
-./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+export KEYCLOAK_ISSUER_URI=http://keycloak:8080/realms/fluxgate
+export KEYCLOAK_JWK_SET_URI=http://keycloak:8080/realms/fluxgate/protocol/openid-connect/certs
+export FLUXGATE_REDIS_URI=redis://localhost:6379
+export FLUXGATE_CONTROL_SECRET=local-dev-notifier-secret-change-me
+./mvnw -B -Dmaven.repo.local="$FLUXGATE_M2_DIR" clean verify spotless:check
+./mvnw -Dmaven.repo.local="$FLUXGATE_M2_DIR" spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-The API will be available at `http://localhost:8090`. Without `-Dspring-boot.run.profiles=dev` the
-safe defaults apply, and the dev realm's tokens are rejected with `401` because they carry no
-`fluxgate-studio-admin-api` audience.
-
-#### 3. Start UI
+In another terminal, from the Studio repository root, create `fluxgate-studio-ui-nextjs/.env.local`
+using the [UI environment example](#ui-envlocal) below, then run:
 
 ```bash
 cd fluxgate-studio-ui-nextjs
-
-# Install dependencies
-npm install
-
-# Development mode
+npm ci
 npm run dev
-
-# Or production build
-npm run build
-npm run start
 ```
 
-The UI will be available at `http://localhost:3000`
+API: `http://localhost:8090`; UI: `http://localhost:3000`. The dev realm lacks the API audience
+mapper, so it needs the `dev` profile locally. The production profile retains audience validation.
 
 ## Configuration
 
@@ -160,7 +146,7 @@ NEXTAUTH_SECRET=your-secret-key
 # Keycloak
 KEYCLOAK_CLIENT_ID=fluxgate-studio
 KEYCLOAK_CLIENT_SECRET=fluxgate-studio-secret
-KEYCLOAK_ISSUER=http://localhost:18080/realms/fluxgate
+KEYCLOAK_ISSUER=http://keycloak:8080/realms/fluxgate
 ```
 
 #### Admin API (application.yml)
@@ -171,12 +157,12 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:18080/realms/fluxgate
+          issuer-uri: http://keycloak:8080/realms/fluxgate
 
 fluxgate:
   mongo:
     enabled: true
-    uri: mongodb://localhost:27017/fluxgate
+    uri: mongodb://fluxgate:fluxgate123@localhost:27017/fluxgate?authSource=admin
     database: fluxgate
     rule-collection: rate_limit_rules
 ```
@@ -194,7 +180,7 @@ The included `docker/fluxgate-realm.json` creates:
   | admin | admin | admin, user |
   | user | user | user |
 
-Access Keycloak Admin Console at `http://localhost:18080/admin` (admin/admin)
+Access Keycloak Admin Console at `http://keycloak:8080/admin` (admin/admin)
 
 ## API Endpoints
 
@@ -254,7 +240,7 @@ outside a laptop.
 | 4 | OpenAPI document behind authentication (`fluxgate.studio.security.public-api-docs=false`, the default): `/api-docs/**` then requires `ROLE_USER` or `ROLE_ADMIN`. | `application-prod.yml` |
 | 5 | CORS: `CORS_ALLOWED_ORIGINS` lists the real UI origins, never `*`. The application fails to start on `*` together with `allow-credentials=true`. | Admin API environment |
 | 6 | `fluxgate.mongo.ddl-auto=validate` so the application never creates collections or indexes implicitly. | `application-prod.yml` |
-| 7 | Every secret injected from the environment: `FLUXGATE_MONGO_URI`, `FLUXGATE_REDIS_URI`, `NEXTAUTH_SECRET`, `KEYCLOAK_CLIENT_SECRET`. No defaults from the dev realm survive into a deployment. | both services |
+| 7 | Every secret injected from the environment: `FLUXGATE_MONGO_URI`, `FLUXGATE_REDIS_URI`, `FLUXGATE_CONTROL_SECRET`, `NEXTAUTH_SECRET`, `KEYCLOAK_CLIENT_SECRET`. No defaults from the dev realm survive into a deployment. | both services |
 | 8 | Actuator: only `health,info,metrics` exposed and `management.endpoint.health.show-details=when_authorized` (health details name the internal Redis/Mongo hosts). | `application-prod.yml` |
 | 9 | UI security headers served on every response: `X-Frame-Options: DENY`, `Content-Security-Policy: frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`. Check them with `curl -I` against the deployed UI, because a reverse proxy can strip or override them. | `fluxgate-studio-ui-nextjs/next.config.ts` |
 | 10 | BFF proxy allow-list unchanged, or extended by the rules below. | `fluxgate-studio-ui-nextjs/src/app/api/proxy/[...path]/route.ts` |
@@ -281,6 +267,10 @@ browser can reach, so it has to stay a prefix allow-list over validated segments
   happy path. Extend it together with the allow-list (`npm test`).
 
 ## Development
+
+API commands below use the private repository prepared in the quick start: add
+`-Dmaven.repo.local="$FLUXGATE_M2_DIR"` to each `./mvnw` command.
+
 
 ### UI Development
 
@@ -357,4 +347,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Related Projects
 
-- [FluxGate](https://github.com/openfluxgate/fluxgate) - Distributed Rate Limiting Engine
+- [FluxGate](https://github.com/OpenFluxGate/openfluxgate-core) - Distributed Rate Limiting Engine

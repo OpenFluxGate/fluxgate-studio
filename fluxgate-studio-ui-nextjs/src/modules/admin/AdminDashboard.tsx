@@ -20,6 +20,7 @@ import {
 
 import {
   ApiError,
+  assertSafeRuleNumbers,
   createRule as apiCreateRule,
   type CreateRuleRequest,
   deleteRule as apiDeleteRule,
@@ -132,6 +133,8 @@ export const AdminDashboard = () => {
     try {
       setFormErrors({});
       if (selectedRule) {
+        // Read values may have been rounded for display; never write back an unsafe snapshot.
+        assertSafeRuleNumbers(selectedRule);
         // Update existing rule
         const updatedRule = await apiUpdateRule(
           data.id,
@@ -164,7 +167,7 @@ export const AdminDashboard = () => {
   const handleExport = async () => {
     try {
       const exported = await apiExportRules();
-      const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
+      const blob = new Blob([exported], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -173,7 +176,7 @@ export const AdminDashboard = () => {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      setNotice(`Exported ${exported.length} rule(s).`);
+      setNotice('Exported rules without changing the original JSON.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to export rules');
     }
@@ -194,6 +197,7 @@ export const AdminDashboard = () => {
         setError('The selected file does not contain a rule array.');
         return;
       }
+      payload.forEach(assertSafeRuleNumbers);
       const confirmed = window.confirm(
         `Import ${payload.length} rule(s) from "${file.name}"? Rules with an existing id will be` +
           ' overwritten.'

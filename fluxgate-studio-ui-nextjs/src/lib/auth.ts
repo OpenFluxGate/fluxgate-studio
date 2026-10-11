@@ -40,6 +40,7 @@ export const authOptions: NextAuthOptions = {
           accessToken: account.access_token,
           refreshToken: account.refresh_token,
           expiresAt: account.expires_at,
+          error: undefined,
         };
       }
 
@@ -96,9 +97,11 @@ async function refreshAccessToken(token: {
       accessToken: refreshedTokens.access_token,
       refreshToken: refreshedTokens.refresh_token ?? token.refreshToken,
       expiresAt: Math.floor(Date.now() / 1000 + refreshedTokens.expires_in),
+      error: undefined,
     };
-  } catch (error) {
-    console.error('Error refreshing access token', error);
+  } catch {
+    // Provider error responses can contain credentials; keep logs and the public error generic.
+    console.error('Error refreshing access token');
     return {
       ...token,
       error: 'RefreshAccessTokenError',

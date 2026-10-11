@@ -1,12 +1,10 @@
 import { type NextRequest } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { getToken } from 'next-auth/jwt';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('next-auth', () => ({ getServerSession: vi.fn() }));
-vi.mock('next-auth/jwt', () => ({ getToken: vi.fn() }));
-vi.mock('@/lib/auth', () => ({ authOptions: {} }));
+import { backendSession } from '@/lib/backend-session';
+
+vi.mock('@/lib/backend-session', () => ({ backendSession: vi.fn() }));
 
 const API_BASE = 'http://admin-api.test:8090';
 
@@ -45,8 +43,7 @@ beforeEach(() => {
   fetchMock.mockResolvedValue(
     new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } })
   );
-  vi.mocked(getServerSession).mockResolvedValue({ expires: 'never' });
-  vi.mocked(getToken).mockResolvedValue({ accessToken: 'server-side-token' });
+  vi.mocked(backendSession).mockResolvedValue({ accessToken: 'server-side-token', cookies: [] });
 });
 
 describe('BFF proxy route', () => {
@@ -131,7 +128,7 @@ describe('BFF proxy route', () => {
   });
 
   it('rejects a request without a session', async () => {
-    vi.mocked(getServerSession).mockResolvedValue(null);
+    vi.mocked(backendSession).mockResolvedValue({ accessToken: undefined, cookies: [] });
 
     const response = await DELETE(requestFor('DELETE'), contextFor(['api', 'rules', 'rule-1']));
 
@@ -140,7 +137,7 @@ describe('BFF proxy route', () => {
   });
 
   it('rejects a session without an access token', async () => {
-    vi.mocked(getToken).mockResolvedValue(null);
+    vi.mocked(backendSession).mockResolvedValue({ accessToken: undefined, cookies: [] });
 
     const response = await GET(requestFor('GET'), contextFor(['api', 'rules']));
 

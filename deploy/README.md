@@ -4,17 +4,52 @@ Studio manages mutable rule drafts and publishes authoritative policy generation
 
 ## Paired core artifacts
 
-This worktree uses the `MongoPolicyRepository` API from the paired FluxGate LTS / Envoy integration worktree and pins `0.4.0-SNAPSHOT`. This API is **not available in the published 0.3.7 artifacts**. Install the matching integration changes into an isolated Maven repository before building Studio. The deployment must pair the Studio API and Envoy reader with the same policy schema and repository implementation.
+Studio uses the paired FluxGate core `MongoPolicyRepository` API and `0.4.0-SNAPSHOT` artifacts.
+The API is **not available in published 0.3.7 artifacts**. The reviewed source revision is
+[`b52e0787707232b62b5aa4afe285170fc78eeb97`](https://github.com/OpenFluxGate/openfluxgate-core/commit/b52e0787707232b62b5aa4afe285170fc78eeb97).
+Compose and Admin API CI use this exact revision; update both when changing the pairing.
+Envoy and Studio must use compatible policy schemas and repository implementations. The public pin
+includes the reviewed policy and validation fixes. For later local development, select a matching
+core worktree with `FLUXGATE_CORE_SOURCE`; publish and repin Compose, CI and this guide together
+before distributing another paired build.
 
-Studio obtains policy collections from the qualified `fluxgateMongoDatabase` bean. The starter supplies this database through `FluxgateMongoClientHolder`, which isolates the FluxGate client from any application `MongoClient` bean. The holder closes its own client at shutdown and leaves an application-supplied legacy `fluxgateMongoClient` open for its owner.
+Compose builds these dependencies in its own build container, without a host Maven cache.
+`FLUXGATE_CORE_SOURCE=/absolute/path/to/core docker compose build admin-api` selects a matching local
+checkout. A direct `docker build` also needs `--build-context fluxgate_core=/absolute/path/to/core`.
 
-After the matching core installation completes, run from `fluxgate-studio-admin-api` with Java 21:
+For native development, start in the Studio repository root with Java 21:
 
 ```bash
-./mvnw -B -Dmaven.repo.local=/tmp/fluxgate-lts-integration-m2/repository clean verify spotless:check
+git clone https://github.com/OpenFluxGate/openfluxgate-core.git ../fluxgate-core-paired
+git -C ../fluxgate-core-paired checkout b52e0787707232b62b5aa4afe285170fc78eeb97
+export FLUXGATE_CORE_SOURCE="$(cd ../fluxgate-core-paired && pwd)"
 ```
 
-This builds `target/fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar`. The repository path is a local proof convention, not a production dependency source.
+If you already have a matching checkout, skip the clone and checkout commands above and select it:
+
+```bash
+export FLUXGATE_CORE_SOURCE=/absolute/path/to/matching/core
+```
+
+Then, in the same terminal from the Studio repository root, prepare and use an isolated repository:
+
+```bash
+export FLUXGATE_M2_DIR="$(mktemp -d "${TMPDIR:-/tmp}/fluxgate-studio-m2.XXXXXX")"
+(cd "$FLUXGATE_CORE_SOURCE" && ./mvnw -B -Dmaven.repo.local="$FLUXGATE_M2_DIR" \
+  -pl fluxgate-spring-boot3-starter,fluxgate-control-support -am install spotless:check)
+cd fluxgate-studio-admin-api
+./mvnw -B -Dmaven.repo.local="$FLUXGATE_M2_DIR" clean verify spotless:check
+```
+
+Keep `FLUXGATE_M2_DIR` in the terminal for later Maven commands. The wrapper provides Maven; Docker
+is needed for the integration-test tier. This builds `target/fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar`.
+It does not publish SNAPSHOT artifacts; release distribution still requires a paired public release.
+
+Studio obtains policy collections from the qualified `fluxgateMongoDatabase` bean supplied by
+`FluxgateMongoClientHolder`. Its client is isolated from any application `MongoClient` bean and closed
+at shutdown; an application-owned legacy `fluxgateMongoClient` remains under its owner's lifecycle.
+Redis reload notifications require `FLUXGATE_CONTROL_SECRET`, matching Java SDK reader signing keys.
+The local Compose fixture supplies a development-only key; production must supply a private value.
 
 ## Mutable draft identity
 
@@ -29,6 +64,10 @@ Studio reuses the core compound index contract and never creates a global unique
 ## Publication API
 
 Every endpoint requires a verified Bearer JWT with the configured issuer and audience. `USER` and `ADMIN` may read. Publication and rollback require `ADMIN` at both the URL authorization layer and the controller method layer.
+
+These roles apply to the whole Studio deployment. They do not restrict an administrator to a tenant
+or rule-set owner. Tenant-scoped quota keys do not provide tenant-scoped management permissions;
+use separate deployments/databases and authorization boundaries when that isolation is required.
 
 | Method | Path | Behavior |
 | --- | --- | --- |

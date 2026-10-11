@@ -4,12 +4,12 @@ name: UI CI
 # and admin-api-ci.yml, so lint, typecheck and build always run together).
 on:
   push:
-    branches: [ "main", "development/**" ]
+    branches: [ "main", "development/**", "feature/lts-*", "fix/main-review-findings" ]
     paths:
       - 'fluxgate-studio-ui-nextjs/**'
       - '.github/workflows/ui-ci.yml'
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "feature/lts-*" ]
     paths:
       - 'fluxgate-studio-ui-nextjs/**'
       - '.github/workflows/ui-ci.yml'
@@ -43,6 +43,9 @@ jobs:
 
       - name: Type check
         run: npm run typecheck
+
+      - name: Run regression tests
+        run: npm run test
 
       - name: Build
         run: npm run build
