@@ -27,6 +27,7 @@
         <tomcat.version>10.1.60</tomcat.version>
         <netty.version>4.1.137.Final</netty.version>
         <jackson-bom.version>2.21.7</jackson-bom.version>
+        <micrometer.version>1.16.7</micrometer.version>
         <java.version>21</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>

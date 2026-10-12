@@ -51,7 +51,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: OpenFluxGate/openfluxgate-core
-          ref: 0f142b97e72103916b6fac04aaf96b523fc06954
+          ref: d2b771ab7ee9864a040e6672014fb16fb54b4873
           path: .paired-core
 
       - name: Set up JDK
