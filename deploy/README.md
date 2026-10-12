@@ -4,14 +4,19 @@ Studio manages mutable rule drafts and publishes authoritative policy generation
 
 ## Paired core artifacts
 
-Studio uses the paired FluxGate core `MongoPolicyRepository` API and `0.4.0-SNAPSHOT` artifacts.
+Studio uses the paired FluxGate core `MongoPolicyRepository` API and `0.5.0` artifacts.
 The API is **not available in published 0.3.7 artifacts**. The reviewed source revision is
-[`d2b771ab7ee9864a040e6672014fb16fb54b4873`](https://github.com/OpenFluxGate/openfluxgate-core/commit/d2b771ab7ee9864a040e6672014fb16fb54b4873).
+[`39a1789acfc481e416e7363dc6e9dd3817b147b5`](https://github.com/OpenFluxGate/openfluxgate-core/commit/39a1789acfc481e416e7363dc6e9dd3817b147b5).
 Compose and Admin API CI use this exact revision; update both when changing the pairing.
 Envoy and Studio must use compatible policy schemas and repository implementations. The public pin
 includes the reviewed policy and validation fixes. For later local development, select a matching
 core worktree with `FLUXGATE_CORE_SOURCE`; publish and repin Compose, CI and this guide together
 before distributing another paired build.
+
+This pair prepares 0.5.0 from source. Its Boot 3 server remains a legacy compatibility build;
+the maintained server baseline and LTS support scope are pending. The paired core's
+[security policy](https://github.com/OpenFluxGate/fluxgate/blob/39a1789acfc481e416e7363dc6e9dd3817b147b5/SECURITY.md#050-source-preparation)
+records the residual Spring advisories. Native or Docker build success does not close that boundary.
 
 Compose builds these dependencies in its own build container, without a host Maven cache.
 `FLUXGATE_CORE_SOURCE=/absolute/path/to/core docker compose build admin-api` selects a matching local
@@ -21,7 +26,7 @@ For native development, start in the Studio repository root with Java 21:
 
 ```bash
 git clone https://github.com/OpenFluxGate/openfluxgate-core.git ../fluxgate-core-paired
-git -C ../fluxgate-core-paired checkout d2b771ab7ee9864a040e6672014fb16fb54b4873
+git -C ../fluxgate-core-paired checkout 39a1789acfc481e416e7363dc6e9dd3817b147b5
 export FLUXGATE_CORE_SOURCE="$(cd ../fluxgate-core-paired && pwd)"
 ```
 

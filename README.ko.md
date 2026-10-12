@@ -69,8 +69,10 @@
 
 ### 옵션 A — Docker Compose
 
-Admin API 이미지는 고정된 Git revision에서 짝이 맞는 core `0.4.0-SNAPSHOT` 의존성을 빌드합니다.
+Admin API 이미지는 고정된 Git revision에서 짝이 맞는 core `0.5.0` 의존성을 빌드합니다.
 호스트의 Maven 캐시나 사전에 설치한 core JAR은 필요하지 않습니다.
+현재는 소스 준비 단계이며 LTS 서버·보안 지원 범위는 아직 확정하지 않았습니다.
+배포 전에 [짝이 맞는 빌드와 보안 범위](deploy/README.md#paired-core-artifacts)를 확인하세요.
 
 1. hosts 파일에 `127.0.0.1 keycloak`을 추가합니다. 토큰 검증을 위해 브라우저와 컨테이너의
    Keycloak issuer URL은 포트까지 같아야 합니다.

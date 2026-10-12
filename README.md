@@ -69,8 +69,10 @@ Run the following commands from the **Studio repository root** unless a differen
 
 ### Option A — Docker Compose
 
-The Admin API image builds the paired `0.4.0-SNAPSHOT` core dependencies from a pinned Git revision;
+The Admin API image builds the paired `0.5.0` core dependencies from a pinned Git revision;
 a warm host Maven cache or separately installed core JARs are not required.
+This is source preparation with a pending LTS server/security support boundary; review the
+[paired build and security scope](deploy/README.md#paired-core-artifacts) before deployment.
 
 1. Add `127.0.0.1 keycloak` to your hosts file. The browser and containers must use the same
    Keycloak issuer URL, including port, for token validation to work.

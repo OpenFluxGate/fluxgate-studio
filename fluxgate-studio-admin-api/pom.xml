@@ -24,16 +24,19 @@
 
     <properties>
         <!-- Last OSS 3.5 release; this compatibility lane is not ongoing OSS maintenance. -->
-        <tomcat.version>10.1.60</tomcat.version>
-        <netty.version>4.1.137.Final</netty.version>
+        <tomcat.version>10.1.61</tomcat.version>
+        <netty.version>4.1.139.Final</netty.version>
         <jackson-bom.version>2.21.7</jackson-bom.version>
         <micrometer.version>1.16.7</micrometer.version>
+        <logback.version>1.6.5</logback.version>
+        <commons-lang3.version>3.18.0</commons-lang3.version>
+        <log4j2.version>2.25.5</log4j2.version>
         <java.version>21</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
 
         <!-- FluxGate dependency (local LTS / Envoy integration artifacts) -->
-        <fluxgate.version>0.4.0-SNAPSHOT</fluxgate.version>
+        <fluxgate.version>0.5.0</fluxgate.version>
 
         <!-- Plugin versions (aligned with fluxgate engine) -->
         <jacoco.version>0.8.12</jacoco.version>
