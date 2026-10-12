@@ -82,7 +82,7 @@ services:
     build:
       context: ./fluxgate-studio-admin-api
       additional_contexts:
-        fluxgate_core: ${FLUXGATE_CORE_SOURCE:-https://github.com/OpenFluxGate/openfluxgate-core.git#b52e0787707232b62b5aa4afe285170fc78eeb97}
+        fluxgate_core: ${FLUXGATE_CORE_SOURCE:-https://github.com/OpenFluxGate/openfluxgate-core.git#0f142b97e72103916b6fac04aaf96b523fc06954}
     container_name: fluxgate-admin-api
     depends_on:
       mongo:

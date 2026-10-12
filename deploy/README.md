@@ -6,7 +6,7 @@ Studio manages mutable rule drafts and publishes authoritative policy generation
 
 Studio uses the paired FluxGate core `MongoPolicyRepository` API and `0.4.0-SNAPSHOT` artifacts.
 The API is **not available in published 0.3.7 artifacts**. The reviewed source revision is
-[`b52e0787707232b62b5aa4afe285170fc78eeb97`](https://github.com/OpenFluxGate/openfluxgate-core/commit/b52e0787707232b62b5aa4afe285170fc78eeb97).
+[`0f142b97e72103916b6fac04aaf96b523fc06954`](https://github.com/OpenFluxGate/openfluxgate-core/commit/0f142b97e72103916b6fac04aaf96b523fc06954).
 Compose and Admin API CI use this exact revision; update both when changing the pairing.
 Envoy and Studio must use compatible policy schemas and repository implementations. The public pin
 includes the reviewed policy and validation fixes. For later local development, select a matching
@@ -21,7 +21,7 @@ For native development, start in the Studio repository root with Java 21:
 
 ```bash
 git clone https://github.com/OpenFluxGate/openfluxgate-core.git ../fluxgate-core-paired
-git -C ../fluxgate-core-paired checkout b52e0787707232b62b5aa4afe285170fc78eeb97
+git -C ../fluxgate-core-paired checkout 0f142b97e72103916b6fac04aaf96b523fc06954
 export FLUXGATE_CORE_SOURCE="$(cd ../fluxgate-core-paired && pwd)"
 ```
 
