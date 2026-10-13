@@ -1,0 +1,139 @@
+# FluxGate Studio - full local stack (Keycloak + MongoDB + Redis + Admin API + UI).
+#
+#   docker compose up --build
+#   UI            http://localhost:3000
+#   Admin API     http://localhost:8090/swagger-ui.html
+#   Keycloak      http://keycloak:8080  (admin / admin)
+#
+# ONE-TIME HOST SETUP: the browser and the containers must agree on the Keycloak URL, because the
+# "iss" claim of the access token has to match what the Admin API validates. Add this line to
+# /etc/hosts (C:\Windows\System32\drivers\etc\hosts on Windows):
+#
+#   127.0.0.1 keycloak
+#
+# Then sign in at http://localhost:3000 with admin/admin (ROLE_ADMIN) or user/user (read-only).
+#
+# Everything here is a development stack: the credentials below come from the dev realm template in
+# docker/fluxgate-realm.json and must never be reused outside a laptop. For production, start from
+# fluxgate-studio-admin-api/src/main/resources/application-prod.yml and inject real secrets.
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: fluxgate-keycloak
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: 'true'
+    ports:
+      # 8080 is the address both the browser (via the /etc/hosts entry) and the other containers
+      # use; 18080 keeps the port of the standalone docker/key-cloak.yml available as well.
+      - '8080:8080'
+      - '18080:8080'
+    volumes:
+      - ./docker/fluxgate-realm.json:/opt/keycloak/data/import/fluxgate-realm.json:ro
+      - keycloak_data:/opt/keycloak/data
+    command:
+      - start-dev
+      - --import-realm
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          "exec 3<>/dev/tcp/127.0.0.1/8080; echo -e 'GET /realms/fluxgate HTTP/1.1\\r\\nhost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q '200'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+
+  mongo:
+    image: mongo:7.0
+    container_name: fluxgate-mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: fluxgate
+      MONGO_INITDB_ROOT_PASSWORD: fluxgate123
+      MONGO_INITDB_DATABASE: fluxgate
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.adminCommand("ping")']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: fluxgate-redis
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  admin-api:
+    build:
+      context: ./fluxgate-studio-admin-api
+      additional_contexts:
+        fluxgate_core: ${FLUXGATE_CORE_SOURCE:-https://github.com/OpenFluxGate/openfluxgate-core.git#39a1789acfc481e416e7363dc6e9dd3817b147b5}
+    container_name: fluxgate-admin-api
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    environment:
+      # Same host name as the browser uses, so the token "iss" claim matches.
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/fluxgate
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/fluxgate/protocol/openid-connect/certs
+      # Local development profile (application-dev.yml): the dev realm has no audience mapper for
+      # this API and Swagger UI needs to read /api-docs without a token, so the dev profile relaxes
+      # exactly those two settings and logs a WARN for each. Never use it in a deployment - see the
+      # production checklist in README.md.
+      SPRING_PROFILES_ACTIVE: dev
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+      FLUXGATE_MONGO_URI: mongodb://fluxgate:fluxgate123@mongo:27017/fluxgate?authSource=admin
+      FLUXGATE_MONGO_DB: fluxgate
+      FLUXGATE_REDIS_URI: redis://redis:6379
+      FLUXGATE_CONTROL_SECRET: ${FLUXGATE_CONTROL_SECRET:-local-dev-notifier-secret-change-me}
+    ports:
+      - '8090:8090'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:8090/actuator/health | grep -q UP']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  ui:
+    build:
+      context: ./fluxgate-studio-ui-nextjs
+    container_name: fluxgate-studio-ui
+    depends_on:
+      admin-api:
+        condition: service_started
+    environment:
+      # Server-side only: the access token is attached by the Next.js proxy route, never in the
+      # browser (see src/app/api/proxy/[...path]/route.ts).
+      ADMIN_API_URL: http://admin-api:8090
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-local-dev-secret-change-me}
+      KEYCLOAK_ISSUER: http://keycloak:8080/realms/fluxgate
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-fluxgate-studio}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-fluxgate-studio-secret}
+    ports:
+      - '3000:3000'
+
+volumes:
+  keycloak_data:
+  mongo_data:
+  redis_data:
