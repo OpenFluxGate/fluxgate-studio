@@ -7,10 +7,11 @@ Studio manages mutable rule drafts and publishes authoritative policy generation
 Studio uses the paired FluxGate core `MongoPolicyRepository` API and `0.5.0` artifacts.
 The API is **not available in published 0.3.7 artifacts**. The reviewed source revision is
 [`39a1789acfc481e416e7363dc6e9dd3817b147b5`](https://github.com/OpenFluxGate/openfluxgate-core/commit/39a1789acfc481e416e7363dc6e9dd3817b147b5).
-Compose and Admin API CI use this exact revision; update both when changing the pairing.
+Compose, Admin API CI, and the Admin API deployment workflow use this exact revision; update all
+three when changing the pairing.
 Envoy and Studio must use compatible policy schemas and repository implementations. The public pin
 includes the reviewed policy and validation fixes. For later local development, select a matching
-core worktree with `FLUXGATE_CORE_SOURCE`; publish and repin Compose, CI and this guide together
+core worktree with `FLUXGATE_CORE_SOURCE`; publish and repin Compose, CI, deployment, and this guide together
 before distributing another paired build.
 
 This pair prepares 0.5.0 from source. Its Boot 3 server remains a legacy compatibility build;
@@ -21,6 +22,13 @@ records the residual Spring advisories. Native or Docker build success does not 
 Compose builds these dependencies in its own build container, without a host Maven cache.
 `FLUXGATE_CORE_SOURCE=/absolute/path/to/core docker compose build admin-api` selects a matching local
 checkout. A direct `docker build` also needs `--build-context fluxgate_core=/absolute/path/to/core`.
+
+GitHub Actions installs the paired core artifacts into `$RUNNER_TEMP/fluxgate-m2` before building
+the Admin API. The deployment workflow also runs `clean verify` on relevant pull requests; its
+SSH and artifact-copy steps run only for pushes to `main`. Admin API and UI checks run on every
+pull request to their configured target branches, including documentation-only changes, so required
+checks are not left pending by path filters. Dependency Review blocks newly introduced high or
+critical vulnerabilities; it does not certify the entire resolved dependency graph.
 
 For native development, start in the Studio repository root with Java 21:
 

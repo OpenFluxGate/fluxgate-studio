@@ -11,10 +11,9 @@ on:
       - 'docker-compose.yml'
   pull_request:
     branches: [ "main", "feature/lts-*" ]
-    paths:
-      - 'fluxgate-studio-admin-api/**'
-      - '.github/workflows/admin-api-ci.yml'
-      - 'docker-compose.yml'
+
+permissions:
+  contents: read
 
 defaults:
   run:
@@ -22,6 +21,7 @@ defaults:
 
 jobs:
   build:
+    name: Admin API checks
     runs-on: ubuntu-latest
 
     services:

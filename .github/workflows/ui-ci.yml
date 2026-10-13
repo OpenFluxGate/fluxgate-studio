@@ -10,9 +10,9 @@ on:
       - '.github/workflows/ui-ci.yml'
   pull_request:
     branches: [ "main", "feature/lts-*" ]
-    paths:
-      - 'fluxgate-studio-ui-nextjs/**'
-      - '.github/workflows/ui-ci.yml'
+
+permissions:
+  contents: read
 
 defaults:
   run:
@@ -20,6 +20,7 @@ defaults:
 
 jobs:
   build:
+    name: UI checks
     runs-on: ubuntu-latest
 
     steps:
