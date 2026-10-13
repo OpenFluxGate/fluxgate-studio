@@ -10,8 +10,8 @@ This repository owns `fluxgate-studio-admin-api` and `fluxgate-studio-ui-nextjs`
 >
 > | Demo | Description | Link |
 > |------|-------------|------|
-> | **FluxGate Studio** | Admin UI for rate limit rule management | [Open Demo](https://port-next-fluxgate-studio-demo-mjdyw2g80a39ae78.sel3.cloudtype.app/) |
-> | **FluxGate API** | Rate limiting API with Swagger UI | [Open Swagger](https://port-0-fluxgate-demo-mjdyw2g80a39ae78.sel3.cloudtype.app/swagger-ui/index.html) |
+> | **FluxGate Studio** | Admin UI for rate limit rule management | [Open Demo](http://13.124.192.116:3000/) |
+> | **FluxGate API** | Rate limiting API with Swagger UI | [Open Swagger](http://13.124.192.116:8080/swagger-ui/index.html) |
 
 
 ## Architecture
