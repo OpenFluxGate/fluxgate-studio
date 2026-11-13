@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.fluxgate.studio.admin.audit.AuditService;
 import org.fluxgate.studio.admin.controller.RuleController;
 import org.fluxgate.studio.admin.service.RuleService;
 import org.junit.jupiter.api.DisplayName;
@@ -35,6 +36,7 @@ class ApiDocsSecurityTest {
   @Autowired private MockMvc mockMvc;
 
   @MockBean private RuleService ruleService;
+  @MockBean private AuditService auditService;
 
   /**
    * springdoc is not part of this slice, so the request cannot reach a handler. What matters is

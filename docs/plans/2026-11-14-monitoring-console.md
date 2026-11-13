@@ -2715,7 +2715,7 @@ public class AuditService {
           RuleDiff.snapshot(before),
           null,
           null);
-  return AuditService.flag(ResponseEntity.noContent(), audited).build();
+  return AuditService.flag(ResponseEntity.status(HttpStatus.NO_CONTENT), audited).build();
 ```
 
 ```java

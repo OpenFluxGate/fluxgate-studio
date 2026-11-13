@@ -6,8 +6,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.fluxgate.studio.admin.audit.AuditAction;
+import org.fluxgate.studio.admin.audit.AuditService;
+import org.fluxgate.studio.admin.audit.RuleDiff;
 import org.fluxgate.studio.admin.dto.request.CreateRuleRequest;
 import org.fluxgate.studio.admin.dto.request.ImportRulesRequest;
 import org.fluxgate.studio.admin.dto.request.SimulateRequest;
@@ -24,6 +28,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -54,9 +59,11 @@ public class RuleController {
   private static final String ROLE_WRITER = "hasRole('ADMIN')";
 
   private final RuleService ruleService;
+  private final AuditService auditService;
 
-  public RuleController(RuleService ruleService) {
+  public RuleController(RuleService ruleService, AuditService auditService) {
     this.ruleService = ruleService;
+    this.auditService = auditService;
   }
 
   /**
@@ -137,9 +144,17 @@ public class RuleController {
     @ApiResponse(responseCode = "403", description = "Admin role required")
   })
   public ResponseEntity<ImportResultResponse> importRules(
-      @Valid @RequestBody ImportRulesRequest request) {
+      @Valid @RequestBody ImportRulesRequest request, Authentication authentication) {
     log.debug("POST /api/rules/import - {} rules", request.rules().size());
-    return ResponseEntity.ok(ruleService.importRules(request.rules()));
+    ImportResultResponse result = ruleService.importRules(request.rules());
+    Map<String, Object> detail = new LinkedHashMap<>();
+    detail.put("total", result.total());
+    detail.put("created", result.created());
+    detail.put("updated", result.updated());
+    boolean audited =
+        auditService.recordChange(
+            authentication, AuditAction.RULES_IMPORT, null, null, null, detail);
+    return AuditService.flag(ResponseEntity.ok(), audited).body(result);
   }
 
   @GetMapping("/{id}")
@@ -194,10 +209,19 @@ public class RuleController {
     @ApiResponse(responseCode = "403", description = "Admin role required"),
     @ApiResponse(responseCode = "409", description = "Rule already exists")
   })
-  public ResponseEntity<RuleResponse> createRule(@Valid @RequestBody CreateRuleRequest request) {
+  public ResponseEntity<RuleResponse> createRule(
+      @Valid @RequestBody CreateRuleRequest request, Authentication authentication) {
     log.debug("POST /api/rules - id={}", request.id());
     RuleResponse created = ruleService.createRule(request);
-    return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    boolean audited =
+        auditService.recordChange(
+            authentication,
+            AuditAction.RULE_CREATE,
+            RuleDiff.target(created),
+            null,
+            RuleDiff.snapshot(created),
+            null);
+    return AuditService.flag(ResponseEntity.status(HttpStatus.CREATED), audited).body(created);
   }
 
   /**
@@ -230,13 +254,28 @@ public class RuleController {
           String ifMatch,
       @Valid @RequestBody UpdateRuleRequest request,
       @RequestParam(required = false) String ruleSetId,
-      @RequestParam(required = false) String unassigned) {
+      @RequestParam(required = false) String unassigned,
+      Authentication authentication) {
     log.debug("PUT /api/rules/{} - ifMatch={}", id, ifMatch);
+    boolean scoped = scoped(ruleSetId, unassigned);
+    Long expected = parseIfMatch(ifMatch);
+    RuleResponse before =
+        scoped ? ruleService.getRuleById(ruleSetId, id) : ruleService.getRuleById(id);
     RuleResponse updated =
-        scoped(ruleSetId, unassigned)
-            ? ruleService.updateRule(ruleSetId, id, request, parseIfMatch(ifMatch))
-            : ruleService.updateRule(id, request, parseIfMatch(ifMatch));
-    return ResponseEntity.ok().eTag(String.valueOf(updated.version())).body(updated);
+        scoped
+            ? ruleService.updateRule(ruleSetId, id, request, expected)
+            : ruleService.updateRule(id, request, expected);
+    RuleDiff.Change change = RuleDiff.diff(before, updated);
+    boolean audited =
+        auditService.recordChange(
+            authentication,
+            AuditAction.RULE_UPDATE,
+            RuleDiff.target(updated),
+            change.before(),
+            change.after(),
+            null);
+    return AuditService.flag(ResponseEntity.ok().eTag(String.valueOf(updated.version())), audited)
+        .body(updated);
   }
 
   /**
@@ -276,11 +315,23 @@ public class RuleController {
   public ResponseEntity<Void> deleteRule(
       @Parameter(description = "Rule ID", required = true) @PathVariable String id,
       @RequestParam(required = false) String ruleSetId,
-      @RequestParam(required = false) String unassigned) {
+      @RequestParam(required = false) String unassigned,
+      Authentication authentication) {
     log.debug("DELETE /api/rules/{}", id);
-    if (scoped(ruleSetId, unassigned)) ruleService.deleteRule(ruleSetId, id);
+    boolean scoped = scoped(ruleSetId, unassigned);
+    RuleResponse before =
+        scoped ? ruleService.getRuleById(ruleSetId, id) : ruleService.getRuleById(id);
+    if (scoped) ruleService.deleteRule(ruleSetId, id);
     else ruleService.deleteRule(id);
-    return ResponseEntity.noContent().build();
+    boolean audited =
+        auditService.recordChange(
+            authentication,
+            AuditAction.RULE_DELETE,
+            RuleDiff.target(before),
+            RuleDiff.snapshot(before),
+            null,
+            null);
+    return AuditService.flag(ResponseEntity.status(HttpStatus.NO_CONTENT), audited).build();
   }
 
   @PatchMapping("/{id}/toggle")
@@ -299,12 +350,24 @@ public class RuleController {
   public ResponseEntity<RuleResponse> toggleRule(
       @Parameter(description = "Rule ID", required = true) @PathVariable String id,
       @RequestParam(required = false) String ruleSetId,
-      @RequestParam(required = false) String unassigned) {
+      @RequestParam(required = false) String unassigned,
+      Authentication authentication) {
     log.debug("PATCH /api/rules/{}/toggle", id);
-    return ResponseEntity.ok(
-        scoped(ruleSetId, unassigned)
-            ? ruleService.toggleRule(ruleSetId, id)
-            : ruleService.toggleRule(id));
+    boolean scoped = scoped(ruleSetId, unassigned);
+    RuleResponse before =
+        scoped ? ruleService.getRuleById(ruleSetId, id) : ruleService.getRuleById(id);
+    RuleResponse toggled =
+        scoped ? ruleService.toggleRule(ruleSetId, id) : ruleService.toggleRule(id);
+    RuleDiff.Change change = RuleDiff.diff(before, toggled);
+    boolean audited =
+        auditService.recordChange(
+            authentication,
+            AuditAction.RULE_TOGGLE,
+            RuleDiff.target(toggled),
+            change.before(),
+            change.after(),
+            null);
+    return AuditService.flag(ResponseEntity.ok(), audited).body(toggled);
   }
 
   @DeleteMapping
@@ -315,14 +378,24 @@ public class RuleController {
     @ApiResponse(responseCode = "403", description = "Admin role required")
   })
   public ResponseEntity<Map<String, Object>> deleteByRuleSetId(
-      @Parameter(description = "Rule set ID", required = true) @RequestParam String ruleSetId) {
+      @Parameter(description = "Rule set ID", required = true) @RequestParam String ruleSetId,
+      Authentication authentication) {
     log.debug("DELETE /api/rules?ruleSetId={}", ruleSetId);
     int count = ruleService.deleteByRuleSetId(ruleSetId);
-    return ResponseEntity.ok(
-        Map.of(
-            "message", "Rules deleted successfully",
-            "ruleSetId", ruleSetId,
-            "deletedCount", count));
+    boolean audited =
+        auditService.recordChange(
+            authentication,
+            AuditAction.RULES_DELETE_ALL,
+            RuleDiff.ruleSet(ruleSetId),
+            null,
+            null,
+            Map.of("deletedCount", count));
+    return AuditService.flag(ResponseEntity.ok(), audited)
+        .body(
+            Map.of(
+                "message", "Rules deleted successfully",
+                "ruleSetId", ruleSetId,
+                "deletedCount", count));
   }
 
   private boolean scoped(String ruleSetId, String unassigned) {
