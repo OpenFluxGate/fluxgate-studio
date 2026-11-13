@@ -32,11 +32,13 @@ This repository owns `fluxgate-studio-admin-api` and `fluxgate-studio-ui-nextjs`
 
 ## Features
 
-- **Rule Management**: Create, update, delete, and toggle rate limit rules
-- **Dashboard**: Real-time statistics and overview of all rules
-- **Authentication**: OAuth2/OIDC integration with Keycloak
-- **Dark/Light Theme**: Customizable UI theme
-- **Rule Simulation**: Test rate limit rules before deployment
+- **Monitoring console**: allowed and rejected trends, most rejected keys and the last decision per rule set, read from the decisions your services record (`rate_limit_events`). Studio never reads Redis.
+- **Rule management**: rules grouped by rule set, each limit explained in plain language (`60s·30` reads "30 at once, then 1 every 2s"), and a review step that lists the changed values before saving
+- **Key lookup** (admin): whether one key is currently blocked, when it is expected to be released, and its recent decisions. Every lookup is written to the audit log first.
+- **Audit log** (admin): who created, changed, toggled, deleted, imported or published what, and who looked up which key
+- **Authentication**: OAuth2/OIDC with Keycloak. `ROLE_USER` reads (keys masked), `ROLE_ADMIN` writes.
+- **Light and dark**, English and Korean
+- **Rule simulation**: dry-run a burst against a rule's bands
 
 ## Tech Stack
 
@@ -149,6 +151,11 @@ NEXTAUTH_SECRET=your-secret-key
 KEYCLOAK_CLIENT_ID=fluxgate-studio
 KEYCLOAK_CLIENT_SECRET=fluxgate-studio-secret
 KEYCLOAK_ISSUER=http://keycloak:8080/realms/fluxgate
+
+# Console language before the operator picks one (en or ko). Default en.
+NEXT_PUBLIC_DEFAULT_LOCALE=en
+# Optional link shown on the overview, for example your APM dashboard
+NEXT_PUBLIC_EXTERNAL_DASHBOARD_URL=
 ```
 
 #### Admin API (application.yml)
@@ -167,6 +174,39 @@ fluxgate:
     uri: mongodb://fluxgate:fluxgate123@localhost:27017/fluxgate?authSource=admin
     database: fluxgate
     rule-collection: rate_limit_rules
+```
+
+#### Monitoring and audit log
+
+```yaml
+fluxgate:
+  studio:
+    monitoring:
+      event-database: ${FLUXGATE_EVENT_DB:}          # empty means the rule database
+      event-collection: ${FLUXGATE_EVENT_COLLECTION:rate_limit_events}
+      create-indexes: ${FLUXGATE_EVENT_CREATE_INDEXES:true}
+      cache-ttl: 10s                                 # identical queries share one result
+      query-timeout: 5s                              # maxTimeMS of every aggregation
+      key-transforms: none,sha256                    # how a typed key can be matched
+    audit:
+      collection: ${STUDIO_AUDIT_COLLECTION:studio_audit_log}
+      retention: ${STUDIO_AUDIT_RETENTION:730d}      # 0 keeps entries forever
+```
+
+The console reads only these fields of each decision: `timestamp` (epoch ms), `allowed`, `ruleSetId`, `ruleId`,
+`userId`, `remainingTokens`, `retryAfterMs`, `endpoint` and `method`. FluxGate's `MongoRateLimitMetricsRecorder`
+writes all of them.
+
+At startup the Admin API creates three indexes on the event collection: `{timestamp: 1}`,
+`{ruleSetId: 1, timestamp: 1}` and `{userId: 1, timestamp: -1}`. On a shared database where the Studio account may
+not create indexes, set `FLUXGATE_EVENT_CREATE_INDEXES=false` and ask your DBA to create them. A failed index
+creation only logs a warning.
+
+To see the console with data on a laptop, load two hours of sample decisions into the Compose MongoDB:
+
+```bash
+docker cp docker/demo-events.js fluxgate-mongo:/tmp/demo-events.js
+docker exec fluxgate-mongo mongosh --quiet -u fluxgate -p fluxgate123 --authenticationDatabase admin fluxgate --file /tmp/demo-events.js
 ```
 
 ### Keycloak Setup
@@ -202,6 +242,18 @@ Reads require `ROLE_USER` or `ROLE_ADMIN`; every mutating endpoint requires `ROL
 | PATCH | `/api/rules/{id}/toggle` | admin | Toggle enabled/disabled (compare-and-set, `409` on a concurrent edit) |
 | DELETE | `/api/rules/{id}` | admin | Delete a rule |
 | DELETE | `/api/rules?ruleSetId=` | admin | Delete every rule of a rule set |
+| GET | `/api/me` | user, admin | Name and roles of the caller |
+| GET | `/api/monitoring/overview?window=5m\|1h\|24h` | user, admin | Totals and per rule set activity |
+| GET | `/api/monitoring/timeseries?window=&ruleSetId=` | user, admin | Allowed and rejected decisions per bucket |
+| GET | `/api/monitoring/top-rejected?window=&ruleSetId=&limit=` | user, admin | Most rejected keys, masked for `ROLE_USER` |
+| GET | `/api/keys/transforms` | admin | Enabled key transforms |
+| POST | `/api/keys/decisions` | admin | Look up one key (`{value, transform, window}`), recorded in the audit log first |
+| GET | `/api/audit?action=&actor=&q=&from=&to=&page=&size=` | admin | Search the audit log, lookup values masked |
+| GET | `/api/audit/{id}` | admin | One audit entry, unmasked |
+
+Every rule and policy change is written to the audit log after it succeeds. If that write fails, the change stays and
+the response carries `X-Studio-Audit: failed`, which the console shows as a warning. A key lookup that cannot be
+recorded is refused with `503`.
 
 ### Pagination
 
