@@ -1,6 +1,9 @@
 export type Locale = 'en' | 'ko';
 
 export const en = {
+  'login.subtitle': 'Rate limit monitoring and rule management',
+  'login.signIn': 'Sign in with Keycloak',
+  'login.redirecting': 'Redirecting to Keycloak…',
   'nav.overview': 'Overview',
   'nav.rules': 'Rules',
   'nav.keys': 'Key lookup',
@@ -135,6 +138,9 @@ export const en = {
 export type MessageKey = keyof typeof en;
 
 export const ko: Record<MessageKey, string> = {
+  'login.subtitle': '유량제어 모니터링과 규칙 관리',
+  'login.signIn': 'Keycloak으로 로그인',
+  'login.redirecting': 'Keycloak으로 이동 중…',
   'nav.overview': '개요',
   'nav.rules': '규칙',
   'nav.keys': '키 조회',

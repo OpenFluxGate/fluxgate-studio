@@ -1,47 +1,120 @@
 @import 'tailwindcss';
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --c-bg: #fafafa;
+  --c-panel: #ffffff;
+  --c-panel2: #f4f4f5;
+  --c-line: #e4e4e7;
+  --c-line-strong: #d4d4d8;
+  --c-fg: #18181b;
+  --c-fg2: #3f3f46;
+  --c-muted: #71717a;
+  --c-faint: #a1a1aa;
+  --c-bad: #dc2626;
+  --c-bad-soft: #fef2f2;
+  --c-ok: #16a34a;
+  --c-ok-soft: #f0fdf4;
+  --c-warn: #92400e;
+  --c-warn-soft: #fffbeb;
+  --c-warn-line: #fcd34d;
+  --c-bar: #a1a1aa;
+  --c-select: #eff6ff;
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --c-bg: #09090b;
+  --c-panel: #18181b;
+  --c-panel2: #111113;
+  --c-line: #27272a;
+  --c-line-strong: #3f3f46;
+  --c-fg: #fafafa;
+  --c-fg2: #d4d4d8;
+  --c-muted: #a1a1aa;
+  --c-faint: #71717a;
+  --c-bad: #f87171;
+  --c-bad-soft: #3f1212;
+  --c-ok: #4ade80;
+  --c-ok-soft: #0f2a1a;
+  --c-warn: #fcd34d;
+  --c-warn-soft: #2a1f08;
+  --c-warn-line: #a16207;
+  --c-bar: #52525b;
+  --c-select: #172036;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --c-bg: #09090b;
+    --c-panel: #18181b;
+    --c-panel2: #111113;
+    --c-line: #27272a;
+    --c-line-strong: #3f3f46;
+    --c-fg: #fafafa;
+    --c-fg2: #d4d4d8;
+    --c-muted: #a1a1aa;
+    --c-faint: #71717a;
+    --c-bad: #f87171;
+    --c-bad-soft: #3f1212;
+    --c-ok: #4ade80;
+    --c-ok-soft: #0f2a1a;
+    --c-warn: #fcd34d;
+    --c-warn-soft: #2a1f08;
+    --c-warn-line: #a16207;
+    --c-bar: #52525b;
+    --c-select: #172036;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--c-bg);
+  --color-panel: var(--c-panel);
+  --color-panel2: var(--c-panel2);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-fg: var(--c-fg);
+  --color-fg2: var(--c-fg2);
+  --color-muted: var(--c-muted);
+  --color-faint: var(--c-faint);
+  --color-bad: var(--c-bad);
+  --color-bad-soft: var(--c-bad-soft);
+  --color-ok: var(--c-ok);
+  --color-ok-soft: var(--c-ok-soft);
+  --color-warn: var(--c-warn);
+  --color-warn-soft: var(--c-warn-soft);
+  --color-warn-line: var(--c-warn-line);
+  --color-bar: var(--c-bar);
+  --color-select: var(--c-select);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--c-bg);
+  color: var(--c-fg);
   font-family:
     system-ui,
     -apple-system,
-    BlinkMacSystemFont,
+    'Apple SD Gothic Neo',
     'Segoe UI',
     Roboto,
-    'Helvetica Neue',
-    Arial,
     sans-serif;
+  font-size: 13px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar */
+.num {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: var(--c-line-strong);
   border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #475569;
-}
-
-/* Selection */
-::selection {
-  background: rgba(6, 182, 212, 0.3);
-  color: inherit;
 }
