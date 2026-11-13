@@ -1,5 +1,203 @@
 'use client';
 
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+
+import useSWR from 'swr';
+
+import { type ApiKeyLookup, fetchKeyTransforms, lookupKey } from '@/lib/api';
+import { formatClock, formatCount, formatDateTime } from '@/lib/format';
+import { type MessageKey } from '@/lib/i18n';
+
+import { StackedBars } from '../charts';
+import { useI18n } from '../I18nProvider';
+import { useMe } from '../MeProvider';
+import {
+  BUTTON_PRIMARY,
+  Forbidden,
+  INPUT,
+  Notice,
+  PageHeader,
+  Panel,
+  TD,
+  TH,
+  WindowPicker,
+} from '../ui';
+
+const WINDOWS = ['1h', '24h', '7d'] as const;
+type Range = (typeof WINDOWS)[number];
+
+const STATUS_STYLE = {
+  BLOCKED: 'text-bad',
+  RECOVERED: 'text-warn',
+  ALLOWED: 'text-ok',
+} as const;
+
 export function KeysScreen() {
-  return null;
+  const { t } = useI18n();
+  const { isAdmin, loading } = useMe();
+  const params = useSearchParams();
+  const transforms = useSWR(isAdmin ? 'key-transforms' : null, fetchKeyTransforms);
+
+  const [value, setValue] = useState(params.get('value') ?? '');
+  const [transform, setTransform] = useState(params.get('transform') ?? 'none');
+  const [range, setRange] = useState<Range>('24h');
+  const [result, setResult] = useState<ApiKeyLookup | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const run = async (nextRange: Range = range) => {
+    if (!value.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setResult(await lookupKey({ value: value.trim(), transform, window: nextRange }));
+    } catch (err) {
+      setResult(null);
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin && params.get('value')) void run();
+    // Runs once when an admin arrives with a key in the address.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
+
+  if (!loading && !isAdmin) return <Forbidden />;
+
+  return (
+    <div>
+      <PageHeader title={t('keys.title')}>
+        <span className="text-muted text-[11px]">{t('keys.audited')}</span>
+      </PageHeader>
+
+      <form
+        className="mb-3 flex flex-wrap items-center gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void run();
+        }}
+      >
+        <select
+          aria-label={t('keys.transform')}
+          value={transform}
+          onChange={(event) => setTransform(event.target.value)}
+          className={INPUT}
+        >
+          {(transforms.data ?? ['none']).map((option) => (
+            <option key={option} value={option}>
+              {t(`keys.transform.${option}` as MessageKey)}
+            </option>
+          ))}
+        </select>
+        <input
+          aria-label={t('keys.value')}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          placeholder={t('keys.placeholder')}
+          className={`${INPUT} num w-80`}
+        />
+        <WindowPicker
+          value={range}
+          options={WINDOWS}
+          onChange={(next) => {
+            setRange(next);
+            if (result) void run(next);
+          }}
+        />
+        <button type="submit" className={BUTTON_PRIMARY} disabled={busy || !value.trim()}>
+          {t('keys.lookup')}
+        </button>
+      </form>
+
+      {error && <Notice tone="bad">{error}</Notice>}
+
+      {result && result.ruleSets.length === 0 && <Notice>{t('keys.noResult')}</Notice>}
+
+      {result && result.ruleSets.length > 0 && (
+        <>
+          <div className="mb-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {result.ruleSets.map((status) => (
+              <Panel
+                key={status.ruleSetId ?? '-'}
+                title={`${status.ruleSetId ?? '-'} · ${t('keys.basis')}`}
+              >
+                <div className="space-y-1 px-3 py-2">
+                  <div className={`text-sm font-semibold ${STATUS_STYLE[status.status]}`}>
+                    {t(`keys.status.${status.status}` as MessageKey)}
+                  </div>
+                  <div className="num text-fg2 text-xs">
+                    {formatDateTime(status.lastDecisionAt)}
+                    {' · '}
+                    {status.blockedUntil
+                      ? t(status.status === 'BLOCKED' ? 'keys.blockedUntil' : 'keys.releasedAt', {
+                          time: formatClock(status.blockedUntil),
+                        })
+                      : t('keys.remaining', { count: status.remainingTokens })}
+                  </div>
+                  <div className="text-muted text-[11px]">
+                    {t('keys.counts', {
+                      allowed: formatCount(status.allowed),
+                      rejected: formatCount(status.rejected),
+                    })}
+                  </div>
+                </div>
+              </Panel>
+            ))}
+          </div>
+
+          <Panel title={t('keys.timeline')} className="mb-2">
+            <div className="p-3">
+              <StackedBars
+                buckets={result.buckets}
+                height={60}
+                describe={(bucket) =>
+                  `${formatDateTime(bucket.start)}  ${t('decision.allowed')} ${bucket.allowed} · ${t('decision.rejected')} ${bucket.rejected}`
+                }
+              />
+            </div>
+          </Panel>
+
+          <Panel title={t('keys.recent')}>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th className={TH}>{t('col.time')}</th>
+                  <th className={TH}>{t('col.rule')}</th>
+                  <th className={TH}>{t('col.request')}</th>
+                  <th className={TH}>{t('col.decision')}</th>
+                  <th className={`${TH} text-right`}>{t('col.remaining')}</th>
+                  <th className={`${TH} text-right`}>{t('col.retryAfter')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.recent.map((decision, index) => (
+                  <tr key={`${decision.timestamp}-${index}`}>
+                    <td className={`${TD} num`}>
+                      {formatDateTime(decision.timestamp)}:
+                      {String(new Date(decision.timestamp).getSeconds()).padStart(2, '0')}
+                    </td>
+                    <td className={`${TD} num text-fg2`}>{decision.ruleId}</td>
+                    <td className={`${TD} num text-fg2`}>
+                      {decision.method} {decision.endpoint}
+                    </td>
+                    <td className={`${TD} ${decision.allowed ? 'text-ok' : 'text-bad'}`}>
+                      {t(decision.allowed ? 'decision.allowed' : 'decision.rejected')}
+                    </td>
+                    <td className={`${TD} num text-right`}>{decision.remainingTokens}</td>
+                    <td className={`${TD} num text-right`}>
+                      {decision.allowed ? '–' : `${(decision.retryAfterMs / 1000).toFixed(1)}s`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Panel>
+        </>
+      )}
+    </div>
+  );
 }
