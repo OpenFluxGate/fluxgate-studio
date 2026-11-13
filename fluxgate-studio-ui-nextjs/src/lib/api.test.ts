@@ -3,11 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ruleIdentity } from '@/modules/admin/types';
 
 import {
+  AUDIT_FAILED_EVENT,
   createRule,
   type CreateRuleRequest,
   exportRules,
+  fetchAudit,
+  fetchTopRejected,
   importRules,
+  lookupKey,
   ruleUrl,
+  toggleRule,
   updateRule,
 } from './api';
 
@@ -95,6 +100,72 @@ describe('lossless export and numeric write boundaries', () => {
     });
     expect(new Headers(fetchMock.mock.calls[1][1].headers).get('If-Match')).toBe(
       String(Number.MAX_SAFE_INTEGER)
+    );
+  });
+});
+
+describe('console API', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('announces an audit failure the Admin API reports', async () => {
+    const target = new EventTarget();
+    const listener = vi.fn();
+    target.addEventListener(AUDIT_FAILED_EVENT, listener);
+    vi.stubGlobal('window', target);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('{"id":"r1"}', {
+          status: 200,
+          headers: { 'content-type': 'application/json', 'x-studio-audit': 'failed' },
+        })
+      )
+    );
+
+    await toggleRule('r1', 'set');
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends key lookups in the request body, never in the URL', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('{"key":"u1"}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await lookupKey({ value: '123456789', transform: 'none', window: '24h' });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/proxy/api/keys/decisions');
+    expect(url).not.toContain('123456789');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({
+      value: '123456789',
+      transform: 'none',
+      window: '24h',
+    });
+  });
+
+  it('builds monitoring query strings', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(
+        async () =>
+          new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchTopRejected('24h', 5, 'checkout api');
+    await fetchAudit({ action: 'RULE_UPDATE', q: 'r1', page: 2, size: 50 });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      '/api/proxy/api/monitoring/top-rejected?window=24h&limit=5&ruleSetId=checkout+api'
+    );
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      '/api/proxy/api/audit?page=2&size=50&action=RULE_UPDATE&q=r1'
     );
   });
 });
