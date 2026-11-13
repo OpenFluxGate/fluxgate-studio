@@ -42,6 +42,15 @@ public class MonitoringConfig {
   }
 
   @Bean
+  public MongoAuditStore mongoAuditStore(
+      ObjectProvider<FluxgateMongoClientHolder> clients,
+      @Value("${fluxgate.mongo.database:fluxgate}") String database,
+      AuditProperties properties) {
+    return new MongoAuditStore(
+        collection(clients, database, properties.collection()), properties.retention());
+  }
+
+  @Bean
   public ApplicationRunner monitoringIndexes(
       MongoEventStore events, MongoAuditStore audit, MonitoringProperties properties) {
     return args -> {
