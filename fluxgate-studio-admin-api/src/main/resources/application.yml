@@ -39,6 +39,16 @@ fluxgate:
       # ROLE_USER or ROLE_ADMIN. The dev profile opens it up so that Swagger UI works without a
       # token; a deployment must leave this at false.
       public-api-docs: ${STUDIO_PUBLIC_API_DOCS:false}
+    monitoring:
+      event-database: ${FLUXGATE_EVENT_DB:}
+      event-collection: ${FLUXGATE_EVENT_COLLECTION:rate_limit_events}
+      create-indexes: ${FLUXGATE_EVENT_CREATE_INDEXES:true}
+      cache-ttl: 10s
+      query-timeout: 5s
+      key-transforms: none,sha256
+    audit:
+      collection: ${STUDIO_AUDIT_COLLECTION:studio_audit_log}
+      retention: ${STUDIO_AUDIT_RETENTION:730d}
 
   # MongoDB rule storage
   mongo:
