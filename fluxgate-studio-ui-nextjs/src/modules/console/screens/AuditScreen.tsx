@@ -7,6 +7,7 @@ import useSWR from 'swr';
 import { type ApiAuditEntry, fetchAudit, fetchAuditEntry } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import { type MessageKey } from '@/lib/i18n';
+import { formatLimit } from '@/lib/ruleMeaning';
 
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
@@ -25,27 +26,43 @@ const ACTIONS = [
 ] as const;
 const PAGE_SIZE = 50;
 
-function show(value: unknown): string {
+function show(field: string, value: unknown): string {
   if (value === null || value === undefined) return '∅';
+  if (field === 'bands' && Array.isArray(value)) {
+    return value
+      .map((band) => formatLimit(band as { windowSeconds: number; capacity: number }))
+      .join(' / ');
+  }
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
 }
 
+const SNAPSHOT_FIELDS = ['scope', 'bands', 'enabled'];
+
 function Change({ entry }: { entry: ApiAuditEntry }) {
   const { t } = useI18n();
   if (entry.action === 'KEY_LOOKUP') {
-    return <span>{t('audit.lookupOf', { value: show(entry.detail?.value) })}</span>;
+    return <span>{t('audit.lookupOf', { value: show('value', entry.detail?.value) })}</span>;
+  }
+  if (entry.action === 'RULE_CREATE' || entry.action === 'RULE_DELETE') {
+    const snapshot = (entry.action === 'RULE_CREATE' ? entry.after : entry.before) ?? {};
+    return (
+      <span className={entry.action === 'RULE_DELETE' ? 'text-bad' : 'text-ok'}>
+        {SNAPSHOT_FIELDS.map((field) => `${field} ${show(field, snapshot[field])}`).join(' · ')}
+      </span>
+    );
   }
   const fields = Object.keys({ ...(entry.before ?? {}), ...(entry.after ?? {}) });
-  if (fields.length === 0) return <span className="text-muted">{show(entry.detail)}</span>;
+  if (fields.length === 0)
+    return <span className="text-muted">{show('detail', entry.detail)}</span>;
   return (
     <div className="space-y-0.5">
       {fields.map((field) => (
         <div key={field}>
           <span className="text-muted">{field} </span>
-          <span className="bg-bad-soft text-bad">{show(entry.before?.[field])}</span>
+          <span className="bg-bad-soft text-bad">{show(field, entry.before?.[field])}</span>
           {' → '}
-          <span className="bg-ok-soft text-ok">{show(entry.after?.[field])}</span>
+          <span className="bg-ok-soft text-ok">{show(field, entry.after?.[field])}</span>
         </div>
       ))}
     </div>
@@ -130,7 +147,7 @@ export function AuditScreen() {
                 </td>
                 <td className={TD}>{entry.actor.name || entry.actor.username}</td>
                 <td className={TD}>
-                  <span className="border-line-strong rounded border px-1 text-[10px]">
+                  <span className="border-line-strong rounded border px-1 text-[10px] whitespace-nowrap">
                     {t(`action.${entry.action}` as MessageKey)}
                   </span>
                 </td>
@@ -141,7 +158,7 @@ export function AuditScreen() {
                 <td className={`${TD} text-right`}>
                   <button
                     type="button"
-                    className={BUTTON}
+                    className={`${BUTTON} whitespace-nowrap`}
                     onClick={async () => setDetail(await fetchAuditEntry(entry.id))}
                   >
                     {t('audit.detail')}

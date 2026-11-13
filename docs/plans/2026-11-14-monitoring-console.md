@@ -3894,8 +3894,9 @@ describe('console API', () => {
   });
 
   it('builds monitoring query strings', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } })
+    const fetchMock = vi.fn().mockImplementation(
+      async () =>
+        new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } })
     );
     vi.stubGlobal('fetch', fetchMock);
 
@@ -5558,7 +5559,7 @@ git commit -m "feat(ui): add the monitoring overview"
 안쪽 카드 클래스:
 
 ```tsx
-        className={`${theme.colors.bgSecondary} ${theme.colors.border} h-full w-full max-w-xl overflow-y-auto border-l ${theme.colors.shadow}`}
+        className={`${theme.colors.bgSecondary} ${theme.colors.border} h-full w-full max-w-4xl overflow-y-auto border-l ${theme.colors.shadow}`}
 ```
 
 밴드 행에서 `<div className="grid flex-1 grid-cols-3 gap-2">`를 아래로 바꾼다.

@@ -79,7 +79,7 @@ export function OverviewScreen() {
         />
       </div>
 
-      <div className="mb-2 grid gap-2 lg:grid-cols-3">
+      <div className="mb-2 grid items-start gap-2 lg:grid-cols-3">
         <Panel title={t('overview.trend')} className="lg:col-span-2">
           <div className="p-3">
             <StackedBars

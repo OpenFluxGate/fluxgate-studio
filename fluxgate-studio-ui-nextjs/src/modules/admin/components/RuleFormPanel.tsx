@@ -166,7 +166,7 @@ export const RuleFormPanel = ({ rule, onClose, onSave, serverErrors }: RuleFormP
   return (
     <div className={`fixed inset-0 ${theme.colors.bgOverlay} z-50 flex justify-end`}>
       <div
-        className={`${theme.colors.bgSecondary} ${theme.colors.border} h-full w-full max-w-xl overflow-y-auto border-l ${theme.colors.shadow}`}
+        className={`${theme.colors.bgSecondary} ${theme.colors.border} h-full w-full max-w-4xl overflow-y-auto border-l ${theme.colors.shadow}`}
       >
         <div
           className={`p-4 ${theme.colors.borderSubtle} border-b bg-gradient-to-r ${theme.colors.gradientGlow}`}

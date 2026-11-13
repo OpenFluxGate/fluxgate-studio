@@ -162,39 +162,41 @@ export function KeysScreen() {
           </Panel>
 
           <Panel title={t('keys.recent')}>
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <th className={TH}>{t('col.time')}</th>
-                  <th className={TH}>{t('col.rule')}</th>
-                  <th className={TH}>{t('col.request')}</th>
-                  <th className={TH}>{t('col.decision')}</th>
-                  <th className={`${TH} text-right`}>{t('col.remaining')}</th>
-                  <th className={`${TH} text-right`}>{t('col.retryAfter')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.recent.map((decision, index) => (
-                  <tr key={`${decision.timestamp}-${index}`}>
-                    <td className={`${TD} num`}>
-                      {formatDateTime(decision.timestamp)}:
-                      {String(new Date(decision.timestamp).getSeconds()).padStart(2, '0')}
-                    </td>
-                    <td className={`${TD} num text-fg2`}>{decision.ruleId}</td>
-                    <td className={`${TD} num text-fg2`}>
-                      {decision.method} {decision.endpoint}
-                    </td>
-                    <td className={`${TD} ${decision.allowed ? 'text-ok' : 'text-bad'}`}>
-                      {t(decision.allowed ? 'decision.allowed' : 'decision.rejected')}
-                    </td>
-                    <td className={`${TD} num text-right`}>{decision.remainingTokens}</td>
-                    <td className={`${TD} num text-right`}>
-                      {decision.allowed ? '–' : `${(decision.retryAfterMs / 1000).toFixed(1)}s`}
-                    </td>
+            <div className="max-h-[480px] overflow-y-auto">
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className={TH}>{t('col.time')}</th>
+                    <th className={TH}>{t('col.rule')}</th>
+                    <th className={TH}>{t('col.request')}</th>
+                    <th className={TH}>{t('col.decision')}</th>
+                    <th className={`${TH} text-right`}>{t('col.remaining')}</th>
+                    <th className={`${TH} text-right`}>{t('col.retryAfter')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {result.recent.map((decision, index) => (
+                    <tr key={`${decision.timestamp}-${index}`}>
+                      <td className={`${TD} num`}>
+                        {formatDateTime(decision.timestamp)}:
+                        {String(new Date(decision.timestamp).getSeconds()).padStart(2, '0')}
+                      </td>
+                      <td className={`${TD} num text-fg2`}>{decision.ruleId}</td>
+                      <td className={`${TD} num text-fg2`}>
+                        {decision.method} {decision.endpoint}
+                      </td>
+                      <td className={`${TD} ${decision.allowed ? 'text-ok' : 'text-bad'}`}>
+                        {t(decision.allowed ? 'decision.allowed' : 'decision.rejected')}
+                      </td>
+                      <td className={`${TD} num text-right`}>{decision.remainingTokens}</td>
+                      <td className={`${TD} num text-right`}>
+                        {decision.allowed ? '–' : `${(decision.retryAfterMs / 1000).toFixed(1)}s`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </Panel>
         </>
       )}
