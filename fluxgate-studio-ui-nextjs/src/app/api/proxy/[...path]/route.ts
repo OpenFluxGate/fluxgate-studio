@@ -24,7 +24,14 @@ const API_BASE = new URL(API_BASE_URL);
 const API_BASE_PATH = API_BASE.pathname.endsWith('/') ? API_BASE.pathname : `${API_BASE.pathname}/`;
 
 /** Only the Admin API surface the console needs is reachable through the proxy. */
-const ALLOWED_PREFIXES = ['api/rules', 'api/dashboard'];
+const ALLOWED_PREFIXES = [
+  'api/rules',
+  'api/dashboard',
+  'api/monitoring',
+  'api/keys',
+  'api/audit',
+  'api/me',
+];
 
 /**
  * Request headers that are forwarded upstream (everything else is dropped).
@@ -39,7 +46,12 @@ const FORWARDED_REQUEST_HEADERS = ['content-type', 'if-match', 'accept'];
 const BLOCKED_REQUEST_HEADERS = ['authorization', 'cookie'];
 
 /** Response headers that are handed back to the browser. */
-const FORWARDED_RESPONSE_HEADERS = ['content-type', 'etag', 'content-disposition'];
+const FORWARDED_RESPONSE_HEADERS = [
+  'content-type',
+  'etag',
+  'content-disposition',
+  'x-studio-audit',
+];
 
 /**
  * Methods the proxy accepts. `HEAD` is included because the App Router answers `HEAD` with the `GET`
