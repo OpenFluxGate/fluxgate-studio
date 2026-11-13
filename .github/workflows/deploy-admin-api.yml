@@ -7,37 +7,67 @@ on:
     paths:
       - 'fluxgate-studio-admin-api/**'
       - '.github/workflows/deploy-admin-api.yml'
+  pull_request:
+    branches: [ "main", "feature/lts-*" ]
+    paths:
+      - 'fluxgate-studio-admin-api/**'
+      - '.github/workflows/deploy-admin-api.yml'
+
+permissions:
+  contents: read
 
 jobs:
   build-and-deploy:
+    name: Admin API deployment build
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Keep this revision paired with admin-api-ci.yml and docker-compose.yml.
+      - name: Check out paired core policy source
+        uses: actions/checkout@v4
+        with:
+          repository: OpenFluxGate/openfluxgate-core
+          ref: 39a1789acfc481e416e7363dc6e9dd3817b147b5
+          path: .paired-core
+          persist-credentials: false
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
-          cache: maven
+
+      - name: Install paired core artifacts into a clean repository
+        working-directory: .paired-core
+        run: >-
+          ./mvnw -B -ntp
+          -Dmaven.repo.local="$RUNNER_TEMP/fluxgate-m2"
+          -pl fluxgate-spring-boot3-starter,fluxgate-control-support -am
+          -Dmaven.test.skip=true -Djacoco.skip=true -Dspotless.skip=true install
 
       - name: Build with Maven
         working-directory: fluxgate-studio-admin-api
-        run: mvn clean package -DskipTests
+        run: ./mvnw -B -ntp -Dmaven.repo.local="$RUNNER_TEMP/fluxgate-m2" clean verify
 
       - name: Stop existing service
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
+            set -e
             sudo systemctl stop fluxgate-admin-api || true
             mkdir -p /opt/fluxgate/admin-api
 
       - name: Copy JAR to Lightsail
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
@@ -48,13 +78,15 @@ jobs:
           strip_components: 2
 
       - name: Start service
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
+            set -e
             sudo systemctl start fluxgate-admin-api
             sleep 10
             sudo systemctl status fluxgate-admin-api --no-pager
-            curl -f http://localhost:8081/actuator/health || echo "Health check pending"
+            curl --fail --silent --show-error http://localhost:8081/actuator/health

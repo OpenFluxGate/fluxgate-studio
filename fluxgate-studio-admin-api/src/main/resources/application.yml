@@ -17,10 +17,30 @@ spring:
 app:
   security:
     cors:
+      # Comma separated list of UI origins. Never use "*" together with allow-credentials:
+      # the application fails fast at startup on that combination.
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+      # This API is a pure Bearer token resource server and uses no cookies.
+      allow-credentials: ${CORS_ALLOW_CREDENTIALS:false}
 
-# FluxGate MongoDB Configuration
+# FluxGate Studio specific security settings
 fluxgate:
+  studio:
+    security:
+      # Client id that must appear in the JWT "aud" claim when audience validation is enabled.
+      audience: ${STUDIO_JWT_AUDIENCE:fluxgate-studio-admin-api}
+      # Fail closed: a token that was not minted for this API is rejected. The bundled development
+      # realm (docker/fluxgate-realm.json) defines the "fluxgate-studio" client without an audience
+      # protocol mapper, so its access tokens carry no "fluxgate-studio-admin-api" audience - run the
+      # local stack with SPRING_PROFILES_ACTIVE=dev (see application-dev.yml), which switches this
+      # off and logs a startup warning. Never disable it in a deployment.
+      validate-audience: ${STUDIO_JWT_VALIDATE_AUDIENCE:true}
+      # The OpenAPI document (/api-docs/**) describes the whole admin surface, so it requires
+      # ROLE_USER or ROLE_ADMIN. The dev profile opens it up so that Swagger UI works without a
+      # token; a deployment must leave this at false.
+      public-api-docs: ${STUDIO_PUBLIC_API_DOCS:false}
+
+  # MongoDB rule storage
   mongo:
     enabled: true
     uri: ${FLUXGATE_MONGO_URI:mongodb://fluxgate:fluxgate123@localhost:27017/fluxgate?authSource=admin}

@@ -14,8 +14,8 @@ interface RuleCardProps {
   rule: Rule;
   onEdit: (rule: Rule) => void;
   onSimulate: (rule: Rule) => void;
-  onToggle: (id: string) => void;
-  onDelete?: (id: string) => void;
+  onToggle: (rule: Rule) => void;
+  onDelete?: (rule: Rule) => void;
 }
 
 export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleCardProps) => {
@@ -51,7 +51,7 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
                 <h3 className={`font-semibold ${theme.colors.textPrimary} truncate`}>
                   {rule.name}
                 </h3>
-                <button onClick={() => onToggle(rule.id)} className="flex-shrink-0">
+                <button onClick={() => onToggle(rule)} className="flex-shrink-0">
                   {rule.enabled ? (
                     <ToggleRight size={20} className={theme.colors.accent} />
                   ) : (
@@ -144,7 +144,7 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
                 <Edit2 size={14} />
               </button>
               <button
-                onClick={() => onDelete?.(rule.id)}
+                onClick={() => onDelete?.(rule)}
                 className={`p-1.5 ${theme.colors.textMuted} ${theme.colors.dangerBg} rounded-md transition-colors hover:opacity-80`}
                 title="Delete"
               >

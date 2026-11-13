@@ -1,0 +1,18 @@
+# Local development profile: activate with SPRING_PROFILES_ACTIVE=dev
+#
+# This profile exists so that the shipped defaults can be the safe ones. It relaxes exactly two
+# settings, both of which only make sense against the bundled Keycloak dev realm
+# (docker/fluxgate-realm.json), and the application logs a WARN at startup for each of them:
+#
+#   1. validate-audience: the dev realm's "fluxgate-studio" client has no audience protocol mapper,
+#      so its access tokens carry no "fluxgate-studio-admin-api" audience and every request would be
+#      rejected with 401.
+#   2. public-api-docs: Swagger UI at /swagger-ui.html has to be able to read /api-docs without a
+#      bearer token.
+#
+# Never activate this profile in a deployment. See the production checklist in the repository README.
+fluxgate:
+  studio:
+    security:
+      validate-audience: ${STUDIO_JWT_VALIDATE_AUDIENCE:false}
+      public-api-docs: ${STUDIO_PUBLIC_API_DOCS:true}

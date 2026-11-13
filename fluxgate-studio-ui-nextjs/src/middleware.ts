@@ -7,8 +7,9 @@ export default withAuth({
 });
 
 export const config = {
-  // Protect all routes except login, api/auth, static files, and public assets
+  // Protect all routes except login, api/auth, the BFF proxy (which answers 401 as JSON itself),
+  // static files, and public assets.
   matcher: [
-    '/((?!login|api/auth|_next/static|_next/image|favicon.ico|logo.svg|.*\\.png$|.*\\.jpg$|.*\\.jpeg$|.*\\.gif$|.*\\.svg$|.*\\.ico$).*)',
+    '/((?!login|api/auth|api/proxy|_next/static|_next/image|favicon.ico|logo.svg|.*\\.png$|.*\\.jpg$|.*\\.jpeg$|.*\\.gif$|.*\\.svg$|.*\\.ico$).*)',
   ],
 };

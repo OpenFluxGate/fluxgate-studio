@@ -8,6 +8,9 @@ on:
       - 'fluxgate-studio-ui-nextjs/**'
       - '.github/workflows/deploy-studio-ui.yml'
 
+permissions:
+  contents: read
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
