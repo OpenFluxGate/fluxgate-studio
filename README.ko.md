@@ -37,7 +37,8 @@
 - **키 조회**(admin): 특정 키가 지금 막혀 있는지, 언제 풀리는지, 최근 판정. 조회는 변경 기록에 먼저 남깁니다.
 - **변경 기록**(admin): 누가 무엇을 만들고, 바꾸고, 지우고, 가져오고, 게시했는지와 누가 어떤 키를 조회했는지
 - **인증**: Keycloak OAuth2/OIDC. `ROLE_USER`는 읽기(키는 마스킹), `ROLE_ADMIN`은 쓰기
-- **라이트·다크**, 한국어·영어
+- **Grafana 스타일 대시보드**: 시간 범위 프리셋(5분~24시간), 시계열 드래그 확대와 축소, 자동 갱신(끄기·10s·30s·1m), 모든 패널을 거르는 규칙 묶음 변수, 접히는 행, 패널 메뉴(크게 보기·데이터 보기·CSV), TV 모드(`?kiosk`, Esc로 끝내기). 대시보드 상태는 주소(`?from=now-1h&to=now&refresh=10s&ruleSet=...`)에 남아 링크로 같은 화면을 열 수 있습니다.
+- **다크 기본**, 라이트·시스템 테마, 한국어·영어
 - **규칙 시뮬레이션**: 규칙 구간에 몰아치는 요청을 미리 계산
 
 ## 기술 스택
@@ -198,7 +199,7 @@ Keycloak 관리 콘솔: `http://keycloak:8080/admin` (admin/admin)
 
 ### 모니터링, 키 조회, 변경 기록
 - `GET /api/me` - 현재 사용자와 역할
-- `GET /api/monitoring/overview?window=5m|1h|24h` - 전체와 규칙 묶음별 판정
+- `GET /api/monitoring/overview?window=5m|15m|1h|6h|24h` 또는 `?from=&to=`(epoch ms, 최대 24시간) - 전체와 규칙 묶음별 판정
 - `GET /api/monitoring/timeseries?window=&ruleSetId=` - 구간별 허용·차단 건수
 - `GET /api/monitoring/top-rejected?window=&ruleSetId=&limit=` - 많이 차단된 키, `ROLE_USER`에게는 마스킹
 - `GET /api/keys/transforms` (admin) - 키 변환 목록

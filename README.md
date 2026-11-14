@@ -37,7 +37,8 @@ This repository owns `fluxgate-studio-admin-api` and `fluxgate-studio-ui-nextjs`
 - **Key lookup** (admin): whether one key is currently blocked, when it is expected to be released, and its recent decisions. Every lookup is written to the audit log first.
 - **Audit log** (admin): who created, changed, toggled, deleted, imported or published what, and who looked up which key
 - **Authentication**: OAuth2/OIDC with Keycloak. `ROLE_USER` reads (keys masked), `ROLE_ADMIN` writes.
-- **Light and dark**, English and Korean
+- **Grafana style dashboard**: time range presets (5m to 24h), drag to zoom on the time series, zoom out, auto refresh (off, 10s, 30s, 1m), a rule set variable that filters every panel, collapsible rows, panel menus (view, inspect data, download CSV) and a TV mode (`?kiosk`, Esc to leave). The dashboard state lives in the address (`?from=now-1h&to=now&refresh=10s&ruleSet=...`), so a link reopens the same view.
+- **Dark by default**, light and system themes, English and Korean
 - **Rule simulation**: dry-run a burst against a rule's bands
 
 ## Tech Stack
@@ -243,7 +244,7 @@ Reads require `ROLE_USER` or `ROLE_ADMIN`; every mutating endpoint requires `ROL
 | DELETE | `/api/rules/{id}` | admin | Delete a rule |
 | DELETE | `/api/rules?ruleSetId=` | admin | Delete every rule of a rule set |
 | GET | `/api/me` | user, admin | Name and roles of the caller |
-| GET | `/api/monitoring/overview?window=5m\|1h\|24h` | user, admin | Totals and per rule set activity |
+| GET | `/api/monitoring/overview?window=5m\|15m\|1h\|6h\|24h` or `?from=&to=` | user, admin | Totals and per rule set activity. `from` and `to` are epoch ms, at most 24 hours apart |
 | GET | `/api/monitoring/timeseries?window=&ruleSetId=` | user, admin | Allowed and rejected decisions per bucket |
 | GET | `/api/monitoring/top-rejected?window=&ruleSetId=&limit=` | user, admin | Most rejected keys, masked for `ROLE_USER` |
 | GET | `/api/keys/transforms` | admin | Enabled key transforms |
