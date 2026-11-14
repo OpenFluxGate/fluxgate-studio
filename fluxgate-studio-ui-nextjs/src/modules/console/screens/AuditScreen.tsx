@@ -2,16 +2,17 @@
 
 import React, { useState } from 'react';
 
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import useSWR from 'swr';
 
 import { type ApiAuditEntry, fetchAudit, fetchAuditEntry } from '@/lib/api';
-import { formatDateTime } from '@/lib/format';
+import { formatTimestamp } from '@/lib/format';
 import { type MessageKey } from '@/lib/i18n';
 import { formatLimit } from '@/lib/ruleMeaning';
 
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
-import { BUTTON, Forbidden, INPUT, Notice, PageHeader, Panel, TD, TH } from '../ui';
+import { BUTTON, Forbidden, INPUT, Notice, PageHeader, Panel } from '../ui';
 
 const ACTIONS = [
   'RULE_CREATE',
@@ -25,6 +26,15 @@ const ACTIONS = [
   'KEY_LOOKUP',
 ] as const;
 const PAGE_SIZE = 50;
+const SNAPSHOT_FIELDS = ['scope', 'bands', 'enabled'];
+const ACTION_TONE: Record<string, string> = {
+  RULE_CREATE: 'text-ok',
+  RULE_DELETE: 'text-bad',
+  RULES_DELETE_ALL: 'text-bad',
+  KEY_LOOKUP: 'text-s1',
+};
+
+type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string;
 
 function show(field: string, value: unknown): string {
   if (value === null || value === undefined) return '∅';
@@ -37,26 +47,39 @@ function show(field: string, value: unknown): string {
   return String(value);
 }
 
-const SNAPSHOT_FIELDS = ['scope', 'bands', 'enabled'];
+function changedFields(entry: ApiAuditEntry): string[] {
+  return Object.keys({ ...(entry.before ?? {}), ...(entry.after ?? {}) });
+}
 
-function Change({ entry }: { entry: ApiAuditEntry }) {
-  const { t } = useI18n();
+function summary(entry: ApiAuditEntry, t: Translate): string {
   if (entry.action === 'KEY_LOOKUP') {
-    return <span>{t('audit.lookupOf', { value: show('value', entry.detail?.value) })}</span>;
+    return t('audit.lookupOf', { value: show('value', entry.detail?.value) });
   }
   if (entry.action === 'RULE_CREATE' || entry.action === 'RULE_DELETE') {
     const snapshot = (entry.action === 'RULE_CREATE' ? entry.after : entry.before) ?? {};
-    return (
-      <span className={entry.action === 'RULE_DELETE' ? 'text-bad' : 'text-ok'}>
-        {SNAPSHOT_FIELDS.map((field) => `${field} ${show(field, snapshot[field])}`).join(' · ')}
-      </span>
-    );
+    return SNAPSHOT_FIELDS.map((field) => `${field} ${show(field, snapshot[field])}`).join(' · ');
   }
-  const fields = Object.keys({ ...(entry.before ?? {}), ...(entry.after ?? {}) });
-  if (fields.length === 0)
-    return <span className="text-muted">{show('detail', entry.detail)}</span>;
+  const fields = changedFields(entry);
+  if (fields.length === 0) return show('detail', entry.detail);
+  return fields
+    .map(
+      (field) =>
+        `${field} ${show(field, entry.before?.[field])} → ${show(field, entry.after?.[field])}`
+    )
+    .join(' · ');
+}
+
+function target(entry: ApiAuditEntry): string {
+  return entry.target
+    ? [entry.target.ruleSetId, entry.target.ruleId].filter(Boolean).join(' / ')
+    : '–';
+}
+
+function Change({ entry }: { entry: ApiAuditEntry }) {
+  const fields = changedFields(entry);
+  if (fields.length === 0) return null;
   return (
-    <div className="space-y-0.5">
+    <div className="num space-y-0.5">
       {fields.map((field) => (
         <div key={field}>
           <span className="text-muted">{field} </span>
@@ -76,26 +99,46 @@ export function AuditScreen() {
   const [actor, setActor] = useState('');
   const [q, setQ] = useState('');
   const [page, setPage] = useState(0);
-  const [detail, setDetail] = useState<ApiAuditEntry | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [details, setDetails] = useState<Record<string, ApiAuditEntry>>({});
 
   const search = { action, actor, q, page, size: PAGE_SIZE };
   const result = useSWR(isAdmin ? ['audit', search] : null, () => fetchAudit(search));
 
   if (!loading && !isAdmin) return <Forbidden />;
 
+  const entries = result.data?.content ?? [];
   const pages = Math.max(1, Math.ceil((result.data?.totalElements ?? 0) / PAGE_SIZE));
-  const target = (entry: ApiAuditEntry) =>
-    entry.target ? [entry.target.ruleSetId, entry.target.ruleId].filter(Boolean).join(' / ') : '–';
+
+  const toggle = async (entry: ApiAuditEntry) => {
+    if (openId === entry.id) {
+      setOpenId(null);
+      return;
+    }
+    setOpenId(entry.id);
+    if (!details[entry.id]) {
+      try {
+        const full = await fetchAuditEntry(entry.id);
+        setDetails((previous) => ({ ...previous, [entry.id]: full }));
+      } catch {
+        // The masked list entry stays visible when the full entry cannot be read.
+      }
+    }
+  };
+
+  const resetPage =
+    <T,>(setter: (value: T) => void) =>
+    (value: T) => {
+      setter(value);
+      setPage(0);
+    };
 
   return (
     <div>
       <PageHeader title={t('audit.title')}>
         <select
           value={action}
-          onChange={(event) => {
-            setAction(event.target.value);
-            setPage(0);
-          }}
+          onChange={(event) => resetPage(setAction)(event.target.value)}
           className={INPUT}
         >
           <option value="">{t('audit.allActions')}</option>
@@ -107,19 +150,13 @@ export function AuditScreen() {
         </select>
         <input
           value={actor}
-          onChange={(event) => {
-            setActor(event.target.value);
-            setPage(0);
-          }}
+          onChange={(event) => resetPage(setActor)(event.target.value)}
           placeholder={t('audit.actor')}
           className={INPUT}
         />
         <input
           value={q}
-          onChange={(event) => {
-            setQ(event.target.value);
-            setPage(0);
-          }}
+          onChange={(event) => resetPage(setQ)(event.target.value)}
           placeholder={t('audit.search')}
           className={`${INPUT} w-56`}
         />
@@ -127,47 +164,66 @@ export function AuditScreen() {
 
       {result.error && <Notice tone="bad">{String((result.error as Error).message)}</Notice>}
 
-      <Panel>
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th className={TH}>{t('col.time')}</th>
-              <th className={TH}>{t('col.user')}</th>
-              <th className={TH}>{t('col.action')}</th>
-              <th className={TH}>{t('col.target')}</th>
-              <th className={TH}>{t('col.change')}</th>
-              <th className={TH} />
-            </tr>
-          </thead>
-          <tbody>
-            {(result.data?.content ?? []).map((entry) => (
-              <tr key={entry.id}>
-                <td className={`${TD} num whitespace-nowrap`}>
-                  {formatDateTime(Date.parse(entry.at))}
-                </td>
-                <td className={TD}>{entry.actor.name || entry.actor.username}</td>
-                <td className={TD}>
-                  <span className="border-line-strong rounded border px-1 text-[10px] whitespace-nowrap">
+      <Panel
+        title={t('audit.title')}
+        data={{
+          headers: [
+            t('col.time'),
+            t('col.user'),
+            t('col.action'),
+            t('col.target'),
+            t('col.change'),
+          ],
+          rows: entries.map((entry) => [
+            formatTimestamp(Date.parse(entry.at)),
+            entry.actor.name || entry.actor.username,
+            entry.action,
+            target(entry),
+            summary(entry, t),
+          ]),
+        }}
+        csvName="audit.csv"
+      >
+        <ul className="text-xs">
+          {entries.map((entry) => {
+            const open = openId === entry.id;
+            const Icon = open ? ChevronDown : ChevronRight;
+            const full = details[entry.id] ?? entry;
+            return (
+              <li key={entry.id} className="border-line/60 border-b">
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => toggle(entry)}
+                  className="hover:bg-panel2 flex w-full items-center gap-3 px-3 py-1.5 text-left"
+                >
+                  <Icon size={12} className="text-muted shrink-0" />
+                  <span className="num text-muted shrink-0">
+                    {formatTimestamp(Date.parse(entry.at))}
+                  </span>
+                  <span
+                    className={`w-28 shrink-0 truncate font-medium ${ACTION_TONE[entry.action] ?? 'text-fg2'}`}
+                  >
                     {t(`action.${entry.action}` as MessageKey)}
                   </span>
-                </td>
-                <td className={`${TD} num text-fg2`}>{target(entry)}</td>
-                <td className={`${TD} num`}>
-                  <Change entry={entry} />
-                </td>
-                <td className={`${TD} text-right`}>
-                  <button
-                    type="button"
-                    className={`${BUTTON} whitespace-nowrap`}
-                    onClick={async () => setDetail(await fetchAuditEntry(entry.id))}
-                  >
-                    {t('audit.detail')}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <span className="text-fg2 w-24 shrink-0 truncate">
+                    {entry.actor.name || entry.actor.username}
+                  </span>
+                  <span className="num text-fg2 w-64 shrink-0 truncate">{target(entry)}</span>
+                  <span className="num min-w-0 flex-1 truncate">{summary(entry, t)}</span>
+                </button>
+                {open && (
+                  <div className="bg-panel2 space-y-2 px-9 py-2">
+                    <Change entry={full} />
+                    <pre className="num bg-bg overflow-x-auto rounded p-2 text-[11px]">
+                      {JSON.stringify(full, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
         <footer className="text-muted flex items-center justify-end gap-2 px-3 py-2 text-[11px]">
           <button
             type="button"
@@ -188,30 +244,6 @@ export function AuditScreen() {
           </button>
         </footer>
       </Panel>
-
-      {detail && (
-        <div
-          className="fixed inset-0 z-50 flex justify-end bg-black/40"
-          onClick={() => setDetail(null)}
-        >
-          <div
-            className="border-line bg-panel h-full w-full max-w-lg overflow-y-auto border-l p-4"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-semibold">
-                {t(`action.${detail.action}` as MessageKey)}
-              </h2>
-              <button type="button" className={BUTTON} onClick={() => setDetail(null)}>
-                {t('common.close')}
-              </button>
-            </div>
-            <pre className="num bg-panel2 overflow-x-auto rounded p-3 text-[11px]">
-              {JSON.stringify(detail, null, 2)}
-            </pre>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

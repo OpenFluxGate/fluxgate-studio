@@ -231,7 +231,28 @@ export function RulesScreen() {
       )}
       {notice && <Notice onClose={() => setNotice(null)}>{notice}</Notice>}
 
-      <Panel>
+      <Panel
+        title={t('rules.title')}
+        data={{
+          headers: [
+            t('col.ruleSet'),
+            t('col.rule'),
+            t('col.scope'),
+            t('col.limit'),
+            t('col.meaning'),
+            t('col.enabled'),
+          ],
+          rows: (rules.data ?? []).map((rule) => [
+            rule.ruleSetId,
+            rule.id,
+            rule.scope,
+            rule.bands.map(formatLimit).join(' / '),
+            rule.bands.map((band) => describeBand(band, locale)).join(' / '),
+            rule.enabled ? 'on' : 'off',
+          ]),
+        }}
+        csvName="rules.csv"
+      >
         <table className="w-full">
           <thead>
             <tr>
