@@ -6,10 +6,10 @@ import { useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 
 import { type ApiKeyLookup, fetchKeyTransforms, lookupKey } from '@/lib/api';
-import { formatClock, formatCount, formatDateTime } from '@/lib/format';
+import { formatClock, formatCount, formatDateTime, formatTimestamp } from '@/lib/format';
 import { type MessageKey } from '@/lib/i18n';
 
-import { StackedBars } from '../charts';
+import { TimeSeries } from '../charts';
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
 import {
@@ -19,6 +19,7 @@ import {
   Notice,
   PageHeader,
   Panel,
+  SeverityIcon,
   TD,
   TH,
   WindowPicker,
@@ -26,6 +27,12 @@ import {
 
 const WINDOWS = ['1h', '24h', '7d'] as const;
 type Range = (typeof WINDOWS)[number];
+
+const STATUS_SEVERITY = {
+  BLOCKED: 'bad',
+  RECOVERED: 'warn',
+  ALLOWED: 'ok',
+} as const;
 
 const STATUS_STYLE = {
   BLOCKED: 'text-bad',
@@ -75,7 +82,7 @@ export function KeysScreen() {
       </PageHeader>
 
       <form
-        className="mb-3 flex flex-wrap items-center gap-2"
+        className="border-line bg-panel mb-3 flex flex-wrap items-center gap-2 rounded border p-2"
         onSubmit={(event) => {
           event.preventDefault();
           void run();
@@ -126,7 +133,10 @@ export function KeysScreen() {
                 title={`${status.ruleSetId ?? '-'} · ${t('keys.basis')}`}
               >
                 <div className="space-y-1 px-3 py-2">
-                  <div className={`text-sm font-semibold ${STATUS_STYLE[status.status]}`}>
+                  <div
+                    className={`flex items-center gap-1.5 text-sm font-semibold ${STATUS_STYLE[status.status]}`}
+                  >
+                    <SeverityIcon severity={STATUS_SEVERITY[status.status]} />
                     {t(`keys.status.${status.status}` as MessageKey)}
                   </div>
                   <div className="num text-fg2 text-xs">
@@ -149,19 +159,65 @@ export function KeysScreen() {
             ))}
           </div>
 
-          <Panel title={t('keys.timeline')} className="mb-2">
-            <div className="p-3">
-              <StackedBars
-                buckets={result.buckets}
-                height={60}
-                describe={(bucket) =>
-                  `${formatDateTime(bucket.start)}  ${t('decision.allowed')} ${bucket.allowed} · ${t('decision.rejected')} ${bucket.rejected}`
-                }
-              />
-            </div>
+          <Panel
+            title={t('keys.timeline')}
+            className="mb-2"
+            data={{
+              headers: [t('col.time'), t('decision.allowed'), t('decision.rejected')],
+              rows: result.buckets.map((bucket) => [
+                formatTimestamp(bucket.start),
+                bucket.allowed,
+                bucket.rejected,
+              ]),
+            }}
+            csvName="key-decisions.csv"
+          >
+            {(large) => (
+              <div className="px-2 pb-2">
+                <TimeSeries
+                  times={result.buckets.map((bucket) => bucket.start)}
+                  series={[
+                    {
+                      label: t('decision.allowed'),
+                      color: '--c-s1',
+                      values: result.buckets.map((bucket) => bucket.allowed),
+                    },
+                    {
+                      label: t('decision.rejected'),
+                      color: '--c-s2',
+                      values: result.buckets.map((bucket) => bucket.rejected),
+                    },
+                  ]}
+                  height={large ? 480 : 160}
+                  formatTime={formatDateTime}
+                  formatTooltipTime={formatTimestamp}
+                />
+              </div>
+            )}
           </Panel>
 
-          <Panel title={t('keys.recent')}>
+          <Panel
+            title={t('keys.recent')}
+            data={{
+              headers: [
+                t('col.time'),
+                t('col.rule'),
+                t('col.request'),
+                t('col.decision'),
+                t('col.remaining'),
+                t('col.retryAfter'),
+              ],
+              rows: result.recent.map((decision) => [
+                formatTimestamp(decision.timestamp),
+                decision.ruleId,
+                `${decision.method ?? ''} ${decision.endpoint ?? ''}`.trim(),
+                decision.allowed ? 'allowed' : 'rejected',
+                decision.remainingTokens,
+                decision.allowed ? null : decision.retryAfterMs,
+              ]),
+            }}
+            csvName="recent-decisions.csv"
+          >
             <div className="max-h-[480px] overflow-y-auto">
               <table className="w-full">
                 <thead>

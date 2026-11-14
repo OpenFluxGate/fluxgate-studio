@@ -1,5 +1,11 @@
+import { Suspense } from 'react';
+
 import { OverviewScreen } from '@/modules/console/screens/OverviewScreen';
 
 export default function OverviewPage() {
-  return <OverviewScreen />;
+  return (
+    <Suspense>
+      <OverviewScreen />
+    </Suspense>
+  );
 }
