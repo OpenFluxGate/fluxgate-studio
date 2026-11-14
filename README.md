@@ -39,6 +39,7 @@ This repository owns `fluxgate-studio-admin-api` and `fluxgate-studio-ui-nextjs`
 - **Authentication**: OAuth2/OIDC with Keycloak. `ROLE_USER` reads (keys masked), `ROLE_ADMIN` writes.
 - **Grafana style dashboard**: time range presets (5m to 24h), drag to zoom on the time series, zoom out, auto refresh (off, 10s, 30s, 1m), a rule set variable that filters every panel, collapsible rows, panel menus (view, inspect data, download CSV) and a TV mode (`?kiosk`, Esc to leave). The dashboard state lives in the address (`?from=now-1h&to=now&refresh=10s&ruleSet=...`), so a link reopens the same view.
 - **Dark by default**, light and system themes, English and Korean
+- **Settings**: every user picks the language (English or Korean) and the theme. Admins replace the top left icon and the favicon, which apply to every user and the sign in page as soon as they are saved, and are recorded in the audit log.
 - **Rule simulation**: dry-run a burst against a rule's bands
 
 ## Tech Stack
@@ -192,6 +193,8 @@ fluxgate:
     audit:
       collection: ${STUDIO_AUDIT_COLLECTION:studio_audit_log}
       retention: ${STUDIO_AUDIT_RETENTION:730d}      # 0 keeps entries forever
+    settings:
+      collection: ${STUDIO_SETTINGS_COLLECTION:studio_settings}  # console logo and favicon
 ```
 
 The console reads only these fields of each decision: `timestamp` (epoch ms), `allowed`, `ruleSetId`, `ruleId`,
@@ -251,6 +254,8 @@ Reads require `ROLE_USER` or `ROLE_ADMIN`; every mutating endpoint requires `ROL
 | POST | `/api/keys/decisions` | admin | Look up one key (`{value, transform, window}`), recorded in the audit log first |
 | GET | `/api/audit?action=&actor=&q=&from=&to=&page=&size=` | admin | Search the audit log, lookup values masked |
 | GET | `/api/audit/{id}` | admin | One audit entry, unmasked |
+| GET | `/api/branding` | public | Console logo and favicon as data URLs, `null` for the defaults |
+| PUT | `/api/branding` | admin | Replace both images (`{logo, favicon}`). PNG, SVG, ICO, JPEG, WebP or GIF, logo up to 128 KB, favicon up to 64 KB. SVG with scripts is refused |
 
 Every rule and policy change is written to the audit log after it succeeds. If that write fails, the change stays and
 the response carries `X-Studio-Audit: failed`, which the console shows as a warning. A key lookup that cannot be
