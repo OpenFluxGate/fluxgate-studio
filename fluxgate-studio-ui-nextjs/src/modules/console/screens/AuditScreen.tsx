@@ -1,18 +1,33 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  ArrowRight,
+  ChevronDown,
+  ChevronRight,
+  ImageUp,
+  Pencil,
+  Plus,
+  Power,
+  Search,
+  Send,
+  Trash2,
+  Undo2,
+  Upload,
+  X,
+} from 'lucide-react';
 import useSWR from 'swr';
 
 import { type ApiAuditEntry, fetchAudit, fetchAuditEntry } from '@/lib/api';
 import { formatTimestamp } from '@/lib/format';
-import { type MessageKey } from '@/lib/i18n';
-import { formatLimit } from '@/lib/ruleMeaning';
+import { type Locale, type MessageKey } from '@/lib/i18n';
+import { fieldLabel, valueLabel } from '@/lib/labels';
 
+import { Badge, BUTTON, BUTTON_QUIET, Field, INPUT } from '../controls';
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
-import { BUTTON, Forbidden, INPUT, Notice, PageHeader, Panel } from '../ui';
+import { Forbidden, PageHeader, Panel, TD, TH, WindowPicker } from '../ui';
 
 const ACTIONS = [
   'RULE_CREATE',
@@ -24,91 +39,200 @@ const ACTIONS = [
   'POLICY_PUBLISH',
   'POLICY_ROLLBACK',
   'KEY_LOOKUP',
+  'BRANDING_UPDATE',
 ] as const;
+const PERIODS = ['24h', '7d', '30d', 'all'] as const;
+type Period = (typeof PERIODS)[number];
+const PERIOD_MILLIS: Record<Period, number | null> = {
+  '24h': 24 * 3600_000,
+  '7d': 7 * 24 * 3600_000,
+  '30d': 30 * 24 * 3600_000,
+  all: null,
+};
 const PAGE_SIZE = 50;
 const SNAPSHOT_FIELDS = ['scope', 'bands', 'enabled'];
-const ACTION_TONE: Record<string, string> = {
-  RULE_CREATE: 'text-ok',
-  RULE_DELETE: 'text-bad',
-  RULES_DELETE_ALL: 'text-bad',
-  KEY_LOOKUP: 'text-s1',
+
+type BadgeTone = 'neutral' | 'ok' | 'warn' | 'bad' | 'info';
+const ACTION_STYLE: Record<string, { tone: BadgeTone; icon: typeof Plus }> = {
+  RULE_CREATE: { tone: 'ok', icon: Plus },
+  RULE_UPDATE: { tone: 'info', icon: Pencil },
+  RULE_TOGGLE: { tone: 'neutral', icon: Power },
+  RULE_DELETE: { tone: 'bad', icon: Trash2 },
+  RULES_DELETE_ALL: { tone: 'bad', icon: Trash2 },
+  RULES_IMPORT: { tone: 'info', icon: Upload },
+  POLICY_PUBLISH: { tone: 'info', icon: Send },
+  POLICY_ROLLBACK: { tone: 'warn', icon: Undo2 },
+  KEY_LOOKUP: { tone: 'neutral', icon: Search },
+  BRANDING_UPDATE: { tone: 'info', icon: ImageUp },
 };
 
 type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string;
 
-function show(field: string, value: unknown): string {
-  if (value === null || value === undefined) return '∅';
-  if (field === 'bands' && Array.isArray(value)) {
-    return value
-      .map((band) => formatLimit(band as { windowSeconds: number; capacity: number }))
-      .join(' / ');
-  }
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
+function useDebounced<T>(value: T, delay = 300): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
 }
 
 function changedFields(entry: ApiAuditEntry): string[] {
-  return Object.keys({ ...(entry.before ?? {}), ...(entry.after ?? {}) });
+  const before = entry.before ?? {};
+  const after = entry.after ?? {};
+  return Object.keys({ ...before, ...after }).filter(
+    (field) => JSON.stringify(before[field]) !== JSON.stringify(after[field])
+  );
 }
 
-function summary(entry: ApiAuditEntry, t: Translate): string {
+function summary(entry: ApiAuditEntry, t: Translate, locale: Locale): string {
   if (entry.action === 'KEY_LOOKUP') {
-    return t('audit.lookupOf', { value: show('value', entry.detail?.value) });
+    return t('audit.lookupOf', { value: valueLabel('value', entry.detail?.value, locale) });
   }
   if (entry.action === 'RULE_CREATE' || entry.action === 'RULE_DELETE') {
     const snapshot = (entry.action === 'RULE_CREATE' ? entry.after : entry.before) ?? {};
-    return SNAPSHOT_FIELDS.map((field) => `${field} ${show(field, snapshot[field])}`).join(' · ');
+    return SNAPSHOT_FIELDS.filter((field) => field in snapshot)
+      .map((field) => `${fieldLabel(field, locale)} ${valueLabel(field, snapshot[field], locale)}`)
+      .join(' · ');
   }
   const fields = changedFields(entry);
-  if (fields.length === 0) return show('detail', entry.detail);
+  if (fields.length === 0) {
+    return entry.detail && Object.keys(entry.detail).length
+      ? Object.entries(entry.detail)
+          .map(
+            ([field, value]) => `${fieldLabel(field, locale)} ${valueLabel(field, value, locale)}`
+          )
+          .join(' · ')
+      : '';
+  }
   return fields
     .map(
       (field) =>
-        `${field} ${show(field, entry.before?.[field])} → ${show(field, entry.after?.[field])}`
+        `${fieldLabel(field, locale)} ${valueLabel(field, entry.before?.[field], locale)} → ${valueLabel(field, entry.after?.[field], locale)}`
     )
     .join(' · ');
 }
 
-function target(entry: ApiAuditEntry): string {
-  return entry.target
-    ? [entry.target.ruleSetId, entry.target.ruleId].filter(Boolean).join(' / ')
-    : '–';
+function target(entry: ApiAuditEntry, t: Translate): string {
+  if (!entry.target) return '–';
+  if (entry.target.setting) return t('settings.branding');
+  return [entry.target.ruleSetId, entry.target.ruleId].filter(Boolean).join(' / ') || '–';
 }
 
-function Change({ entry }: { entry: ApiAuditEntry }) {
-  const fields = changedFields(entry);
-  if (fields.length === 0) return null;
+function ActionBadge({ action }: { action: string }) {
+  const { t } = useI18n();
+  const style = ACTION_STYLE[action] ?? { tone: 'neutral' as const, icon: Pencil };
   return (
-    <div className="num space-y-0.5">
-      {fields.map((field) => (
-        <div key={field}>
-          <span className="text-muted">{field} </span>
-          <span className="bg-bad-soft text-bad">{show(field, entry.before?.[field])}</span>
-          {' → '}
-          <span className="bg-ok-soft text-ok">{show(field, entry.after?.[field])}</span>
-        </div>
-      ))}
+    <Badge tone={style.tone} icon={style.icon}>
+      {t(`action.${action}` as MessageKey)}
+    </Badge>
+  );
+}
+
+function Detail({ entry }: { entry: ApiAuditEntry }) {
+  const { t, locale } = useI18n();
+  const fields = changedFields(entry);
+  const snapshot =
+    entry.action === 'RULE_CREATE'
+      ? entry.after
+      : entry.action === 'RULE_DELETE'
+        ? entry.before
+        : null;
+  return (
+    <div className="space-y-3 py-1">
+      {snapshot ? (
+        <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-[13px]">
+          {Object.entries(snapshot).map(([field, value]) => (
+            <React.Fragment key={field}>
+              <dt className="text-muted">{fieldLabel(field, locale)}</dt>
+              <dd className="text-fg">{valueLabel(field, value, locale)}</dd>
+            </React.Fragment>
+          ))}
+        </dl>
+      ) : fields.length > 0 ? (
+        <table className="text-[13px]">
+          <thead>
+            <tr>
+              <th scope="col" className={TH}>
+                {t('confirm.field')}
+              </th>
+              <th scope="col" className={TH}>
+                {t('confirm.before')}
+              </th>
+              <th scope="col" className={`${TH} w-6`}>
+                <span className="sr-only">→</span>
+              </th>
+              <th scope="col" className={TH}>
+                {t('confirm.after')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {fields.map((field) => (
+              <tr key={field}>
+                <td className={`${TD} text-fg2`}>{fieldLabel(field, locale)}</td>
+                <td className={`${TD} text-muted decoration-bad/60 line-through`}>
+                  {valueLabel(field, entry.before?.[field], locale)}
+                </td>
+                <td className={TD}>
+                  <ArrowRight size={14} aria-hidden className="text-muted" />
+                </td>
+                <td className={`${TD} text-fg font-medium`}>
+                  {valueLabel(field, entry.after?.[field], locale)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="text-muted text-[13px]">{t('audit.noChange')}</p>
+      )}
+      <details className="text-xs">
+        <summary className="text-muted hover:text-fg cursor-pointer">{t('audit.raw')}</summary>
+        <pre className="mono border-line bg-bg mt-2 max-h-72 overflow-auto rounded border p-2 text-[11px]">
+          {JSON.stringify(entry, null, 2)}
+        </pre>
+      </details>
     </div>
   );
 }
 
 export function AuditScreen() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { isAdmin, loading } = useMe();
   const [action, setAction] = useState('');
   const [actor, setActor] = useState('');
   const [q, setQ] = useState('');
+  const [period, setPeriod] = useState<Period>('7d');
   const [page, setPage] = useState(0);
   const [openId, setOpenId] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, ApiAuditEntry>>({});
 
-  const search = { action, actor, q, page, size: PAGE_SIZE };
-  const result = useSWR(isAdmin ? ['audit', search] : null, () => fetchAudit(search));
+  const debouncedActor = useDebounced(actor.trim());
+  const debouncedQ = useDebounced(q.trim());
+
+  const result = useSWR(
+    isAdmin ? ['audit', action, debouncedActor, debouncedQ, period, page] : null,
+    () => {
+      const span = PERIOD_MILLIS[period];
+      return fetchAudit({
+        action,
+        actor: debouncedActor,
+        q: debouncedQ,
+        from: span === null ? undefined : Date.now() - span,
+        page,
+        size: PAGE_SIZE,
+      });
+    },
+    { keepPreviousData: true }
+  );
 
   if (!loading && !isAdmin) return <Forbidden />;
 
   const entries = result.data?.content ?? [];
-  const pages = Math.max(1, Math.ceil((result.data?.totalElements ?? 0) / PAGE_SIZE));
+  const total = result.data?.totalElements ?? 0;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const filtered = Boolean(action || actor || q || period !== '7d');
 
   const toggle = async (entry: ApiAuditEntry) => {
     if (openId === entry.id) {
@@ -133,115 +257,244 @@ export function AuditScreen() {
       setPage(0);
     };
 
+  const clear = () => {
+    setAction('');
+    setActor('');
+    setQ('');
+    setPeriod('7d');
+    setPage(0);
+  };
+
   return (
     <div>
       <PageHeader title={t('audit.title')}>
-        <select
-          value={action}
-          onChange={(event) => resetPage(setAction)(event.target.value)}
-          className={INPUT}
-        >
-          <option value="">{t('audit.allActions')}</option>
-          {ACTIONS.map((option) => (
-            <option key={option} value={option}>
-              {t(`action.${option}` as MessageKey)}
-            </option>
-          ))}
-        </select>
-        <input
-          value={actor}
-          onChange={(event) => resetPage(setActor)(event.target.value)}
-          placeholder={t('audit.actor')}
-          className={INPUT}
-        />
-        <input
-          value={q}
-          onChange={(event) => resetPage(setQ)(event.target.value)}
-          placeholder={t('audit.search')}
-          className={`${INPUT} w-56`}
-        />
+        {result.data && (
+          <span className="num text-muted text-xs">{t('audit.count', { total })}</span>
+        )}
       </PageHeader>
 
-      {result.error && <Notice tone="bad">{String((result.error as Error).message)}</Notice>}
+      <form
+        role="search"
+        className="border-line bg-panel mb-4 flex flex-wrap items-end gap-3 rounded-md border p-3"
+        onSubmit={(event) => event.preventDefault()}
+      >
+        <Field id="audit-action" label={t('audit.filterAction')}>
+          <select
+            id="audit-action"
+            name="action"
+            value={action}
+            onChange={(event) => resetPage(setAction)(event.target.value)}
+            className={`${INPUT} w-44`}
+          >
+            <option value="">{t('audit.allActions')}</option>
+            {ACTIONS.map((option) => (
+              <option key={option} value={option}>
+                {t(`action.${option}` as MessageKey)}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field id="audit-user" label={t('audit.filterUser')}>
+          <input
+            id="audit-user"
+            name="actor"
+            type="search"
+            autoComplete="off"
+            spellCheck={false}
+            value={actor}
+            onChange={(event) => resetPage(setActor)(event.target.value)}
+            placeholder={t('audit.userPlaceholder')}
+            className={`${INPUT} w-40`}
+          />
+        </Field>
+        <Field id="audit-target" label={t('audit.filterTarget')} className="min-w-56 flex-1">
+          <input
+            id="audit-target"
+            name="target"
+            type="search"
+            autoComplete="off"
+            spellCheck={false}
+            value={q}
+            onChange={(event) => resetPage(setQ)(event.target.value)}
+            placeholder={t('audit.targetPlaceholder')}
+            className={`${INPUT} mono w-full`}
+          />
+        </Field>
+        <div>
+          <span aria-hidden className="text-fg2 mb-1 block text-xs font-medium">
+            {t('audit.period')}
+          </span>
+          <WindowPicker
+            label={t('audit.period')}
+            value={period}
+            options={PERIODS}
+            onChange={resetPage(setPeriod)}
+          />
+        </div>
+        {filtered && (
+          <button type="button" className={BUTTON_QUIET} onClick={clear}>
+            <X size={14} aria-hidden />
+            {t('audit.clear')}
+          </button>
+        )}
+      </form>
 
       <Panel
         title={t('audit.title')}
         data={{
           headers: [
             t('col.time'),
-            t('col.user'),
             t('col.action'),
+            t('col.user'),
             t('col.target'),
             t('col.change'),
           ],
           rows: entries.map((entry) => [
             formatTimestamp(Date.parse(entry.at)),
+            t(`action.${entry.action}` as MessageKey),
             entry.actor.name || entry.actor.username,
-            entry.action,
-            target(entry),
-            summary(entry, t),
+            target(entry, t),
+            summary(entry, t, locale),
           ]),
         }}
-        csvName="audit.csv"
+        csvName="activity.csv"
+        state={{
+          loading: !result.data && !result.error,
+          error: result.data ? undefined : result.error,
+          onRetry: () => void result.mutate(),
+        }}
       >
-        <ul className="text-xs">
-          {entries.map((entry) => {
-            const open = openId === entry.id;
-            const Icon = open ? ChevronDown : ChevronRight;
-            const full = details[entry.id] ?? entry;
-            return (
-              <li key={entry.id} className="border-line/60 border-b">
-                <button
-                  type="button"
-                  aria-expanded={open}
-                  onClick={() => toggle(entry)}
-                  className="hover:bg-panel2 flex w-full items-center gap-3 px-3 py-1.5 text-left"
-                >
-                  <Icon size={12} className="text-muted shrink-0" />
-                  <span className="num text-muted shrink-0">
-                    {formatTimestamp(Date.parse(entry.at))}
-                  </span>
-                  <span
-                    className={`w-28 shrink-0 truncate font-medium ${ACTION_TONE[entry.action] ?? 'text-fg2'}`}
-                  >
-                    {t(`action.${entry.action}` as MessageKey)}
-                  </span>
-                  <span className="text-fg2 w-24 shrink-0 truncate">
-                    {entry.actor.name || entry.actor.username}
-                  </span>
-                  <span className="num text-fg2 w-64 shrink-0 truncate">{target(entry)}</span>
-                  <span className="num min-w-0 flex-1 truncate">{summary(entry, t)}</span>
-                </button>
-                {open && (
-                  <div className="bg-panel2 space-y-2 px-9 py-2">
-                    <Change entry={full} />
-                    <pre className="num bg-bg overflow-x-auto rounded p-2 text-[11px]">
-                      {JSON.stringify(full, null, 2)}
-                    </pre>
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-        <footer className="text-muted flex items-center justify-end gap-2 px-3 py-2 text-[11px]">
-          <button
-            type="button"
-            className={BUTTON}
-            disabled={page === 0}
-            onClick={() => setPage(page - 1)}
+        {entries.length === 0 ? (
+          <div className="text-muted flex flex-col items-center gap-2 px-3 py-10 text-center text-[13px]">
+            {t('audit.empty')}
+            {filtered && (
+              <button type="button" className={BUTTON} onClick={clear}>
+                {t('audit.clear')}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div
+            className={`overflow-x-auto transition-opacity ${result.isValidating ? 'opacity-70' : ''}`}
+            aria-busy={result.isValidating}
           >
-            {t('common.previous')}
-          </button>
-          {t('common.page', { page: page + 1, pages })}
-          <button
-            type="button"
-            className={BUTTON}
-            disabled={page + 1 >= pages}
-            onClick={() => setPage(page + 1)}
-          >
-            {t('common.next')}
-          </button>
+            <table className="w-full table-fixed text-[13px]">
+              <colgroup>
+                <col className="w-9" />
+                <col className="w-40" />
+                <col className="w-36" />
+                <col className="w-32" />
+                <col className="w-60" />
+                <col />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col" className={TH}>
+                    <span className="sr-only">{t('col.detail')}</span>
+                  </th>
+                  <th scope="col" className={TH}>
+                    {t('col.time')}
+                  </th>
+                  <th scope="col" className={TH}>
+                    {t('col.action')}
+                  </th>
+                  <th scope="col" className={TH}>
+                    {t('col.user')}
+                  </th>
+                  <th scope="col" className={TH}>
+                    {t('col.target')}
+                  </th>
+                  <th scope="col" className={TH}>
+                    {t('col.change')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => {
+                  const open = openId === entry.id;
+                  const Icon = open ? ChevronDown : ChevronRight;
+                  const time = formatTimestamp(Date.parse(entry.at));
+                  const text = summary(entry, t, locale);
+                  return (
+                    <React.Fragment key={entry.id}>
+                      <tr
+                        className="hover:bg-panel2 cursor-pointer"
+                        onClick={() => void toggle(entry)}
+                      >
+                        <td className={`${TD} pr-0`}>
+                          <button
+                            type="button"
+                            aria-expanded={open}
+                            aria-controls={`audit-detail-${entry.id}`}
+                            aria-label={t('audit.toggle', {
+                              time,
+                              action: t(`action.${entry.action}` as MessageKey),
+                            })}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void toggle(entry);
+                            }}
+                            className="text-muted hover:bg-line hover:text-fg flex h-6 w-6 items-center justify-center rounded"
+                          >
+                            <Icon size={14} aria-hidden />
+                          </button>
+                        </td>
+                        <td className={`${TD} num text-fg2 whitespace-nowrap`}>{time}</td>
+                        <td className={TD}>
+                          <ActionBadge action={entry.action} />
+                        </td>
+                        <td className={`${TD} truncate`} title={entry.actor.username}>
+                          {entry.actor.name || entry.actor.username}
+                        </td>
+                        <td className={`${TD} mono text-fg2 truncate`} title={target(entry, t)}>
+                          {target(entry, t)}
+                        </td>
+                        <td className={`${TD} text-fg2 truncate`} title={text}>
+                          {text || '–'}
+                        </td>
+                      </tr>
+                      {open && (
+                        <tr id={`audit-detail-${entry.id}`}>
+                          <td className="border-line/70 bg-panel2 border-b" />
+                          <td colSpan={5} className="border-line/70 bg-panel2 border-b px-3 py-2">
+                            <Detail entry={details[entry.id] ?? entry} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <footer className="text-muted flex items-center justify-between gap-2 px-3 py-2 text-xs">
+          <span className="num">
+            {t('common.items', {
+              from: total ? page * PAGE_SIZE + 1 : 0,
+              to: Math.min(total, (page + 1) * PAGE_SIZE),
+              total,
+            })}
+          </span>
+          <span className="flex items-center gap-2">
+            <button
+              type="button"
+              className={BUTTON}
+              disabled={page === 0}
+              onClick={() => setPage(page - 1)}
+            >
+              {t('common.previous')}
+            </button>
+            <span className="num">{t('common.page', { page: page + 1, pages })}</span>
+            <button
+              type="button"
+              className={BUTTON}
+              disabled={page + 1 >= pages}
+              onClick={() => setPage(page + 1)}
+            >
+              {t('common.next')}
+            </button>
+          </span>
         </footer>
       </Panel>
     </div>

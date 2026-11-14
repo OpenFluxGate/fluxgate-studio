@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 
 import {
   AlertTriangle,
@@ -9,7 +9,9 @@ import {
   ChevronRight,
   Download,
   EllipsisVertical,
+  Info,
   Maximize2,
+  RotateCw,
   Table2,
   XOctagon,
 } from 'lucide-react';
@@ -20,47 +22,76 @@ import { type MessageKey } from '@/lib/i18n';
 import { type Severity } from '@/lib/stats';
 
 import { Sparkline } from './charts';
+import { BUTTON, MenuItem, MenuList, Tooltip, usePopover } from './controls';
 import { useI18n } from './I18nProvider';
 import { useKiosk } from './kiosk';
+import { Modal } from './overlay';
 import { usePersistentFlag } from './persistentFlag';
 import { useNow } from './useLive';
+import { UserMenu } from './UserMenu';
+
+export {
+  Badge,
+  BUTTON,
+  BUTTON_DANGER,
+  BUTTON_PRIMARY,
+  BUTTON_QUIET,
+  Field,
+  IconButton,
+  INPUT,
+} from './controls';
 
 export const TH =
-  'border-b border-line px-2 py-1.5 text-left text-[11px] font-medium text-s1 whitespace-nowrap';
-export const TD = 'border-b border-line/60 px-2 py-1.5 align-top';
-export const BUTTON =
-  'inline-flex items-center gap-1 rounded border border-line-strong bg-panel2 px-2 py-1 text-xs text-fg hover:border-fg2 disabled:opacity-50';
-export const BUTTON_PRIMARY =
-  'inline-flex items-center gap-1 rounded bg-s1 px-2.5 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50';
-export const INPUT =
-  'rounded border border-line-strong bg-panel2 px-2 py-1 text-xs text-fg placeholder:text-faint focus:border-s1 focus:outline-none';
+  'border-b border-line px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-muted';
+export const TD = 'border-b border-line/70 px-3 py-2 align-middle';
 
 export interface TableData {
   headers: string[];
   rows: (string | number | null)[][];
 }
 
+export interface PanelState {
+  loading?: boolean;
+  error?: unknown;
+  empty?: boolean;
+  onRetry?: () => void;
+}
+
 export function PageHeader({ title, children }: { title: string; children?: React.ReactNode }) {
+  const { t } = useI18n();
   const { kiosk } = useKiosk();
   if (kiosk) return null;
+  const environment = process.env.NEXT_PUBLIC_ENV_LABEL;
   return (
-    <div className="border-line bg-panel sticky top-0 z-30 -mx-4 -mt-4 mb-3 flex flex-wrap items-center gap-2 border-b px-4 py-2">
-      <div className="text-muted text-xs">
-        FluxGate<span className="mx-1.5">›</span>
-        <span className="text-fg font-medium">{title}</span>
-      </div>
-      <div className="ml-auto flex flex-wrap items-center gap-2">{children}</div>
+    <div className="border-line bg-panel sticky top-0 z-30 -mx-4 mb-4 flex h-12 items-center gap-3 border-b px-4">
+      <nav aria-label="breadcrumb" className="flex min-w-0 items-center gap-1.5 text-[13px]">
+        <span className="text-muted">FluxGate</span>
+        <span aria-hidden className="text-faint">
+          /
+        </span>
+        <h1 className="text-fg truncate text-[15px] font-semibold">{title}</h1>
+      </nav>
+      {environment && (
+        <span
+          title={t('env.label')}
+          className="border-warn-line text-warn rounded border px-1.5 text-[11px] font-medium"
+        >
+          {environment}
+        </span>
+      )}
+      <div className="ml-auto flex items-center gap-2">{children}</div>
+      <UserMenu />
     </div>
   );
 }
 
 export function DataTable({ data }: { data: TableData }) {
   return (
-    <table className="w-full">
+    <table className="w-full text-[13px]">
       <thead>
         <tr>
           {data.headers.map((header) => (
-            <th key={header} className={TH}>
+            <th key={header} scope="col" className={TH}>
               {header}
             </th>
           ))}
@@ -81,123 +112,158 @@ export function DataTable({ data }: { data: TableData }) {
   );
 }
 
-function MenuItem({
-  icon: Icon,
-  onClick,
-  children,
-}: {
-  icon: typeof Maximize2;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+export function Skeleton({ lines = 3, height = 'h-3' }: { lines?: number; height?: string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="hover:bg-line flex w-full items-center gap-2 px-3 py-1.5 text-left"
-    >
-      <Icon size={13} />
-      {children}
-    </button>
+    <div className="space-y-2 p-3" aria-hidden>
+      {Array.from({ length: lines }, (_, index) => (
+        <div
+          key={index}
+          className={`${height} bg-panel2 rounded motion-safe:animate-pulse`}
+          style={{ width: `${90 - index * 15}%` }}
+        />
+      ))}
+    </div>
   );
+}
+
+function StateBody({ state, children }: { state?: PanelState; children: React.ReactNode }) {
+  const { t } = useI18n();
+  if (state?.error) {
+    return (
+      <div role="alert" className="flex flex-col items-center gap-2 px-3 py-6 text-center text-xs">
+        <span className="text-bad flex items-center gap-1.5">
+          <XOctagon size={14} aria-hidden />
+          {t('common.loadFailed')}
+        </span>
+        <span className="text-muted">{(state.error as Error).message}</span>
+        {state.onRetry && (
+          <button type="button" className={BUTTON} onClick={state.onRetry}>
+            <RotateCw size={13} aria-hidden />
+            {t('common.retry')}
+          </button>
+        )}
+      </div>
+    );
+  }
+  if (state?.loading) {
+    return (
+      <>
+        <span className="sr-only">{t('common.loading')}</span>
+        <Skeleton />
+      </>
+    );
+  }
+  if (state?.empty) {
+    return <p className="text-muted px-3 py-6 text-center text-xs">{t('common.noData')}</p>;
+  }
+  return <>{children}</>;
 }
 
 export function Panel({
   title,
+  description,
   actions,
   className = '',
   bodyClassName = '',
   data,
   csvName,
+  state,
   children,
 }: {
-  title?: React.ReactNode;
+  title?: string;
+  description?: string;
   actions?: React.ReactNode;
   className?: string;
   bodyClassName?: string;
   data?: TableData;
   csvName?: string;
+  state?: PanelState;
   children: React.ReactNode | ((large: boolean) => React.ReactNode);
 }) {
   const { t } = useI18n();
+  const {
+    open: menuOpen,
+    setOpen: setMenuOpen,
+    close: closeMenu,
+    rootRef,
+    triggerRef,
+  } = usePopover();
   const [mode, setMode] = useState<'normal' | 'view' | 'data'>('normal');
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  useEffect(() => {
-    if (mode === 'normal') return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMode('normal');
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [mode]);
 
   const body = (large: boolean) => (typeof children === 'function' ? children(large) : children);
   const choose = (next: 'view' | 'data') => {
-    setMenuOpen(false);
+    closeMenu(false);
     setMode(next);
   };
 
   return (
-    <section className={`border-line bg-panel relative rounded border ${className}`}>
+    <section className={`border-line bg-panel relative min-w-0 rounded-md border ${className}`}>
       {title && (
-        <header className="text-fg flex items-center gap-2 px-3 py-1.5 text-xs font-medium">
-          <span className="truncate">{title}</span>
+        <header className="flex h-9 items-center gap-1.5 px-3">
+          <h2 className="text-fg truncate text-[13px] font-semibold">{title}</h2>
+          {description && (
+            <span className="group relative inline-flex" tabIndex={0} aria-label={description}>
+              <Info size={13} aria-hidden className="text-muted" />
+              <Tooltip text={description} align="start" />
+            </span>
+          )}
           <div className="ml-auto flex items-center gap-1">
             {actions}
-            <div className="relative">
+            <div ref={rootRef} className="relative">
               <button
+                ref={triggerRef}
                 type="button"
-                aria-label={t('panel.menu')}
+                aria-label={`${title} ${t('panel.menu')}`}
+                aria-haspopup="menu"
                 aria-expanded={menuOpen}
                 onClick={() => setMenuOpen(!menuOpen)}
-                className="text-muted hover:bg-panel2 hover:text-fg rounded px-0.5"
+                className="text-muted hover:bg-panel2 hover:text-fg inline-flex h-7 w-7 items-center justify-center rounded transition-colors"
               >
-                <EllipsisVertical size={14} />
+                <EllipsisVertical size={15} aria-hidden />
               </button>
               {menuOpen && (
-                <div
-                  className="border-line bg-panel2 absolute right-0 z-40 mt-1 w-40 rounded border py-1 text-xs font-normal shadow-lg"
-                  onMouseLeave={() => setMenuOpen(false)}
-                >
-                  <MenuItem icon={Maximize2} onClick={() => choose('view')}>
+                <MenuList label={`${title} ${t('panel.menu')}`}>
+                  <MenuItem icon={Maximize2} onSelect={() => choose('view')}>
                     {t('panel.view')}
                   </MenuItem>
                   {data && (
-                    <MenuItem icon={Table2} onClick={() => choose('data')}>
+                    <MenuItem icon={Table2} onSelect={() => choose('data')}>
                       {t('panel.data')}
                     </MenuItem>
                   )}
                   {data && (
                     <MenuItem
                       icon={Download}
-                      onClick={() => {
-                        setMenuOpen(false);
+                      onSelect={() => {
+                        closeMenu(true);
                         downloadCsv(csvName ?? 'panel.csv', toCsv(data.headers, data.rows));
                       }}
                     >
                       {t('panel.csv')}
                     </MenuItem>
                   )}
-                </div>
+                </MenuList>
               )}
             </div>
           </div>
         </header>
       )}
-      <div className={bodyClassName}>{body(false)}</div>
-      {mode !== 'normal' && (
-        <div className="bg-bg fixed inset-0 z-50 flex flex-col p-6" role="dialog" aria-modal>
-          <div className="mb-3 flex items-center gap-2">
-            <h2 className="text-sm font-semibold">{title}</h2>
-            <button type="button" className={`${BUTTON} ml-auto`} onClick={() => setMode('normal')}>
-              {t('common.close')}
-            </button>
-          </div>
-          <div className="border-line bg-panel min-h-0 flex-1 overflow-auto rounded border p-3">
-            {mode === 'view' ? body(true) : data && <DataTable data={data} />}
-          </div>
-        </div>
+      <div className={bodyClassName}>
+        <StateBody state={state}>{body(false)}</StateBody>
+      </div>
+      {mode !== 'normal' && title && (
+        <Modal
+          title={title}
+          description={description}
+          size="full"
+          onClose={() => setMode('normal')}
+        >
+          {mode === 'view' ? (
+            <StateBody state={state}>{body(true)}</StateBody>
+          ) : (
+            data && <DataTable data={data} />
+          )}
+        </Modal>
       )}
     </section>
   );
@@ -215,18 +281,20 @@ export function Row({
   const [open, setOpen] = usePersistentFlag(`studio-row-${id}`, true);
   const Icon = open ? ChevronDown : ChevronRight;
   return (
-    <div className="mb-3">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-        className="text-fg2 hover:text-fg mb-1.5 flex items-center gap-1 text-xs font-medium"
-      >
-        <Icon size={14} />
-        {title}
-      </button>
+    <section className="mb-4" aria-labelledby={`row-${id}`}>
+      <h2 id={`row-${id}`} className="mb-2">
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+          className="text-fg2 hover:text-fg flex h-7 items-center gap-1 rounded pr-2 text-[13px] font-semibold transition-colors"
+        >
+          <Icon size={15} aria-hidden />
+          {title}
+        </button>
+      </h2>
       {open && children}
-    </div>
+    </section>
   );
 }
 
@@ -242,12 +310,9 @@ export function SeverityIcon({ severity, size = 14 }: { severity: Severity; size
   const { t } = useI18n();
   const Icon = SEVERITY_ICON[severity];
   return (
-    <Icon
-      size={size}
-      role="img"
-      aria-label={t(`severity.${severity}` as MessageKey)}
-      className={SEVERITY_TEXT[severity]}
-    />
+    <span role="img" aria-label={t(`severity.${severity}` as MessageKey)} className="inline-flex">
+      <Icon size={size} aria-hidden className={SEVERITY_TEXT[severity]} />
+    </span>
   );
 }
 
@@ -258,17 +323,25 @@ export function StatPanel({
   severity,
   spark,
   color = '--c-s1',
+  delta,
+  description,
+  state,
 }: {
   title: string;
   value: string;
   unit?: string;
   severity?: Severity;
-  spark?: number[];
+  spark?: (number | null)[];
   color?: string;
+  delta?: React.ReactNode;
+  description?: string;
+  state?: PanelState;
 }) {
   return (
     <Panel
       title={title}
+      description={description}
+      state={state}
       data={
         spark
           ? { headers: ['#', title], rows: spark.map((point, index) => [index + 1, point]) }
@@ -277,21 +350,26 @@ export function StatPanel({
       csvName={`${title}.csv`}
     >
       {(large) => (
-        <div className={`relative ${large ? 'h-96' : 'h-16'}`}>
+        <div className={`relative ${large ? 'h-96' : 'h-[88px]'}`}>
           <div
-            className={`relative z-10 flex items-center gap-1.5 px-3 ${severity ? SEVERITY_TEXT[severity] : 'text-fg'}`}
+            className={`relative z-10 flex items-center gap-2 px-3 ${severity ? SEVERITY_TEXT[severity] : 'text-fg'}`}
           >
-            {severity && <SeverityIcon severity={severity} size={18} />}
-            <span className={`num leading-9 ${large ? 'text-6xl' : 'text-2xl'}`}>{value}</span>
-            {unit && <span className="text-muted text-sm">{unit}</span>}
+            {severity && <SeverityIcon severity={severity} size={20} />}
+            <span
+              className={`num leading-none font-medium tracking-tight ${large ? 'text-7xl' : 'text-[32px]'}`}
+            >
+              {value}
+            </span>
+            {unit && <span className="text-muted text-[15px]">{unit}</span>}
           </div>
+          {delta && <div className="text-muted relative z-10 mt-1.5 px-3 text-xs">{delta}</div>}
           {spark && (
             <Sparkline
               values={spark}
               color={color}
               area
               stretch
-              height={large ? 240 : 36}
+              height={large ? 240 : 34}
               className="absolute inset-x-0 bottom-0"
             />
           )}
@@ -305,21 +383,28 @@ export function WindowPicker<T extends string>({
   value,
   options,
   onChange,
+  label,
 }: {
   value: T;
   options: readonly T[];
   onChange: (value: T) => void;
+  label: string;
 }) {
   const { t } = useI18n();
   return (
-    <div className="border-line-strong bg-panel2 inline-flex rounded border p-0.5" role="group">
+    <div
+      className="border-line-strong bg-panel2 inline-flex h-8 items-center rounded border p-0.5"
+      role="radiogroup"
+      aria-label={label}
+    >
       {options.map((option) => (
         <button
           key={option}
           type="button"
+          role="radio"
+          aria-checked={option === value}
           onClick={() => onChange(option)}
-          aria-pressed={option === value}
-          className={`rounded-sm px-2 py-0.5 text-xs ${option === value ? 'bg-s1 text-white' : 'text-fg2 hover:bg-line'}`}
+          className={`h-full rounded-sm px-2.5 text-xs transition-colors ${option === value ? 'bg-s1 font-medium text-white' : 'text-fg2 hover:bg-line hover:text-fg'}`}
         >
           {t(`window.${option}` as MessageKey)}
         </button>
@@ -333,14 +418,18 @@ export function LiveStatus({ updatedAt, error }: { updatedAt: number | null; err
   const now = useNow();
   if (error && updatedAt) {
     return (
-      <span className="border-warn-line bg-warn-soft text-warn rounded border px-2 py-0.5 text-[11px]">
+      <span
+        role="status"
+        className="border-warn-line bg-warn-soft text-warn inline-flex h-6 items-center gap-1 rounded border px-2 text-[11px]"
+      >
+        <AlertTriangle size={12} aria-hidden />
         {t('common.refreshFailed', { time: formatClock(updatedAt) })}
       </span>
     );
   }
   if (!updatedAt || !now) return null;
   return (
-    <span className="text-muted text-[11px]">
+    <span className="num text-muted text-[11px] whitespace-nowrap">
       {t('common.updated', { ago: formatAgo(updatedAt, now, locale) })}
     </span>
   );
@@ -358,15 +447,25 @@ export function Notice({
   const { t } = useI18n();
   const style =
     tone === 'bad'
-      ? 'border-bad bg-bad-soft text-bad'
+      ? 'border-bad/50 bg-bad-soft text-bad'
       : tone === 'warn'
         ? 'border-warn-line bg-warn-soft text-warn'
         : 'border-line bg-panel2 text-fg2';
+  const Icon = tone === 'bad' ? XOctagon : tone === 'warn' ? AlertTriangle : Info;
   return (
-    <div className={`mb-3 flex items-start gap-2 rounded border px-3 py-2 text-xs ${style}`}>
+    <div
+      role={tone === 'bad' ? 'alert' : 'status'}
+      aria-live={tone === 'bad' ? 'assertive' : 'polite'}
+      className={`mb-3 flex items-start gap-2 rounded-md border px-3 py-2 text-[13px] ${style}`}
+    >
+      <Icon size={15} aria-hidden className="mt-0.5 shrink-0" />
       <div className="flex-1">{children}</div>
       {onClose && (
-        <button type="button" onClick={onClose} className="text-[11px] underline">
+        <button
+          type="button"
+          onClick={onClose}
+          className="h-6 rounded px-1.5 text-xs underline-offset-2 hover:underline"
+        >
           {t('common.dismiss')}
         </button>
       )}

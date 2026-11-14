@@ -30,6 +30,9 @@ export function describeBand(band: BandLike, locale: Locale): string {
   });
 }
 
-export function formatLimit(band: BandLike): string {
-  return `${band.windowSeconds}s·${band.capacity}`;
+export function formatLimit(band: BandLike, locale: Locale = 'en'): string {
+  return translate(locale, 'limit.compact', {
+    capacity: band.capacity,
+    window: formatPeriod(band.windowSeconds, locale),
+  });
 }

@@ -111,6 +111,7 @@ export interface SimulationResult {
   bands: {
     label: string;
     capacity: number;
+    windowSeconds?: number;
     available: number;
     consumed: number;
     remaining: number;

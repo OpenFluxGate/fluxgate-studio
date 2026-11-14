@@ -11,22 +11,33 @@ interface MeValue {
   me?: ApiMe;
   isAdmin: boolean;
   loading: boolean;
+  error?: Error;
+  retry: () => void;
 }
 
-const MeContext = createContext<MeValue>({ isAdmin: false, loading: true });
+const MeContext = createContext<MeValue>({ isAdmin: false, loading: true, retry: () => {} });
 
 export function MeProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { data, error, isLoading } = useSWR('me', fetchMe, { revalidateOnFocus: false });
+  const { data, error, isLoading, mutate } = useSWR('me', fetchMe, { revalidateOnFocus: false });
+  const unauthorized = error instanceof ApiError && error.status === 401;
 
   useEffect(() => {
-    if (error instanceof ApiError && error.status === 401) {
-      router.replace('/login');
-    }
-  }, [error, router]);
+    if (unauthorized) router.replace('/login');
+  }, [unauthorized, router]);
 
   return (
-    <MeContext.Provider value={{ me: data, isAdmin: !!data?.canWrite, loading: isLoading }}>
+    <MeContext.Provider
+      value={{
+        me: data,
+        isAdmin: !!data?.canWrite,
+        loading: isLoading,
+        error: error && !unauthorized ? (error as Error) : undefined,
+        retry: () => {
+          void mutate();
+        },
+      }}
+    >
       {children}
     </MeContext.Provider>
   );

@@ -2,66 +2,98 @@
 
 import React from 'react';
 
+import { AlertTriangle, ArrowRight } from 'lucide-react';
+
+import { fieldLabel } from '@/lib/labels';
 import { type FieldChange } from '@/lib/ruleDiff';
 
+import { BUTTON, BUTTON_DANGER } from './controls';
 import { useI18n } from './I18nProvider';
-import { BUTTON, BUTTON_PRIMARY, TD, TH } from './ui';
+import { Modal } from './overlay';
+import { TD, TH } from './ui';
 
 export function ConfirmChangeDialog({
   title,
   changes,
   busy,
+  confirmLabel,
+  warning,
   onCancel,
   onConfirm,
 }: {
   title: string;
   changes: FieldChange[];
   busy: boolean;
+  confirmLabel?: string;
+  warning?: string;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-      <div role="dialog" aria-modal className="border-line bg-panel w-full max-w-lg rounded border">
-        <header className="border-line border-b px-4 py-2 text-sm font-semibold">
-          {t('rules.confirmTitle')}
-          <div className="num text-muted text-[11px] font-normal">{title}</div>
-        </header>
-        <table className="w-full">
+    <Modal
+      title={t('rules.confirmTitle')}
+      description={<span className="mono">{title}</span>}
+      onClose={onCancel}
+      size="md"
+      footer={
+        <>
+          <button
+            type="button"
+            className={BUTTON}
+            onClick={onCancel}
+            disabled={busy}
+            data-autofocus
+          >
+            {t('common.cancel')}
+          </button>
+          <button type="button" className={BUTTON_DANGER} onClick={onConfirm} disabled={busy}>
+            {confirmLabel ?? t('rules.confirmSave')}
+          </button>
+        </>
+      }
+    >
+      {changes.length > 0 && (
+        <table className="mb-3 w-full text-[13px]">
           <thead>
             <tr>
-              <th className={TH}>{t('col.change')}</th>
-              <th className={TH} />
-              <th className={TH} />
+              <th scope="col" className={TH}>
+                {t('confirm.field')}
+              </th>
+              <th scope="col" className={TH}>
+                {t('confirm.before')}
+              </th>
+              <th scope="col" className={`${TH} w-6`}>
+                <span className="sr-only">→</span>
+              </th>
+              <th scope="col" className={TH}>
+                {t('confirm.after')}
+              </th>
             </tr>
           </thead>
           <tbody>
             {changes.map((change) => (
               <tr key={change.field}>
-                <td className={`${TD} num text-muted`}>{change.field}</td>
-                <td className={`${TD} num`}>
-                  <span className="bg-bad-soft text-bad">{change.before || '∅'}</span>
+                <td className={`${TD} text-fg2`}>{fieldLabel(change.field, locale)}</td>
+                <td className={`${TD} text-muted decoration-bad/60 line-through`}>
+                  {change.before || t('value.empty')}
                 </td>
-                <td className={`${TD} num`}>
-                  <span className="bg-ok-soft text-ok">{change.after || '∅'}</span>
+                <td className={TD}>
+                  <ArrowRight size={14} aria-hidden className="text-muted" />
                 </td>
+                <td className={`${TD} text-fg font-medium`}>{change.after || t('value.empty')}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <p className="border-warn-line bg-warn-soft text-warn m-3 rounded border px-3 py-2 text-xs">
-          {t('rules.confirmWarning')}
-        </p>
-        <footer className="border-line flex justify-end gap-2 border-t px-4 py-2">
-          <button type="button" className={BUTTON} onClick={onCancel} disabled={busy}>
-            {t('common.cancel')}
-          </button>
-          <button type="button" className={BUTTON_PRIMARY} onClick={onConfirm} disabled={busy}>
-            {t('rules.confirmSave')}
-          </button>
-        </footer>
+      )}
+      <div
+        role="note"
+        className="border-warn-line bg-warn-soft text-warn flex items-start gap-2 rounded-md border px-3 py-2 text-[13px]"
+      >
+        <AlertTriangle size={15} aria-hidden className="mt-0.5 shrink-0" />
+        {warning ?? t('rules.confirmWarning')}
       </div>
-    </div>
+    </Modal>
   );
 }

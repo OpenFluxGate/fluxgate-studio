@@ -28,8 +28,14 @@ export function formatDateTime(timestamp: number): string {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function formatBucket(millis: number): string {
-  return millis < 60_000 ? `${millis / 1000}s` : `${millis / 60_000}m`;
+export function formatBucket(millis: number, locale: Locale = 'en'): string {
+  const [value, unit] =
+    millis < 60_000
+      ? [millis / 1000, locale === 'ko' ? '초' : 's']
+      : millis < 3_600_000
+        ? [millis / 60_000, locale === 'ko' ? '분' : 'm']
+        : [millis / 3_600_000, locale === 'ko' ? '시간' : 'h'];
+  return `${value}${unit}`;
 }
 
 export function formatHourMinute(timestamp: number): string {

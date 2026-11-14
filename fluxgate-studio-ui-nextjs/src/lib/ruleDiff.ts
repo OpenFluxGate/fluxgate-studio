@@ -1,6 +1,7 @@
 import { type Rule } from '@/modules/admin/types';
 
-import { formatLimit } from './ruleMeaning';
+import { type Locale } from './i18n';
+import { valueLabel } from './labels';
 
 export interface FieldChange {
   field: string;
@@ -19,18 +20,20 @@ const FIELDS = [
   'tags',
 ] as const;
 
-function show(field: (typeof FIELDS)[number], rule: Partial<Rule> | null): string {
+function show(field: (typeof FIELDS)[number], rule: Partial<Rule> | null, locale: Locale): string {
   const value = rule?.[field];
   if (value === undefined || value === null) return '';
-  if (field === 'bands') return (value as Rule['bands']).map(formatLimit).join(' / ');
-  if (field === 'tags') return (value as string[]).join(', ');
-  return String(value);
+  return valueLabel(field, value, locale);
 }
 
-export function diffRules(before: Rule | null, after: Partial<Rule>): FieldChange[] {
+export function diffRules(
+  before: Rule | null,
+  after: Partial<Rule>,
+  locale: Locale = 'en'
+): FieldChange[] {
   return FIELDS.map((field) => ({
     field,
-    before: show(field, before),
-    after: show(field, after),
+    before: show(field, before, locale),
+    after: show(field, after, locale),
   })).filter((change) => change.before !== change.after);
 }

@@ -9,7 +9,7 @@ import React, {
   useSyncExternalStore,
 } from 'react';
 
-import { defaultLocale, type Locale, type MessageKey, translate } from '@/lib/i18n';
+import { type Locale, type MessageKey, translate } from '@/lib/i18n';
 
 const COOKIE = 'studio_locale';
 const listeners = new Set<() => void>();
@@ -29,13 +29,23 @@ function subscribe(listener: () => void) {
   };
 }
 
-function readLocale(): Locale {
+function readLocale(fallback: Locale): Locale {
   const match = document.cookie.match(/(?:^|;\s*)studio_locale=(en|ko)/);
-  return match ? (match[1] as Locale) : defaultLocale();
+  return match ? (match[1] as Locale) : fallback;
 }
 
-export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const locale = useSyncExternalStore(subscribe, readLocale, defaultLocale);
+export function I18nProvider({
+  initialLocale,
+  children,
+}: {
+  initialLocale: Locale;
+  children: React.ReactNode;
+}) {
+  const locale = useSyncExternalStore(
+    subscribe,
+    () => readLocale(initialLocale),
+    () => initialLocale
+  );
 
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -43,6 +53,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   const setLocale = useCallback((next: Locale) => {
     document.cookie = `${COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
+    document.documentElement.lang = next;
     listeners.forEach((listener) => listener());
   }, []);
 

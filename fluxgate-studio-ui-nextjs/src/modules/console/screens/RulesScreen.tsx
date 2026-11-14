@@ -2,7 +2,7 @@
 
 import React, { useMemo, useRef, useState } from 'react';
 
-import { Download, Play, Plus, Trash2, Upload } from 'lucide-react';
+import { Download, Eye, Pencil, Play, Plus, Trash2, Upload } from 'lucide-react';
 import useSWR from 'swr';
 
 import {
@@ -19,6 +19,7 @@ import {
   updateRule,
 } from '@/lib/api';
 import { formatCount } from '@/lib/format';
+import { scopeLabel } from '@/lib/labels';
 import { mapApiRuleToRule, mapRuleToCreateRequest, mapRuleToUpdateRequest } from '@/lib/mappers';
 import { diffRules, type FieldChange } from '@/lib/ruleDiff';
 import { describeBand, formatLimit } from '@/lib/ruleMeaning';
@@ -28,7 +29,18 @@ import { type FieldErrors, type Rule, ruleIdentity } from '@/modules/admin/types
 import { ConfirmChangeDialog } from '../ConfirmChangeDialog';
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
-import { BUTTON, BUTTON_PRIMARY, INPUT, Notice, PageHeader, Panel, TD, TH } from '../ui';
+import {
+  Badge,
+  BUTTON,
+  BUTTON_PRIMARY,
+  IconButton,
+  INPUT,
+  Notice,
+  PageHeader,
+  Panel,
+  TD,
+  TH,
+} from '../ui';
 import { useLive } from '../useLive';
 
 type Pending =
@@ -38,14 +50,16 @@ type Pending =
       data: Partial<Rule> & { id: string };
       changes: FieldChange[];
     }
-  | { kind: 'toggle'; rule: Rule; changes: FieldChange[] };
+  | { kind: 'toggle'; rule: Rule; changes: FieldChange[] }
+  | { kind: 'delete'; rule: Rule; changes: FieldChange[] };
 
 function toFieldErrors(details: string[]): FieldErrors {
   const errors: FieldErrors = {};
   for (const detail of details) {
     const separator = detail.indexOf(':');
-    if (separator > 0)
+    if (separator > 0) {
       errors[detail.slice(0, separator).trim()] = detail.slice(separator + 1).trim();
+    }
   }
   return errors;
 }
@@ -62,6 +76,7 @@ export function RulesScreen() {
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState(false);
   const [formErrors, setFormErrors] = useState<FieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
@@ -90,18 +105,23 @@ export function RulesScreen() {
     );
   }, [rules.data, query]);
 
-  const fail = (err: unknown) => {
-    if (err instanceof ApiError && err.status === 409) setError(t('rules.conflict'));
-    else setError(err instanceof Error ? err.message : String(err));
-  };
+  const message = (err: unknown) =>
+    err instanceof ApiError && err.status === 409
+      ? t('rules.conflict')
+      : err instanceof Error
+        ? err.message
+        : String(err);
 
   const confirmPending = async () => {
     if (!pending) return;
     setBusy(true);
     setError(null);
+    setFormError(null);
     try {
       if (pending.kind === 'toggle') {
         await toggleRule(pending.rule.id, pending.rule.ruleSetId);
+      } else if (pending.kind === 'delete') {
+        await deleteRule(pending.rule.id, pending.rule.ruleSetId);
       } else if (pending.rule) {
         assertSafeRuleNumbers(pending.rule);
         await updateRule(
@@ -117,11 +137,15 @@ export function RulesScreen() {
       setFormErrors({});
       await rules.mutate();
     } catch (err) {
-      if (pending.kind === 'save' && err instanceof ApiError && err.details.length > 0) {
-        setFormErrors(toFieldErrors(err.details));
-      }
       setPending(null);
-      fail(err);
+      if (pending.kind === 'save') {
+        if (err instanceof ApiError && err.details.length > 0) {
+          setFormErrors(toFieldErrors(err.details));
+        }
+        setFormError(message(err));
+      } else {
+        setError(message(err));
+      }
     } finally {
       setBusy(false);
     }
@@ -129,24 +153,7 @@ export function RulesScreen() {
 
   const onSave = (data: Partial<Rule> & { id: string }) => {
     const before = editing ?? null;
-    setPending({ kind: 'save', rule: before, data, changes: diffRules(before, data) });
-  };
-
-  const onToggle = (rule: Rule) =>
-    setPending({
-      kind: 'toggle',
-      rule,
-      changes: diffRules(rule, { ...rule, enabled: !rule.enabled }),
-    });
-
-  const onDelete = async (rule: Rule) => {
-    if (!window.confirm(t('rules.deleteConfirm', { id: rule.id }))) return;
-    try {
-      await deleteRule(rule.id, rule.ruleSetId);
-      await rules.mutate();
-    } catch (err) {
-      fail(err);
-    }
+    setPending({ kind: 'save', rule: before, data, changes: diffRules(before, data, locale) });
   };
 
   const onExport = async () => {
@@ -161,7 +168,7 @@ export function RulesScreen() {
       link.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      fail(err);
+      setError(message(err));
     }
   };
 
@@ -177,34 +184,47 @@ export function RulesScreen() {
         return;
       }
       payload.forEach(assertSafeRuleNumbers);
-      if (!window.confirm(t('rules.importConfirm', { count: payload.length, file: file.name })))
+      if (!window.confirm(t('rules.importConfirm', { count: payload.length, file: file.name }))) {
         return;
+      }
       const result = await importRules(payload);
       setNotice(t('rules.imported', { ...result }));
       await rules.mutate();
     } catch (err) {
-      if (err instanceof SyntaxError) setError(t('rules.importNotJson'));
-      else fail(err);
+      setError(err instanceof SyntaxError ? t('rules.importNotJson') : message(err));
     }
   };
+
+  const pendingTitle = (item: Pending) =>
+    item.kind === 'save' && !item.rule
+      ? t('rules.confirmNew', { id: item.data.id })
+      : `${(item.kind === 'save' ? item.rule : item.rule)?.ruleSetId ?? t('rules.unassigned')} / ${item.kind === 'save' ? item.data.id : item.rule.id}`;
 
   return (
     <div>
       <PageHeader title={t('rules.title')}>
+        <label htmlFor="rule-search" className="sr-only">
+          {t('rules.searchLabel')}
+        </label>
         <input
+          id="rule-search"
+          name="q"
+          type="search"
+          autoComplete="off"
+          spellCheck={false}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder={t('rules.search')}
+          placeholder={`${t('rules.search')}…`}
           className={`${INPUT} w-64`}
         />
         <button type="button" className={BUTTON} onClick={onExport}>
-          <Download size={12} />
+          <Download size={14} aria-hidden />
           {t('rules.export')}
         </button>
         {isAdmin ? (
           <>
             <button type="button" className={BUTTON} onClick={() => importInput.current?.click()}>
-              <Upload size={12} />
+              <Upload size={14} aria-hidden />
               {t('rules.import')}
             </button>
             <input
@@ -212,15 +232,25 @@ export function RulesScreen() {
               type="file"
               accept="application/json"
               hidden
+              aria-hidden
+              tabIndex={-1}
               onChange={onImport}
             />
-            <button type="button" className={BUTTON_PRIMARY} onClick={() => setEditing(null)}>
-              <Plus size={12} />
+            <button
+              type="button"
+              className={BUTTON_PRIMARY}
+              onClick={() => {
+                setFormErrors({});
+                setFormError(null);
+                setEditing(null);
+              }}
+            >
+              <Plus size={14} aria-hidden />
               {t('rules.new')}
             </button>
           </>
         ) : (
-          <span className="text-muted text-[11px]">{t('rules.readOnly')}</span>
+          <Badge icon={Eye}>{t('rules.readOnly')}</Badge>
         )}
       </PageHeader>
 
@@ -233,6 +263,11 @@ export function RulesScreen() {
 
       <Panel
         title={t('rules.title')}
+        state={{
+          loading: !rules.data && !rules.error,
+          error: rules.data ? undefined : rules.error,
+          onRetry: () => void rules.mutate(),
+        }}
         data={{
           headers: [
             t('col.ruleSet'),
@@ -245,123 +280,175 @@ export function RulesScreen() {
           rows: (rules.data ?? []).map((rule) => [
             rule.ruleSetId,
             rule.id,
-            rule.scope,
-            rule.bands.map(formatLimit).join(' / '),
+            scopeLabel(rule.scope, locale),
+            rule.bands.map((band) => formatLimit(band, locale)).join(' / '),
             rule.bands.map((band) => describeBand(band, locale)).join(' / '),
-            rule.enabled ? 'on' : 'off',
+            t(rule.enabled ? 'rules.status.on' : 'rules.status.off'),
           ]),
         }}
         csvName="rules.csv"
       >
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th className={TH}>{t('col.rule')}</th>
-              <th className={TH}>{t('col.scope')}</th>
-              <th className={TH}>{t('col.limit')}</th>
-              <th className={TH}>{t('col.meaning')}</th>
-              <th className={TH}>{t('col.enabled')}</th>
-              <th className={TH} />
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map(([ruleSetId, members]) => (
-              <React.Fragment key={ruleSetId ?? '__none__'}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr>
+                <th scope="col" className={TH}>
+                  {t('col.rule')}
+                </th>
+                <th scope="col" className={TH}>
+                  {t('col.scope')}
+                </th>
+                <th scope="col" className={TH}>
+                  {t('col.limit')}
+                </th>
+                <th scope="col" className={TH}>
+                  {t('col.meaning')}
+                </th>
+                <th scope="col" className={TH}>
+                  {t('col.enabled')}
+                </th>
+                <th scope="col" className={`${TH} text-right`}>
+                  {t('rules.actions')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map(([ruleSetId, members]) => (
+                <React.Fragment key={ruleSetId ?? '__none__'}>
+                  <tr>
+                    <th
+                      scope="colgroup"
+                      colSpan={6}
+                      className="border-line bg-panel2 border-b px-3 py-1.5 text-left text-[13px] font-semibold"
+                    >
+                      <span className="mono">{ruleSetId ?? t('rules.unassigned')}</span>
+                      {ruleSetId && (
+                        <span
+                          className={`num ml-3 text-xs font-normal ${rejectedBySet.get(ruleSetId) ? 'text-bad' : 'text-muted'}`}
+                        >
+                          {t('rules.rejected24h', {
+                            count: formatCount(rejectedBySet.get(ruleSetId) ?? 0),
+                          })}
+                        </span>
+                      )}
+                    </th>
+                  </tr>
+                  {members.map((rule) => (
+                    <tr key={ruleIdentity(rule)} className="hover:bg-panel2/60">
+                      <td className={TD}>
+                        <div className="mono text-fg" translate="no">
+                          {rule.id}
+                        </div>
+                        {rule.name !== rule.id && (
+                          <div className="text-muted text-xs">{rule.name}</div>
+                        )}
+                      </td>
+                      <td className={TD}>
+                        <Badge>{scopeLabel(rule.scope, locale)}</Badge>
+                      </td>
+                      <td className={`${TD} num whitespace-nowrap`}>
+                        {rule.bands.map((band) => (
+                          <div key={band.windowSeconds}>{formatLimit(band, locale)}</div>
+                        ))}
+                      </td>
+                      <td className={`${TD} text-fg2`}>
+                        {rule.bands.map((band) => (
+                          <div key={band.windowSeconds}>{describeBand(band, locale)}</div>
+                        ))}
+                      </td>
+                      <td className={TD}>
+                        {isAdmin ? (
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={rule.enabled}
+                            aria-label={t('rules.toggleLabel', { id: rule.id })}
+                            onClick={() =>
+                              setPending({
+                                kind: 'toggle',
+                                rule,
+                                changes: diffRules(
+                                  rule,
+                                  { ...rule, enabled: !rule.enabled },
+                                  locale
+                                ),
+                              })
+                            }
+                            className="text-fg2 hover:text-fg flex h-8 items-center gap-2 rounded px-1 text-xs transition-colors"
+                          >
+                            <span
+                              aria-hidden
+                              className={`relative inline-block h-5 w-9 rounded-full transition-colors ${rule.enabled ? 'bg-s1' : 'bg-line-strong'}`}
+                            >
+                              <span
+                                className={`absolute top-0.5 left-0 h-4 w-4 rounded-full bg-white shadow transition-transform ${rule.enabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`}
+                              />
+                            </span>
+                            {t(rule.enabled ? 'rules.status.on' : 'rules.status.off')}
+                          </button>
+                        ) : (
+                          <Badge tone={rule.enabled ? 'ok' : 'neutral'}>
+                            {t(rule.enabled ? 'rules.status.on' : 'rules.status.off')}
+                          </Badge>
+                        )}
+                      </td>
+                      <td className={TD}>
+                        <div className="flex justify-end gap-1">
+                          <IconButton
+                            label={t('rules.simulate')}
+                            icon={Play}
+                            onClick={() => setSimulating(rule)}
+                            quiet
+                          />
+                          {isAdmin && (
+                            <>
+                              <IconButton
+                                label={t('rules.edit')}
+                                icon={Pencil}
+                                onClick={() => {
+                                  setFormErrors({});
+                                  setFormError(null);
+                                  setEditing(rule);
+                                }}
+                                quiet
+                              />
+                              <IconButton
+                                label={t('rules.delete')}
+                                icon={Trash2}
+                                onClick={() => setPending({ kind: 'delete', rule, changes: [] })}
+                                quiet
+                                align="end"
+                                className="hover:text-bad"
+                              />
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              ))}
+              {rules.data && groups.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={6}
-                    className="border-line bg-panel2 border-b px-2 py-1 text-xs font-semibold"
-                  >
-                    <span className="num">{ruleSetId ?? t('rules.unassigned')}</span>
-                    {ruleSetId && (
-                      <span
-                        className={`ml-3 font-normal ${rejectedBySet.get(ruleSetId) ? 'text-bad' : 'text-muted'}`}
-                      >
-                        {t('rules.rejected24h', {
-                          count: formatCount(rejectedBySet.get(ruleSetId) ?? 0),
-                        })}
-                      </span>
-                    )}
+                  <td colSpan={6} className={`${TD} text-muted py-8 text-center`}>
+                    {t('rules.empty')}
                   </td>
                 </tr>
-                {members.map((rule) => (
-                  <tr key={ruleIdentity(rule)} className={rule.enabled ? '' : 'opacity-60'}>
-                    <td className={`${TD} num`}>
-                      {rule.id}
-                      <div className="text-muted font-sans text-[11px]">{rule.name}</div>
-                    </td>
-                    <td className={TD}>
-                      <span className="border-line-strong text-fg2 rounded border px-1 text-[10px]">
-                        {rule.scope}
-                      </span>
-                    </td>
-                    <td className={`${TD} num`}>{rule.bands.map(formatLimit).join(' / ')}</td>
-                    <td className={`${TD} text-fg2`}>
-                      {rule.bands.map((band) => (
-                        <div key={band.windowSeconds}>{describeBand(band, locale)}</div>
-                      ))}
-                    </td>
-                    <td className={TD}>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={rule.enabled}
-                        disabled={!isAdmin}
-                        onClick={() => onToggle(rule)}
-                        className={`relative inline-block h-3.5 w-6 rounded-full ${rule.enabled ? 'bg-ok' : 'bg-line-strong'} disabled:cursor-default`}
-                      >
-                        <span
-                          className={`bg-panel absolute top-0.5 h-2.5 w-2.5 rounded-full ${rule.enabled ? 'right-0.5' : 'left-0.5'}`}
-                        />
-                      </button>
-                    </td>
-                    <td className={`${TD} text-right whitespace-nowrap`}>
-                      <button type="button" className={BUTTON} onClick={() => setSimulating(rule)}>
-                        <Play size={11} />
-                        {t('rules.simulate')}
-                      </button>
-                      {isAdmin && (
-                        <>
-                          <button
-                            type="button"
-                            className={`${BUTTON} ml-1`}
-                            onClick={() => setEditing(rule)}
-                          >
-                            {t('rules.edit')}
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={t('rules.delete')}
-                            className={`${BUTTON} text-bad ml-1`}
-                            onClick={() => onDelete(rule)}
-                          >
-                            <Trash2 size={11} />
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </React.Fragment>
-            ))}
-            {rules.data && groups.length === 0 && (
-              <tr>
-                <td colSpan={6} className={`${TD} text-muted text-center`}>
-                  {t('rules.empty')}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Panel>
 
       {editing !== undefined && (
         <RuleFormPanel
           rule={editing}
           serverErrors={formErrors}
+          formError={formError}
           onClose={() => {
             setEditing(undefined);
             setFormErrors({});
+            setFormError(null);
           }}
           onSave={onSave}
         />
@@ -369,13 +456,11 @@ export function RulesScreen() {
       {simulating && <SimulationPanel rule={simulating} onClose={() => setSimulating(null)} />}
       {pending && (
         <ConfirmChangeDialog
-          title={
-            pending.kind === 'save' && !pending.rule
-              ? t('rules.confirmNew', { id: pending.data.id })
-              : `${(pending.kind === 'toggle' ? pending.rule : pending.rule!).ruleSetId ?? ''} / ${pending.kind === 'toggle' ? pending.rule.id : pending.data.id}`
-          }
+          title={pendingTitle(pending)}
           changes={pending.changes}
           busy={busy}
+          confirmLabel={pending.kind === 'delete' ? t('rules.deleteConfirmLabel') : undefined}
+          warning={pending.kind === 'delete' ? t('rules.deleteWarning') : undefined}
           onCancel={() => setPending(null)}
           onConfirm={confirmPending}
         />

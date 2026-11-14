@@ -31,6 +31,7 @@ const ALLOWED_PREFIXES = [
   'api/keys',
   'api/audit',
   'api/me',
+  'api/branding',
 ];
 
 /**

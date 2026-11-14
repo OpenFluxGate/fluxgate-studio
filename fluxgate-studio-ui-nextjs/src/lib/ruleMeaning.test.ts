@@ -33,6 +33,7 @@ describe('rule meaning', () => {
   });
 
   it('formats the compact limit', () => {
-    expect(formatLimit({ windowSeconds: 600, capacity: 5 })).toBe('600s·5');
+    expect(formatLimit({ windowSeconds: 600, capacity: 5 }, 'ko')).toBe('10분 5회');
+    expect(formatLimit({ windowSeconds: 60, capacity: 30 })).toBe('30 per 1 min');
   });
 });

@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 
 import uPlot from 'uplot';
 
-import { formatCount } from '@/lib/format';
+import { formatCount, formatHourMinute, formatMonthDay } from '@/lib/format';
 import { legendStats } from '@/lib/stats';
 import { useTheme } from '@/modules/admin';
 
@@ -15,7 +15,12 @@ import 'uplot/dist/uPlot.min.css';
 export interface SeriesSpec {
   label: string;
   color: string;
-  values: number[];
+  values: (number | null)[];
+}
+
+export interface Annotation {
+  time: number;
+  text: string;
 }
 
 interface Hover {
@@ -37,13 +42,32 @@ function toData(times: number[], series: SeriesSpec[]): uPlot.AlignedData {
   return [times.map((time) => time / 1000), ...series.map((spec) => spec.values)];
 }
 
+/** Hour and minute ticks, with the date on the first tick and wherever the day changes. */
+/** Whole number tick steps, because every series counts requests. */
+const COUNT_INCREMENTS = [
+  1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1_000, 2_000, 2_500, 5_000, 10_000, 20_000, 25_000,
+  50_000, 100_000, 250_000, 500_000, 1_000_000, 2_500_000, 5_000_000, 10_000_000,
+];
+
+export function timeTicks(splits: number[]): string[] {
+  return splits.map((split, index) => {
+    const date = new Date(split * 1000);
+    const previous = index > 0 ? new Date(splits[index - 1] * 1000) : null;
+    const newDay = !previous || previous.getDate() !== date.getDate();
+    const time = formatHourMinute(split * 1000);
+    return newDay && index > 0 ? `${time}\n${formatMonthDay(split * 1000)}` : time;
+  });
+}
+
 export function TimeSeries({
   times,
   series,
   height = 220,
   syncKey,
   onZoom,
-  formatTime,
+  yLabel,
+  bucketMillis,
+  annotations = [],
   formatTooltipTime,
 }: {
   times: number[];
@@ -51,20 +75,22 @@ export function TimeSeries({
   height?: number;
   syncKey?: string;
   onZoom?: (from: number, to: number) => void;
-  formatTime: (timestamp: number) => string;
-  formatTooltipTime?: (timestamp: number) => string;
+  yLabel?: string;
+  bucketMillis?: number;
+  annotations?: Annotation[];
+  formatTooltipTime: (timestamp: number) => string;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const chart = useRef<uPlot | null>(null);
-  const latest = useRef({ times, series, onZoom, formatTime });
+  const latest = useRef({ times, series, onZoom, annotations });
   const [hover, setHover] = useState<Hover | null>(null);
-  const { mode } = useTheme();
+  const { resolved } = useTheme();
   const signature = series.map((spec) => `${spec.label}:${spec.color}`).join('|');
 
   useEffect(() => {
-    latest.current = { times, series, onZoom, formatTime };
+    latest.current = { times, series, onZoom, annotations };
     chart.current?.setData(toData(times, series));
-  }, [times, series, onZoom, formatTime]);
+  }, [times, series, onZoom, annotations]);
 
   useEffect(() => {
     const element = host.current;
@@ -74,8 +100,10 @@ export function TimeSeries({
       stroke: token('--c-muted'),
       grid: { stroke: token('--c-grid'), width: 1 },
       ticks: { show: false },
-      font: '11px system-ui, sans-serif',
+      font: '11px Inter, system-ui, sans-serif',
+      labelFont: '11px Inter, system-ui, sans-serif',
     };
+    const marker = token('--c-warning');
     const plot = new uPlot(
       {
         width: element.clientWidth,
@@ -86,15 +114,17 @@ export function TimeSeries({
           drag: { x: true, y: false, setScale: false },
           points: { size: 7 },
         },
-        scales: { x: { time: true } },
+        scales: { x: { time: true }, y: { range: (_u, _min, max) => [0, Math.max(1, max * 1.1)] } },
         axes: [
+          { ...axis, space: 64, values: (_plot, splits) => timeTicks(splits) },
           {
             ...axis,
-            space: 72,
-            values: (_plot, splits) =>
-              splits.map((split) => latest.current.formatTime(split * 1000)),
+            size: 52,
+            label: yLabel,
+            labelSize: yLabel ? 16 : 0,
+            incrs: COUNT_INCREMENTS,
+            values: (_plot, splits) => splits.map((split) => formatCount(split)),
           },
-          { ...axis, size: 48 },
         ],
         series: [
           {},
@@ -105,11 +135,36 @@ export function TimeSeries({
               stroke: color,
               width: 2,
               fill: translucent(color),
+              spanGaps: false,
               points: { show: false },
             };
           }),
         ],
         hooks: {
+          draw: [
+            (u) => {
+              const context = u.ctx;
+              context.save();
+              context.strokeStyle = marker;
+              context.fillStyle = marker;
+              context.lineWidth = 1.5;
+              context.setLineDash([4, 4]);
+              for (const note of latest.current.annotations) {
+                const x = u.valToPos(note.time / 1000, 'x', true);
+                if (x < u.bbox.left || x > u.bbox.left + u.bbox.width) continue;
+                context.beginPath();
+                context.moveTo(x, u.bbox.top);
+                context.lineTo(x, u.bbox.top + u.bbox.height);
+                context.stroke();
+                context.beginPath();
+                context.moveTo(x - 5, u.bbox.top);
+                context.lineTo(x + 5, u.bbox.top);
+                context.lineTo(x, u.bbox.top + 7);
+                context.fill();
+              }
+              context.restore();
+            },
+          ],
           setSelect: [
             (u) => {
               const zoom = latest.current.onZoom;
@@ -150,34 +205,52 @@ export function TimeSeries({
       plot.destroy();
       chart.current = null;
     };
-  }, [mode, height, syncKey, signature]);
+  }, [resolved, height, syncKey, signature, yLabel]);
 
-  const tooltipTime = formatTooltipTime ?? formatTime;
   const point = hover !== null && times[hover.idx] !== undefined ? hover : null;
+  const start = point ? times[point.idx] : 0;
+  const notes = point
+    ? annotations.filter(
+        (note) => note.time >= start && note.time < start + (bucketMillis ?? 60_000)
+      )
+    : [];
 
   return (
     <div className="relative" onMouseLeave={() => setHover(null)}>
       <div ref={host} />
       {point && (
         <div
-          className="border-line bg-panel2 pointer-events-none absolute z-10 min-w-32 rounded border px-2 py-1.5 text-[11px] shadow-lg"
+          role="status"
+          className="border-line-strong bg-panel2 pointer-events-none absolute z-10 max-w-72 min-w-36 rounded-md border px-2.5 py-2 text-xs shadow-xl"
           style={{
             left: point.left,
             top: Math.max(0, point.top - 12),
             transform: point.flip ? 'translateX(calc(-100% - 12px))' : 'translateX(12px)',
           }}
         >
-          <div className="num text-muted mb-1">{tooltipTime(times[point.idx])}</div>
-          {series.map((spec) => (
-            <div key={spec.label} className="flex items-center gap-2">
-              <span
-                className="inline-block h-0.5 w-3"
-                style={{ background: `var(${spec.color})` }}
-              />
-              <span className="text-fg2">{spec.label}</span>
-              <span className="num text-fg ml-auto">
-                {formatCount(spec.values[point.idx] ?? 0)}
-              </span>
+          <div className="num text-muted mb-1">{formatTooltipTime(start)}</div>
+          {series.map((spec) => {
+            const value = spec.values[point.idx];
+            return (
+              <div key={spec.label} className="flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className="inline-block h-0.5 w-3"
+                  style={{ background: `var(${spec.color})` }}
+                />
+                <span className="text-fg2">{spec.label}</span>
+                <span className="num text-fg ml-auto">
+                  {value === null || value === undefined ? '…' : formatCount(value)}
+                </span>
+              </div>
+            );
+          })}
+          {notes.map((note) => (
+            <div
+              key={`${note.time}-${note.text}`}
+              className="border-line text-warn mt-1.5 border-t pt-1.5"
+            >
+              {note.text}
             </div>
           ))}
         </div>
@@ -186,26 +259,36 @@ export function TimeSeries({
   );
 }
 
-export function Legend({ series }: { series: SeriesSpec[] }) {
+export function Legend({ series, unit }: { series: SeriesSpec[]; unit?: string }) {
   const { t } = useI18n();
-  const head = 'px-2 py-1 text-right font-normal text-muted';
+  const head = 'px-2 py-1 text-right text-xs font-medium text-muted';
   return (
-    <table className="mt-1 w-full text-xs">
+    <table className="mt-1 w-auto min-w-80 text-xs">
       <thead>
         <tr>
-          <th className="text-muted px-2 py-1 text-left font-normal">{t('legend.series')}</th>
-          <th className={head}>{t('legend.mean')}</th>
-          <th className={head}>{t('legend.max')}</th>
-          <th className={head}>{t('legend.last')}</th>
+          <th scope="col" className="text-muted px-2 py-1 text-left text-xs font-medium">
+            {t('legend.series')}
+            {unit ? ` (${unit})` : ''}
+          </th>
+          <th scope="col" className={head}>
+            {t('legend.mean')}
+          </th>
+          <th scope="col" className={head}>
+            {t('legend.max')}
+          </th>
+          <th scope="col" className={head}>
+            {t('legend.last')}
+          </th>
         </tr>
       </thead>
       <tbody>
         {series.map((spec) => {
-          const stats = legendStats(spec.values);
+          const stats = legendStats(spec.values.filter((value): value is number => value !== null));
           return (
             <tr key={spec.label}>
-              <td className="px-2 py-0.5">
+              <td className="text-fg2 px-2 py-0.5">
                 <span
+                  aria-hidden
                   className="mr-2 inline-block h-0.5 w-3 align-middle"
                   style={{ background: `var(${spec.color})` }}
                 />
@@ -225,13 +308,13 @@ export function Legend({ series }: { series: SeriesSpec[] }) {
 export function Sparkline({
   values,
   color = '--c-s2',
-  width = 72,
-  height = 16,
+  width = 80,
+  height = 18,
   area = false,
   stretch = false,
   className = '',
 }: {
-  values: number[];
+  values: (number | null)[];
   color?: string;
   width?: number;
   height?: number;
@@ -240,13 +323,19 @@ export function Sparkline({
   className?: string;
 }) {
   const w = stretch ? 100 : width;
-  const max = Math.max(1, ...values);
+  const known = values.filter((value): value is number => value !== null);
+  const max = Math.max(1, ...known);
   const step = values.length > 1 ? w / (values.length - 1) : w;
-  const coords = values.map(
-    (value, index) =>
-      `${(index * step).toFixed(2)},${(height - 1 - (value / max) * (height - 2)).toFixed(2)}`
-  );
-  const active = values.some((value) => value > 0);
+  const coords: string[] = [];
+  values.forEach((value, index) => {
+    if (value !== null) {
+      coords.push(
+        `${(index * step).toFixed(2)},${(height - 1 - (value / max) * (height - 2)).toFixed(2)}`
+      );
+    }
+  });
+  const lastX = coords.length ? coords[coords.length - 1].split(',')[0] : '0';
+  const active = known.some((value) => value > 0);
   const stroke = active ? `var(${color})` : 'var(--c-faint)';
   return (
     <svg
@@ -259,7 +348,7 @@ export function Sparkline({
     >
       {area && coords.length > 1 && (
         <polygon
-          points={`0,${height} ${coords.join(' ')} ${w},${height}`}
+          points={`0,${height} ${coords.join(' ')} ${lastX},${height}`}
           fill={stroke}
           opacity={0.15}
         />
@@ -275,27 +364,40 @@ export function Sparkline({
   );
 }
 
+/** Horizontal gauge on a fixed scale with optional threshold ticks. */
 export function BarGauge({
   value,
   max,
   color,
   label,
+  markers = [],
+  labelWidth = 'w-14',
 }: {
   value: number;
   max: number;
   color: string;
   label: string;
+  markers?: number[];
+  labelWidth?: string;
 }) {
   const ratio = max > 0 ? Math.min(1, value / max) : 0;
   return (
     <div className="flex min-w-28 items-center gap-2">
-      <div className="bg-panel2 h-2 flex-1 overflow-hidden rounded-sm">
+      <div className="bg-panel2 relative h-2 flex-1 rounded-sm">
         <div
           className="h-full rounded-sm"
           style={{ width: `${ratio * 100}%`, background: `var(${color})` }}
         />
+        {markers.map((marker) => (
+          <span
+            key={marker}
+            aria-hidden
+            className="bg-fg2 absolute -top-0.5 h-3 w-px"
+            style={{ left: `${Math.min(1, marker / max) * 100}%` }}
+          />
+        ))}
       </div>
-      <span className="num w-14 text-right">{label}</span>
+      <span className={`num shrink-0 text-right ${labelWidth}`}>{label}</span>
     </div>
   );
 }

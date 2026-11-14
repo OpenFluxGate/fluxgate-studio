@@ -1,29 +1,32 @@
 @import 'tailwindcss';
 
 :root {
-  --c-bg: #fafafa;
+  --c-bg: #f4f5f5;
   --c-panel: #ffffff;
-  --c-panel2: #f4f4f5;
-  --c-line: #e4e4e7;
-  --c-line-strong: #d4d4d8;
-  --c-fg: #18181b;
-  --c-fg2: #3f3f46;
-  --c-muted: #71717a;
-  --c-faint: #a1a1aa;
-  --c-bad: #dc2626;
-  --c-bad-soft: #fef2f2;
-  --c-ok: #16a34a;
-  --c-ok-soft: #f0fdf4;
-  --c-warn: #92400e;
-  --c-warn-soft: #fffbeb;
-  --c-warn-line: #fcd34d;
-  --c-bar: #a1a1aa;
-  --c-select: #eff6ff;
-  --c-s1: #2a78d6;
+  --c-panel2: #f4f5f5;
+  --c-line: #e4e6e8;
+  --c-line-strong: #cfd2d6;
+  --c-fg: #1f2124;
+  --c-fg2: #3d4045;
+  --c-muted: #5c6066;
+  --c-faint: #80858c;
+  --c-bad: #c42b2b;
+  --c-bad-soft: #fdecec;
+  --c-ok: #137a13;
+  --c-ok-soft: #e9f6e9;
+  --c-warn: #8a5300;
+  --c-warn-soft: #fff6e0;
+  --c-warn-line: #e3b04b;
+  --c-bar: #b9bcc1;
+  --c-select: #e8f0fc;
+  --c-s1: #1f6fd1;
+  --c-s1-strong: #185bb0;
+  --c-s1-text: #1a64bf;
   --c-s2: #d03b3b;
+  --c-s2-strong: #b02f2f;
   --c-good: #0ca30c;
-  --c-warning: #fab219;
-  --c-grid: #0000000f;
+  --c-warning: #b77900;
+  --c-grid: #0000001a;
   color-scheme: light;
 }
 
@@ -35,8 +38,8 @@
   --c-line-strong: #3b3f46;
   --c-fg: #d8d9da;
   --c-fg2: #c2c4c7;
-  --c-muted: #8e9196;
-  --c-faint: #6c7077;
+  --c-muted: #9a9da3;
+  --c-faint: #767a82;
   --c-bad: #f87171;
   --c-bad-soft: #3a1517;
   --c-ok: #4ade80;
@@ -47,7 +50,10 @@
   --c-bar: #4a4e56;
   --c-select: #1d2a40;
   --c-s1: #3987e5;
+  --c-s1-strong: #2a78d6;
+  --c-s1-text: #6ea8f0;
   --c-s2: #d03b3b;
+  --c-s2-strong: #b93434;
   --c-good: #0ca30c;
   --c-warning: #fab219;
   --c-grid: #ffffff14;
@@ -63,8 +69,8 @@
     --c-line-strong: #3b3f46;
     --c-fg: #d8d9da;
     --c-fg2: #c2c4c7;
-    --c-muted: #8e9196;
-    --c-faint: #6c7077;
+    --c-muted: #9a9da3;
+    --c-faint: #767a82;
     --c-bad: #f87171;
     --c-bad-soft: #3a1517;
     --c-ok: #4ade80;
@@ -75,7 +81,10 @@
     --c-bar: #4a4e56;
     --c-select: #1d2a40;
     --c-s1: #3987e5;
+    --c-s1-strong: #2a78d6;
+    --c-s1-text: #6ea8f0;
     --c-s2: #d03b3b;
+    --c-s2-strong: #b93434;
     --c-good: #0ca30c;
     --c-warning: #fab219;
     --c-grid: #ffffff14;
@@ -103,29 +112,61 @@
   --color-bar: var(--c-bar);
   --color-select: var(--c-select);
   --color-s1: var(--c-s1);
+  --color-s1-strong: var(--c-s1-strong);
+  --color-s1-text: var(--c-s1-text);
   --color-s2: var(--c-s2);
+  --color-s2-strong: var(--c-s2-strong);
   --color-good: var(--c-good);
   --color-warning: var(--c-warning);
   --color-grid: var(--c-grid);
+  --font-sans:
+    var(--font-inter), 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (pointer: fine) {
+  html {
+    overscroll-behavior: none;
+  }
 }
 
 body {
   background: var(--c-bg);
   color: var(--c-fg);
-  font-family:
-    system-ui,
-    -apple-system,
-    'Apple SD Gothic Neo',
-    'Segoe UI',
-    Roboto,
-    sans-serif;
+  font-family: var(--font-sans);
   font-size: 13px;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+button,
+a,
+select,
+input {
+  touch-action: manipulation;
+}
+
+select {
+  background-color: var(--c-panel2);
+  color: var(--c-fg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--c-s1);
+  outline-offset: 2px;
+}
+
 .num {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -141,4 +182,14 @@ body {
 
 .u-select {
   background: color-mix(in srgb, var(--c-s1) 18%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

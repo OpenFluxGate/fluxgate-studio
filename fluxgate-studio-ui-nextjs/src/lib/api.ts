@@ -5,6 +5,8 @@
  * `src/app/api/proxy/[...path]/route.ts`), which attaches the Keycloak access token on the server.
  * The token is therefore never exposed to client-side JavaScript.
  */
+import { type Branding } from './branding';
+
 const API_BASE_PATH = '/api/proxy';
 
 // API Response Types (matching Spring Boot DTOs)
@@ -218,6 +220,8 @@ export interface AuditSearch {
   action?: string;
   actor?: string;
   q?: string;
+  from?: number;
+  to?: number;
   page: number;
   size: number;
 }
@@ -282,6 +286,8 @@ export async function fetchAudit(search: AuditSearch): Promise<ApiPage<ApiAuditE
   if (search.action) params.set('action', search.action);
   if (search.actor) params.set('actor', search.actor);
   if (search.q) params.set('q', search.q);
+  if (search.from !== undefined) params.set('from', String(search.from));
+  if (search.to !== undefined) params.set('to', String(search.to));
   return handleResponse<ApiPage<ApiAuditEntry>>(
     await fetch(`${API_BASE_PATH}/api/audit?${params.toString()}`)
   );
@@ -290,6 +296,25 @@ export async function fetchAudit(search: AuditSearch): Promise<ApiPage<ApiAuditE
 export async function fetchAuditEntry(id: string): Promise<ApiAuditEntry> {
   return handleResponse<ApiAuditEntry>(
     await fetch(`${API_BASE_PATH}/api/audit/${encodeURIComponent(id)}`)
+  );
+}
+
+/** Public branding, read through a route that works before sign in. */
+export async function fetchBranding(): Promise<Branding> {
+  return handleResponse<Branding>(await fetch('/brand', { cache: 'no-store' }));
+}
+
+/** Replaces the logo and favicon. A null image restores the default. Admin only. */
+export async function saveBranding(update: {
+  logo: string | null;
+  favicon: string | null;
+}): Promise<Branding> {
+  return handleResponse<Branding>(
+    await fetch(`${API_BASE_PATH}/api/branding`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(update),
+    })
   );
 }
 

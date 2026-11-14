@@ -22,7 +22,7 @@ describe('diffRules', () => {
   it('lists only the fields that change', () => {
     expect(
       diffRules(rule, { ...rule, bands: [{ windowSeconds: 60, capacity: 20, label: '' }] })
-    ).toEqual([{ field: 'bands', before: '60s·30', after: '60s·20' }]);
+    ).toEqual([{ field: 'bands', before: '30 per 1 min', after: '20 per 1 min' }]);
   });
 
   it('treats a new rule as a change from nothing', () => {
@@ -36,5 +36,14 @@ describe('diffRules', () => {
 
   it('returns nothing when the edit is a no op', () => {
     expect(diffRules(rule, { ...rule })).toEqual([]);
+  });
+});
+
+describe('readable values', () => {
+  it('shows enums and booleans in the chosen language', () => {
+    expect(diffRules(rule, { ...rule, enabled: false, scope: 'PER_IP' }, 'ko')).toEqual([
+      { field: 'enabled', before: '켜짐', after: '꺼짐' },
+      { field: 'scope', before: '사용자별', after: 'IP별' },
+    ]);
   });
 });

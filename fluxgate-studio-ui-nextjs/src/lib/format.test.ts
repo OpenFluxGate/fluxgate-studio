@@ -32,6 +32,10 @@ describe('time formatting for panels', () => {
   it('names bucket sizes', () => {
     expect(formatBucket(10_000)).toBe('10s');
     expect(formatBucket(300_000)).toBe('5m');
+    expect(formatBucket(3_600_000)).toBe('1h');
+    expect(formatBucket(30_000, 'ko')).toBe('30초');
+    expect(formatBucket(900_000, 'ko')).toBe('15분');
+    expect(formatBucket(7_200_000, 'ko')).toBe('2시간');
   });
 
   it('formats a full local timestamp', () => {

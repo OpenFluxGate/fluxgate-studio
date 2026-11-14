@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 
 import { ChevronDown, Clock, Monitor, RefreshCw, ZoomOut } from 'lucide-react';
 
@@ -13,9 +13,9 @@ import {
   zoomOut,
 } from '@/lib/timeRange';
 
+import { BUTTON, IconButton, INPUT, MenuItem, MenuList, usePopover } from './controls';
 import { useI18n } from './I18nProvider';
 import { useKiosk } from './kiosk';
-import { BUTTON, INPUT } from './ui';
 
 export function TimeRangePicker({
   state,
@@ -28,71 +28,64 @@ export function TimeRangePicker({
 }) {
   const { t, locale } = useI18n();
   const { setKiosk } = useKiosk();
-  const [open, setOpen] = useState(false);
+  const {
+    open: menuOpen,
+    setOpen: setMenuOpen,
+    close: closeMenu,
+    rootRef,
+    triggerRef,
+  } = usePopover();
   const absolute = state.range.kind === 'absolute';
 
   return (
-    <div className="flex items-center gap-1">
-      <button
-        type="button"
-        className={BUTTON}
-        title={t('range.zoomOut')}
-        aria-label={t('range.zoomOut')}
+    <div className="flex items-center gap-1.5">
+      <IconButton
+        label={t('range.zoomOut')}
+        icon={ZoomOut}
         onClick={() => onChange({ range: zoomOut(state.range, Date.now()) })}
-      >
-        <ZoomOut size={13} />
-      </button>
-      <div className="relative">
+      />
+      <div ref={rootRef} className="relative">
         <button
+          ref={triggerRef}
           type="button"
           className={BUTTON}
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen(!menuOpen)}
         >
-          <Clock size={13} />
-          {rangeLabel(state.range, locale)}
-          <ChevronDown size={12} />
+          <Clock size={14} aria-hidden />
+          <span className="num">{rangeLabel(state.range, locale)}</span>
+          <ChevronDown size={13} aria-hidden />
         </button>
-        {open && (
-          <div
-            className="border-line bg-panel2 absolute right-0 z-40 mt-1 w-44 rounded border py-1 text-xs shadow-lg"
-            onMouseLeave={() => setOpen(false)}
-          >
-            {PRESETS.map((preset) => {
-              const active = state.range.kind === 'relative' && state.range.preset === preset;
-              return (
-                <button
-                  key={preset}
-                  type="button"
-                  className={`hover:bg-line block w-full px-3 py-1.5 text-left ${active ? 'text-s1 font-medium' : ''}`}
-                  onClick={() => {
-                    setOpen(false);
-                    onChange({ range: { kind: 'relative', preset } });
-                  }}
-                >
-                  {rangeLabel({ kind: 'relative', preset }, locale)}
-                </button>
-              );
-            })}
-          </div>
+        {menuOpen && (
+          <MenuList label={t('audit.period')}>
+            {PRESETS.map((preset) => (
+              <MenuItem
+                key={preset}
+                checked={state.range.kind === 'relative' && state.range.preset === preset}
+                onSelect={() => {
+                  closeMenu(true);
+                  onChange({ range: { kind: 'relative', preset } });
+                }}
+              >
+                {rangeLabel({ kind: 'relative', preset }, locale)}
+              </MenuItem>
+            ))}
+          </MenuList>
         )}
       </div>
-      <button
-        type="button"
-        className={BUTTON}
-        title={t('refresh.now')}
-        aria-label={t('refresh.now')}
-        onClick={onRefresh}
-      >
-        <RefreshCw size={13} />
-      </button>
+      <IconButton label={t('refresh.now')} icon={RefreshCw} onClick={onRefresh} />
+      <label className="sr-only" htmlFor="refresh-interval">
+        {t('refresh.interval')}
+      </label>
       <select
-        aria-label={t('refresh.interval')}
+        id="refresh-interval"
+        name="refresh"
         title={t('refresh.interval')}
         value={absolute ? 'off' : state.refresh}
         disabled={absolute}
         onChange={(event) => onChange({ refresh: event.target.value as RefreshInterval })}
-        className={INPUT}
+        className={`${INPUT} w-[4.5rem] pr-1`}
       >
         {REFRESH_OPTIONS.map((option) => (
           <option key={option} value={option}>
@@ -100,15 +93,7 @@ export function TimeRangePicker({
           </option>
         ))}
       </select>
-      <button
-        type="button"
-        className={BUTTON}
-        title={t('tv.enter')}
-        aria-label={t('tv.enter')}
-        onClick={() => setKiosk(true)}
-      >
-        <Monitor size={13} />
-      </button>
+      <IconButton label={t('tv.enter')} icon={Monitor} onClick={() => setKiosk(true)} align="end" />
     </div>
   );
 }

@@ -3,29 +3,38 @@
 import React, { useCallback, useMemo } from 'react';
 import Link from 'next/link';
 
-import { ExternalLink } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, ExternalLink } from 'lucide-react';
 import { useSWRConfig } from 'swr';
 
 import {
+  type ApiBucket,
   ApiError,
+  fetchAudit,
   fetchDashboardStats,
   fetchOverview,
   fetchTimeseries,
   fetchTopRejected,
 } from '@/lib/api';
+import { formatAgo, formatBucket, formatCount, formatPercent, formatTimestamp } from '@/lib/format';
+import { type MessageKey } from '@/lib/i18n';
 import {
-  formatAgo,
-  formatBucket,
-  formatClock,
-  formatCount,
-  formatHourMinute,
-  formatPercent,
-  formatTimestamp,
-} from '@/lib/format';
-import { BAD_RATE, bucketRates, rateSeverity, summarize } from '@/lib/stats';
-import { apiRangeParams, DEFAULT_RANGE, rangeKey, refreshMillis, zoomTo } from '@/lib/timeRange';
+  BAD_RATE,
+  bucketRates,
+  legendStats,
+  rateSeverity,
+  summarize,
+  WARN_RATE,
+} from '@/lib/stats';
+import {
+  apiRangeParams,
+  DEFAULT_RANGE,
+  rangeKey,
+  rangeLabel,
+  refreshMillis,
+  zoomTo,
+} from '@/lib/timeRange';
 
-import { BarGauge, Legend, type SeriesSpec, Sparkline, TimeSeries } from '../charts';
+import { type Annotation, BarGauge, type SeriesSpec, Sparkline, TimeSeries } from '../charts';
 import { useI18n } from '../I18nProvider';
 import { useKiosk } from '../kiosk';
 import { useMe } from '../MeProvider';
@@ -44,6 +53,64 @@ import {
 } from '../ui';
 import { useDashboardState } from '../useDashboardState';
 import { useLive, useNow } from '../useLive';
+
+const RATE_SCALE = 0.2;
+
+/** Points of the bucket still being counted are left out so the line does not fall to zero. */
+function settled(buckets: ApiBucket[], bucketMillis: number, to: number) {
+  return buckets.map((bucket) => bucket.start + bucketMillis <= to);
+}
+
+function Delta({
+  current,
+  previous,
+  points,
+  badWhenUp,
+}: {
+  current: number;
+  previous: number | null;
+  points?: boolean;
+  badWhenUp?: boolean;
+}) {
+  const { t } = useI18n();
+  if (previous === null) return <span>{t('overview.noPrevious')}</span>;
+  const change = points
+    ? (current - previous) * 100
+    : previous
+      ? (current - previous) / previous
+      : 0;
+  const up = change > 0;
+  const flat = Math.abs(change) < (points ? 0.05 : 0.005);
+  const text = flat
+    ? '0'
+    : points
+      ? `${up ? '+' : ''}${change.toFixed(1)}%p`
+      : `${up ? '+' : ''}${(change * 100).toFixed(0)}%`;
+  const Icon = up ? ArrowUpRight : ArrowDownRight;
+  const tone = flat ? '' : badWhenUp ? (up ? 'text-bad' : 'text-ok') : 'text-fg2';
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      {!flat && <Icon size={12} aria-hidden className={tone} />}
+      <span className={`num ${tone}`}>{text}</span>
+      <span className="ml-1">{t('overview.vsPrevious', { delta: '' }).trim()}</span>
+    </span>
+  );
+}
+
+function SeriesStats({ values, unit }: { values: (number | null)[]; unit: string }) {
+  const { t } = useI18n();
+  const stats = legendStats(values.filter((value): value is number => value !== null));
+  return (
+    <p className="num text-muted px-3 pb-2 text-xs">
+      {t('legend.mean')} <span className="text-fg2">{stats.mean.toFixed(1)}</span>
+      <span aria-hidden> · </span>
+      {t('legend.max')} <span className="text-fg2">{formatCount(stats.max)}</span>
+      <span aria-hidden> · </span>
+      {t('legend.last')} <span className="text-fg2">{formatCount(stats.last)}</span>
+      <span className="ml-1">({unit})</span>
+    </p>
+  );
+}
 
 export function OverviewScreen() {
   const { t, locale } = useI18n();
@@ -71,34 +138,76 @@ export function OverviewScreen() {
   );
   const stats = useLive('stats', fetchDashboardStats, refresh);
 
+  const span = series.data ? series.data.to - series.data.from : 0;
+  const previousKey = series.data
+    ? `previous:${series.data.from - span}:${series.data.from}:${ruleSet ?? ''}`
+    : null;
+  const previous = useLive(
+    previousKey,
+    () =>
+      fetchTimeseries(
+        { from: String(series.data!.from - span), to: String(series.data!.from) },
+        ruleSet
+      ),
+    0
+  );
+  const notesKey = isAdmin && series.data ? `notes:${key}:${series.data.from}` : null;
+  const notesSource = useLive(
+    notesKey,
+    () => fetchAudit({ from: series.data!.from, to: series.data!.to, page: 0, size: 100 }),
+    refresh
+  );
+
   const buckets = useMemo(() => series.data?.buckets ?? [], [series.data]);
-  const summary = summarize(buckets);
+  const bucketMillis = series.data?.bucketMillis ?? 60_000;
+  const complete = useMemo(
+    () => (series.data ? settled(buckets, bucketMillis, series.data.to) : []),
+    [buckets, bucketMillis, series.data]
+  );
   const times = useMemo(() => buckets.map((bucket) => bucket.start), [buckets]);
-  const lines: SeriesSpec[] = useMemo(
+  const allowed: SeriesSpec[] = useMemo(
     () => [
       {
         label: t('decision.allowed'),
         color: '--c-s1',
-        values: buckets.map((bucket) => bucket.allowed),
+        values: buckets.map((bucket, index) => (complete[index] ? bucket.allowed : null)),
       },
+    ],
+    [buckets, complete, t]
+  );
+  const rejected: SeriesSpec[] = useMemo(
+    () => [
       {
         label: t('decision.rejected'),
         color: '--c-s2',
-        values: buckets.map((bucket) => bucket.rejected),
+        values: buckets.map((bucket, index) => (complete[index] ? bucket.rejected : null)),
       },
     ],
-    [buckets, t]
+    [buckets, complete, t]
+  );
+  const annotations: Annotation[] = useMemo(
+    () =>
+      (notesSource.data?.content ?? [])
+        .filter((entry) => entry.action !== 'KEY_LOOKUP')
+        .map((entry) => ({
+          time: Date.parse(entry.at),
+          text: `${t(`action.${entry.action}` as MessageKey)} · ${[entry.target?.ruleSetId, entry.target?.ruleId].filter(Boolean).join(' / ')} · ${entry.actor.name || entry.actor.username}`,
+        })),
+    [notesSource.data, t]
   );
   const onZoom = useCallback(
     (from: number, to: number) => update({ range: zoomTo(from, to, Date.now()) }),
     [update]
   );
 
+  const summary = summarize(buckets);
+  const previousSummary = previous.data ? summarize(previous.data.buckets) : null;
+  const settledBuckets = buckets.filter((_, index) => complete[index]);
+  const unit = t('overview.perBucket', { bucket: formatBucket(bucketMillis, locale) });
   const allSets = overview.data?.ruleSets ?? [];
   const sets = allSets.filter((set) => !state.ruleSet || set.ruleSetId === state.ruleSet);
   const topRows = top.data ?? [];
   const maxRejected = Math.max(1, ...topRows.map((row) => row.rejected));
-  const maxRate = Math.max(BAD_RATE * 2, ...sets.map((set) => set.rejectRate));
   const invalidRange =
     state.range.kind === 'absolute' &&
     series.error instanceof ApiError &&
@@ -106,6 +215,16 @@ export function OverviewScreen() {
   const external = process.env.NEXT_PUBLIC_EXTERNAL_DASHBOARD_URL;
   const ago = (timestamp: number | null) =>
     timestamp && now ? formatAgo(timestamp, now, locale) : t('overview.never');
+
+  const seriesState = {
+    loading: !series.data && !series.error,
+    error: !series.data && !invalidRange ? series.error : undefined,
+    empty: !!series.data && summary.total === 0,
+    onRetry: () => void series.mutate(),
+  };
+  const chartHelp = isAdmin
+    ? `${t('overview.trendHelp')} ${t('overview.annotationHelp')}`
+    : t('overview.trendHelp');
 
   return (
     <div>
@@ -115,26 +234,38 @@ export function OverviewScreen() {
             href={external}
             target="_blank"
             rel="noreferrer"
-            className="text-fg2 hover:text-fg inline-flex items-center gap-1 text-xs"
+            className="text-s1-text inline-flex h-8 items-center gap-1 rounded px-2 text-xs hover:underline"
           >
             {t('overview.external')}
-            <ExternalLink size={12} />
+            <ExternalLink size={12} aria-hidden />
           </a>
         )}
         <LiveStatus updatedAt={series.updatedAt} error={series.error} />
         <TimeRangePicker state={state} onChange={update} onRefresh={() => mutate(() => true)} />
       </PageHeader>
 
-      {!kiosk && (
-        <div className="mb-3 flex items-center gap-2">
-          <label className="border-line-strong flex items-center overflow-hidden rounded border text-xs">
-            <span className="border-line-strong bg-panel2 text-muted border-r px-2 py-1">
+      {kiosk ? (
+        <div className="mb-4 flex items-center gap-3">
+          <h1 className="text-lg font-semibold">{t('overview.title')}</h1>
+          <span className="num text-fg2 text-[13px]">{rangeLabel(state.range, locale)}</span>
+          {state.ruleSet && <span className="mono text-fg2 text-[13px]">{state.ruleSet}</span>}
+          <LiveStatus updatedAt={series.updatedAt} error={series.error} />
+        </div>
+      ) : (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <label
+            htmlFor="variable-rule-set"
+            className="border-line-strong focus-within:border-s1 focus-within:ring-s1/40 flex h-8 items-center overflow-hidden rounded border focus-within:ring-2"
+          >
+            <span className="border-line-strong bg-panel2 text-fg2 flex h-full items-center border-r px-2.5 text-xs font-medium">
               {t('var.ruleSet')}
             </span>
             <select
+              id="variable-rule-set"
+              name="ruleSet"
               value={state.ruleSet ?? ''}
               onChange={(event) => update({ ruleSet: event.target.value || null })}
-              className="bg-panel text-fg px-2 py-1 focus:outline-none"
+              className="mono bg-panel text-fg h-full min-w-40 px-2 text-[13px] focus-visible:outline-none"
             >
               <option value="">{t('var.all')}</option>
               {allSets.map((set) => (
@@ -152,15 +283,12 @@ export function OverviewScreen() {
           {t('overview.rangeInvalid')}{' '}
           <button
             type="button"
-            className="underline"
+            className="underline underline-offset-2"
             onClick={() => update({ range: DEFAULT_RANGE })}
           >
             {t('overview.rangeReset')}
           </button>
         </Notice>
-      )}
-      {series.error && !series.data && !invalidRange && (
-        <Notice tone="bad">{(series.error as Error).message}</Notice>
       )}
       {overview.data &&
         overview.data.total === 0 &&
@@ -169,67 +297,138 @@ export function OverviewScreen() {
         )}
 
       <Row id="summary" title={t('row.summary')}>
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <StatPanel
             title={t('overview.decisions')}
             value={series.data ? formatCount(summary.total) : '–'}
-            spark={buckets.map((bucket) => bucket.allowed + bucket.rejected)}
+            spark={settledBuckets.map((bucket) => bucket.allowed + bucket.rejected)}
             color="--c-s1"
+            state={{ ...seriesState, empty: false }}
+            delta={
+              series.data && (
+                <Delta current={summary.total} previous={previousSummary?.total ?? null} />
+              )
+            }
           />
           <StatPanel
             title={t('overview.rejected')}
             value={series.data ? formatCount(summary.rejected) : '–'}
-            spark={buckets.map((bucket) => bucket.rejected)}
+            spark={settledBuckets.map((bucket) => bucket.rejected)}
             color="--c-s2"
+            state={{ ...seriesState, empty: false }}
+            delta={
+              series.data && (
+                <Delta
+                  current={summary.rejected}
+                  previous={previousSummary?.rejected ?? null}
+                  badWhenUp
+                />
+              )
+            }
           />
           <StatPanel
             title={t('overview.rejectRate')}
+            description={t('overview.thresholds')}
             value={series.data ? (summary.rate * 100).toFixed(1) : '–'}
             unit="%"
             severity={series.data ? rateSeverity(summary.rate) : undefined}
-            spark={bucketRates(buckets)}
+            spark={bucketRates(settledBuckets)}
             color="--c-warning"
+            state={{ ...seriesState, empty: false }}
+            delta={
+              series.data && (
+                <Delta
+                  current={summary.rate}
+                  previous={previousSummary ? previousSummary.rate : null}
+                  points
+                  badWhenUp
+                />
+              )
+            }
           />
           <StatPanel
             title={t('overview.activeRules')}
             value={stats.data ? String(stats.data.activeRules) : '–'}
             unit={stats.data ? `/ ${stats.data.totalRules}` : undefined}
+            state={{
+              loading: !stats.data && !stats.error,
+              error: stats.data ? undefined : stats.error,
+              onRetry: () => void stats.mutate(),
+            }}
           />
         </div>
       </Row>
 
       <Row id="trend" title={t('row.trend')}>
-        <div className="grid items-start gap-2 lg:grid-cols-3">
-          <Panel
-            title={`${t('overview.trend')}${series.data ? ` · ${formatBucket(series.data.bucketMillis)}` : ''}`}
-            className="lg:col-span-2"
-            data={{
-              headers: [t('col.time'), t('decision.allowed'), t('decision.rejected')],
-              rows: buckets.map((bucket) => [
-                formatTimestamp(bucket.start),
-                bucket.allowed,
-                bucket.rejected,
-              ]),
-            }}
-            csvName="decisions.csv"
-          >
-            {(large) => (
-              <div className="px-2 pb-2">
-                <TimeSeries
-                  times={times}
-                  series={lines}
-                  height={large ? 520 : 240}
-                  syncKey="overview"
-                  onZoom={onZoom}
-                  formatTime={formatHourMinute}
-                  formatTooltipTime={formatClock}
-                />
-                <Legend series={lines} />
-              </div>
-            )}
-          </Panel>
+        <div className="grid items-start gap-3 xl:grid-cols-3">
+          <div className="flex min-w-0 flex-col gap-3 xl:col-span-2">
+            <Panel
+              title={`${t('overview.allowedSeries')} · ${formatBucket(bucketMillis, locale)}`}
+              description={chartHelp}
+              state={seriesState}
+              data={{
+                headers: [t('col.time'), t('decision.allowed'), t('decision.rejected')],
+                rows: buckets.map((bucket) => [
+                  formatTimestamp(bucket.start),
+                  bucket.allowed,
+                  bucket.rejected,
+                ]),
+              }}
+              csvName="decisions.csv"
+            >
+              {(large) => (
+                <>
+                  <div className="px-2">
+                    <TimeSeries
+                      times={times}
+                      series={allowed}
+                      height={large ? 460 : 200}
+                      syncKey="overview"
+                      onZoom={onZoom}
+                      yLabel={unit}
+                      bucketMillis={bucketMillis}
+                      annotations={annotations}
+                      formatTooltipTime={formatTimestamp}
+                    />
+                  </div>
+                  <SeriesStats values={allowed[0].values} unit={unit} />
+                </>
+              )}
+            </Panel>
+            <Panel
+              title={`${t('overview.rejectedSeries')} · ${formatBucket(bucketMillis, locale)}`}
+              description={chartHelp}
+              state={seriesState}
+            >
+              {(large) => (
+                <>
+                  <div className="px-2">
+                    <TimeSeries
+                      times={times}
+                      series={rejected}
+                      height={large ? 460 : 160}
+                      syncKey="overview"
+                      onZoom={onZoom}
+                      yLabel={unit}
+                      bucketMillis={bucketMillis}
+                      annotations={annotations}
+                      formatTooltipTime={formatTimestamp}
+                    />
+                  </div>
+                  <SeriesStats values={rejected[0].values} unit={unit} />
+                </>
+              )}
+            </Panel>
+          </div>
           <Panel
             title={t('overview.topRejected')}
+            description={t('overview.topHelp')}
+            state={{
+              loading: !top.data && !top.error,
+              error: top.data ? undefined : top.error,
+              empty: !!top.data && topRows.length === 0,
+              onRetry: () => void top.mutate(),
+            }}
             data={{
               headers: [t('col.key'), t('col.ruleSet'), t('col.rejected'), t('col.lastRejected')],
               rows: topRows.map((row) => [
@@ -242,40 +441,49 @@ export function OverviewScreen() {
             csvName="top-rejected.csv"
           >
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full text-[13px]">
                 <thead>
                   <tr>
-                    <th className={TH}>{t('col.key')}</th>
-                    <th className={TH}>{t('col.ruleSet')}</th>
-                    <th className={`${TH} w-32`}>{t('col.rejected')}</th>
-                    <th className={TH}>{t('col.lastRejected')}</th>
+                    <th scope="col" className={TH}>
+                      {t('col.keyAndSet')}
+                    </th>
+                    <th scope="col" className={`${TH} w-36`}>
+                      {t('col.rejected')}
+                    </th>
+                    <th scope="col" className={TH}>
+                      {t('col.lastRejected')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {topRows.map((row) => (
                     <tr key={`${row.ruleSetId}:${row.key}`}>
-                      <td className={`${TD} num`}>
+                      <td className={`${TD} mono whitespace-nowrap`}>
                         {isAdmin && !row.masked ? (
                           <Link
                             href={`/keys?value=${encodeURIComponent(row.key)}&transform=none`}
-                            className="text-s1 hover:underline"
+                            className="text-s1-text hover:underline"
                           >
                             {row.key}
                           </Link>
                         ) : (
                           row.key
                         )}
+                        <div className="text-muted text-[11px]">{row.ruleSetId}</div>
                       </td>
-                      <td className={`${TD} num text-fg2 whitespace-nowrap`}>{row.ruleSetId}</td>
                       <td className={TD}>
                         <BarGauge
                           value={row.rejected}
                           max={maxRejected}
                           color="--c-s2"
                           label={formatCount(row.rejected)}
+                          labelWidth="w-8"
                         />
                       </td>
-                      <td className={`${TD} text-muted whitespace-nowrap`}>
+                      <td
+                        className={`${TD} num text-muted whitespace-nowrap`}
+                        title={formatTimestamp(row.lastRejectedAt)}
+                      >
                         {ago(row.lastRejectedAt)}
                       </td>
                     </tr>
@@ -289,7 +497,14 @@ export function OverviewScreen() {
 
       <Row id="ruleSets" title={t('row.ruleSets')}>
         <Panel
-          title={t('col.ruleSet')}
+          title={t('overview.ruleSetPanel')}
+          description={`${t('overview.ruleSetHelp')} ${t('overview.thresholds')}`}
+          state={{
+            loading: !overview.data && !overview.error,
+            error: overview.data ? undefined : overview.error,
+            empty: !!overview.data && sets.length === 0,
+            onRetry: () => void overview.mutate(),
+          }}
           data={{
             headers: [
               t('col.ruleSet'),
@@ -308,52 +523,81 @@ export function OverviewScreen() {
           }}
           csvName="rule-sets.csv"
         >
-          <table className="w-full">
-            <thead>
-              <tr>
-                <th className={TH}>{t('col.ruleSet')}</th>
-                <th className={TH}>{t('col.trend')}</th>
-                <th className={`${TH} text-right`}>{t('col.decisions')}</th>
-                <th className={`${TH} text-right`}>{t('col.rejected')}</th>
-                <th className={`${TH} w-56`}>{t('col.rejectRate')}</th>
-                <th className={TH}>{t('col.lastDecision')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sets.map((set) => {
-                const severity = rateSeverity(set.rejectRate);
-                const selected = state.ruleSet === set.ruleSetId;
-                return (
-                  <tr
-                    key={set.ruleSetId}
-                    onClick={() => update({ ruleSet: selected ? null : set.ruleSetId })}
-                    className={`hover:bg-panel2 cursor-pointer ${selected ? 'bg-select' : ''}`}
-                  >
-                    <td className={`${TD} num`}>{set.ruleSetId}</td>
-                    <td className={TD}>
-                      <Sparkline values={set.trend} />
-                    </td>
-                    <td className={`${TD} num text-right`}>{formatCount(set.total)}</td>
-                    <td className={`${TD} num text-right`}>{formatCount(set.rejected)}</td>
-                    <td className={TD}>
-                      <div className="flex items-center gap-1.5">
-                        <SeverityIcon severity={severity} />
-                        <div className="flex-1">
-                          <BarGauge
-                            value={set.rejectRate}
-                            max={maxRate}
-                            color={severityMark(severity)}
-                            label={formatPercent(set.rejectRate)}
-                          />
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr>
+                  <th scope="col" className={TH}>
+                    {t('col.ruleSet')}
+                  </th>
+                  <th scope="col" className={TH}>
+                    {t('col.rejectTrend')}
+                  </th>
+                  <th scope="col" className={`${TH} text-right`}>
+                    {t('col.decisions')}
+                  </th>
+                  <th scope="col" className={`${TH} text-right`}>
+                    {t('col.rejected')}
+                  </th>
+                  <th scope="col" className={`${TH} w-72`}>
+                    {t('col.rejectRate')}
+                  </th>
+                  <th scope="col" className={TH}>
+                    {t('col.lastDecision')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sets.map((set) => {
+                  const severity = rateSeverity(set.rejectRate);
+                  const selected = state.ruleSet === set.ruleSetId;
+                  return (
+                    <tr key={set.ruleSetId} className={selected ? 'bg-select' : 'hover:bg-panel2'}>
+                      <td className={TD}>
+                        <button
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => update({ ruleSet: selected ? null : set.ruleSetId })}
+                          className="mono text-s1-text rounded px-1 text-left hover:underline"
+                        >
+                          {set.ruleSetId}
+                        </button>
+                      </td>
+                      <td className={TD}>
+                        <Sparkline values={set.trend} />
+                      </td>
+                      <td className={`${TD} num text-right`}>{formatCount(set.total)}</td>
+                      <td className={`${TD} num text-right`}>{formatCount(set.rejected)}</td>
+                      <td className={TD}>
+                        <div className="flex items-center gap-2">
+                          <SeverityIcon severity={severity} />
+                          <div className="flex-1">
+                            <BarGauge
+                              value={set.rejectRate}
+                              max={RATE_SCALE}
+                              color={severityMark(severity)}
+                              label={formatPercent(set.rejectRate)}
+                              markers={[WARN_RATE, BAD_RATE]}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className={`${TD} text-muted`}>{ago(set.lastDecisionAt)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td
+                        className={`${TD} num text-muted whitespace-nowrap`}
+                        title={set.lastDecisionAt ? formatTimestamp(set.lastDecisionAt) : undefined}
+                      >
+                        {ago(set.lastDecisionAt)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-muted flex items-center gap-1.5 px-3 py-2 text-xs">
+            <span aria-hidden className="bg-fg2 inline-block h-3 w-px" />
+            {t('overview.thresholds')}
+          </p>
         </Panel>
       </Row>
     </div>

@@ -1,22 +1,15 @@
-'use client';
+import React from 'react';
 
-import React, { Suspense } from 'react';
+import { readBranding } from '@/lib/adminApi';
+import { requestLocale } from '@/lib/serverLocale';
+import { BrandingFallback } from '@/modules/console/branding';
+import { ConsoleProviders } from '@/modules/console/ConsoleProviders';
 
-import { ThemeProvider } from '@/modules/admin';
-import { I18nProvider } from '@/modules/console/I18nProvider';
-import { MeProvider } from '@/modules/console/MeProvider';
-import { Shell } from '@/modules/console/Shell';
-
-export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
+export default async function ConsoleLayout({ children }: { children: React.ReactNode }) {
+  const [locale, branding] = await Promise.all([requestLocale(), readBranding()]);
   return (
-    <ThemeProvider>
-      <I18nProvider>
-        <MeProvider>
-          <Suspense>
-            <Shell>{children}</Shell>
-          </Suspense>
-        </MeProvider>
-      </I18nProvider>
-    </ThemeProvider>
+    <BrandingFallback branding={branding}>
+      <ConsoleProviders initialLocale={locale}>{children}</ConsoleProviders>
+    </BrandingFallback>
   );
 }
