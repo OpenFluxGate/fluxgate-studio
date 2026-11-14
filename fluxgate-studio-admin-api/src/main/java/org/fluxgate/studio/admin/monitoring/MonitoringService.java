@@ -24,7 +24,6 @@ public class MonitoringService {
 
   private final MongoEventStore store;
   private final RuleService ruleService;
-  private final Clock clock;
   private final TtlCache cache;
 
   public MonitoringService(
@@ -34,42 +33,38 @@ public class MonitoringService {
       Clock clock) {
     this.store = store;
     this.ruleService = ruleService;
-    this.clock = clock;
     this.cache = new TtlCache(properties.cacheTtl(), clock);
   }
 
-  public OverviewResponse overview(MonitoringWindow window) {
-    return cache.get("overview:" + window.code(), () -> computeOverview(window));
+  public OverviewResponse overview(MonitoringRange range) {
+    return cache.get("overview:" + range.cacheKey(), () -> computeOverview(range));
   }
 
-  public TimeseriesResponse timeseries(MonitoringWindow window, String ruleSetId) {
+  public TimeseriesResponse timeseries(MonitoringRange range, String ruleSetId) {
     return cache.get(
-        "timeseries:" + window.code() + ":" + ruleSetId,
-        () -> {
-          long to = clock.millis();
-          long from = to - window.lengthMillis();
-          long bucket = window.bucketMillis();
-          return new TimeseriesResponse(
-              window.code(),
-              from,
-              to,
-              bucket,
-              fill(store.buckets(from, to, bucket, ruleSetId, null), from, to, bucket));
-        });
+        "timeseries:" + range.cacheKey() + ":" + ruleSetId,
+        () ->
+            new TimeseriesResponse(
+                range.label(),
+                range.from(),
+                range.to(),
+                range.bucketMillis(),
+                fill(
+                    store.buckets(range.from(), range.to(), range.bucketMillis(), ruleSetId, null),
+                    range.from(),
+                    range.to(),
+                    range.bucketMillis())));
   }
 
   public List<RejectedKeyResponse> topRejected(
-      MonitoringWindow window, String ruleSetId, int limit, boolean revealKeys) {
+      MonitoringRange range, String ruleSetId, int limit, boolean revealKeys) {
     if (limit < 1 || limit > MAX_TOP_KEYS) {
       throw new InvalidRuleException("limit", "must be between 1 and " + MAX_TOP_KEYS);
     }
     List<RejectedKey> keys =
         cache.get(
-            "top:" + window.code() + ":" + ruleSetId + ":" + limit,
-            () -> {
-              long to = clock.millis();
-              return store.topRejected(to - window.lengthMillis(), to, ruleSetId, limit);
-            });
+            "top:" + range.cacheKey() + ":" + ruleSetId + ":" + limit,
+            () -> store.topRejected(range.from(), range.to(), ruleSetId, limit));
     return keys.stream()
         .map(
             key ->
@@ -98,10 +93,10 @@ public class MonitoringService {
     return total == 0 ? 0 : (double) rejected / total;
   }
 
-  private OverviewResponse computeOverview(MonitoringWindow window) {
-    long to = clock.millis();
-    long from = to - window.lengthMillis();
-    long trendBucket = Math.max(1, window.lengthMillis() / TREND_POINTS);
+  private OverviewResponse computeOverview(MonitoringRange range) {
+    long from = range.from();
+    long to = range.to();
+    long trendBucket = Math.max(1, range.lengthMillis() / TREND_POINTS);
 
     Map<String, RuleSetActivity> activity = new HashMap<>();
     long total = 0;
@@ -155,6 +150,6 @@ public class MonitoringService {
             .thenComparing(Comparator.comparingLong(RuleSetSummary::total).reversed())
             .thenComparing(RuleSetSummary::ruleSetId));
     return new OverviewResponse(
-        window.code(), from, to, total, rejected, rate(rejected, total), summaries);
+        range.label(), from, to, total, rejected, rate(rejected, total), summaries);
   }
 }

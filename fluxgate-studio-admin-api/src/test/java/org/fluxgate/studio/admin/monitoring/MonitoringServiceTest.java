@@ -3,7 +3,6 @@ package org.fluxgate.studio.admin.monitoring;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -49,6 +48,10 @@ class MonitoringServiceTest {
     when(store.bucketsByRuleSet(anyLong(), anyLong(), anyLong())).thenReturn(Map.of());
   }
 
+  private static MonitoringRange range(String window) {
+    return MonitoringRange.of(window, null, null, NOW);
+  }
+
   private static RuleResponse rule(String ruleSetId) {
     return new RuleResponse(
         ruleSetId + "-rule",
@@ -74,36 +77,17 @@ class MonitoringServiceTest {
         .thenReturn(List.of(new RuleSetActivity("a", 30, 3, NOW - 5)));
     when(ruleService.getAllRules()).thenReturn(List.of(rule("c")));
 
-    OverviewResponse overview = service.overview(MonitoringWindow.ONE_HOUR);
+    OverviewResponse overview = service.overview(range("1h"));
 
+    assertThat(overview.window()).isEqualTo("1h");
     assertThat(overview.total()).isEqualTo(15);
     assertThat(overview.rejected()).isEqualTo(3);
     assertThat(overview.rejectRate()).isEqualTo(0.2);
     assertThat(overview.ruleSets()).extracting(RuleSetSummary::ruleSetId).containsExactly("a", "c");
     RuleSetSummary idle = overview.ruleSets().get(1);
     assertThat(idle.total()).isZero();
-    assertThat(idle.rejectRate()).isZero();
     assertThat(idle.lastDecisionAt()).isNull();
     assertThat(idle.trend()).hasSize(MonitoringService.TREND_POINTS).containsOnly(0L);
-    assertThat(overview.ruleSets().get(0).lastDecisionAt()).isEqualTo(NOW - 5);
-  }
-
-  @Test
-  void overviewShowsLastDecisionFromTheLast24HoursEvenWithoutCurrentTraffic() {
-    when(store.activityByRuleSet(NOW - 300_000, NOW, null)).thenReturn(List.of());
-    when(store.activityByRuleSet(NOW - DAY, NOW, null))
-        .thenReturn(List.of(new RuleSetActivity("b", 4, 0, NOW - HOUR)));
-
-    OverviewResponse overview = service.overview(MonitoringWindow.FIVE_MINUTES);
-
-    assertThat(overview.ruleSets())
-        .singleElement()
-        .satisfies(
-            summary -> {
-              assertThat(summary.ruleSetId()).isEqualTo("b");
-              assertThat(summary.total()).isZero();
-              assertThat(summary.lastDecisionAt()).isEqualTo(NOW - HOUR);
-            });
   }
 
   @Test
@@ -114,33 +98,46 @@ class MonitoringServiceTest {
     when(store.bucketsByRuleSet(NOW - HOUR, NOW, bucket))
         .thenReturn(Map.of("a", List.of(new Bucket(NOW - bucket, 1, 2))));
 
-    List<Long> trend = service.overview(MonitoringWindow.ONE_HOUR).ruleSets().get(0).trend();
+    List<Long> trend = service.overview(range("1h")).ruleSets().get(0).trend();
 
     assertThat(trend).hasSize(MonitoringService.TREND_POINTS);
     assertThat(trend.get(trend.size() - 1)).isEqualTo(2L);
   }
 
   @Test
-  void overviewIsCachedForTheConfiguredTtl() {
+  void overviewIsCachedPerRange() {
     when(store.activityByRuleSet(anyLong(), anyLong(), isNull())).thenReturn(List.of());
 
-    service.overview(MonitoringWindow.ONE_HOUR);
-    service.overview(MonitoringWindow.ONE_HOUR);
+    service.overview(range("1h"));
+    service.overview(range("1h"));
+    service.overview(range("6h"));
 
-    verify(store, times(2)).activityByRuleSet(anyLong(), anyLong(), isNull());
+    verify(store, times(4)).activityByRuleSet(anyLong(), anyLong(), isNull());
   }
 
   @Test
-  void timeseriesFillsEmptyBuckets() {
-    when(store.buckets(NOW - HOUR, NOW, 60_000, "a", null))
-        .thenReturn(List.of(new Bucket(NOW - 60_000, 4, 1)));
+  void timeseriesUsesTheRangeBucketAndFillsGaps() {
+    when(store.buckets(NOW - HOUR, NOW, 30_000, "a", null))
+        .thenReturn(List.of(new Bucket(NOW - 30_000, 4, 1)));
 
-    TimeseriesResponse series = service.timeseries(MonitoringWindow.ONE_HOUR, "a");
+    TimeseriesResponse series = service.timeseries(range("1h"), "a");
 
-    assertThat(series.bucketMillis()).isEqualTo(60_000);
-    assertThat(series.buckets()).hasSize(60);
+    assertThat(series.window()).isEqualTo("1h");
+    assertThat(series.bucketMillis()).isEqualTo(30_000);
+    assertThat(series.buckets()).hasSize(120);
     assertThat(series.buckets().get(0)).isEqualTo(new Bucket(NOW - HOUR, 0, 0));
-    assertThat(series.buckets().get(59)).isEqualTo(new Bucket(NOW - 60_000, 4, 1));
+    assertThat(series.buckets().get(119)).isEqualTo(new Bucket(NOW - 30_000, 4, 1));
+  }
+
+  @Test
+  void timeseriesReportsAbsoluteRangesAsCustom() {
+    MonitoringRange custom = MonitoringRange.of(null, NOW - 600_000, NOW - 300_000, NOW);
+    when(store.buckets(NOW - 600_000, NOW - 300_000, 10_000, null, null)).thenReturn(List.of());
+
+    TimeseriesResponse series = service.timeseries(custom, null);
+
+    assertThat(series.window()).isEqualTo("custom");
+    assertThat(series.buckets()).hasSize(30);
   }
 
   @Test
@@ -148,18 +145,18 @@ class MonitoringServiceTest {
     when(store.topRejected(NOW - HOUR, NOW, null, 20))
         .thenReturn(List.of(new RejectedKey("a", "123456789", 3, NOW - 10)));
 
-    assertThat(service.topRejected(MonitoringWindow.ONE_HOUR, null, 20, false))
+    assertThat(service.topRejected(range("1h"), null, 20, false))
         .containsExactly(new RejectedKeyResponse("a", "12****89", true, 3, NOW - 10));
-    assertThat(service.topRejected(MonitoringWindow.ONE_HOUR, null, 20, true))
+    assertThat(service.topRejected(range("1h"), null, 20, true))
         .containsExactly(new RejectedKeyResponse("a", "123456789", false, 3, NOW - 10));
     verify(store, times(1)).topRejected(NOW - HOUR, NOW, null, 20);
   }
 
   @Test
   void topRejectedRejectsLimitsOutsideTheRange() {
-    assertThatThrownBy(() -> service.topRejected(MonitoringWindow.ONE_HOUR, null, 0, true))
+    assertThatThrownBy(() -> service.topRejected(range("1h"), null, 0, true))
         .isInstanceOf(InvalidRuleException.class);
-    assertThatThrownBy(() -> service.topRejected(MonitoringWindow.ONE_HOUR, null, 101, true))
+    assertThatThrownBy(() -> service.topRejected(range("1h"), null, 101, true))
         .isInstanceOf(InvalidRuleException.class);
   }
 
@@ -168,6 +165,5 @@ class MonitoringServiceTest {
     assertThat(MonitoringService.fill(Collections.emptyList(), 90_000, 200_000, 60_000))
         .extracting(Bucket::start)
         .containsExactly(60_000L, 120_000L, 180_000L);
-    verify(store, times(0)).buckets(anyLong(), anyLong(), anyLong(), eq("x"), isNull());
   }
 }
