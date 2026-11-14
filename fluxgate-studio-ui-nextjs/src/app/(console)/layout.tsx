@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 
 import { ThemeProvider } from '@/modules/admin';
 import { I18nProvider } from '@/modules/console/I18nProvider';
@@ -12,7 +12,9 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
     <ThemeProvider>
       <I18nProvider>
         <MeProvider>
-          <Shell>{children}</Shell>
+          <Suspense>
+            <Shell>{children}</Shell>
+          </Suspense>
         </MeProvider>
       </I18nProvider>
     </ThemeProvider>

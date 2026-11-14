@@ -34,16 +34,16 @@ function readMode(): ColorMode {
   if (chosenMode) return chosenMode;
   try {
     const value = window.localStorage.getItem(STORAGE_KEY);
-    return value === 'light' || value === 'dark' ? value : 'system';
+    return value === 'light' || value === 'system' ? value : 'dark';
   } catch {
-    return 'system';
+    return 'dark';
   }
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-  const mode = useSyncExternalStore(subscribe, readMode, () => 'system' as ColorMode);
+  const mode = useSyncExternalStore(subscribe, readMode, () => 'dark' as ColorMode);
 
   useEffect(() => {
     const root = document.documentElement;

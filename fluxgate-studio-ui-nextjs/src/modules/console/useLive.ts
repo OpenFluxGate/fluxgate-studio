@@ -6,10 +6,14 @@ import useSWR from 'swr';
 
 export const REFRESH_MS = 10_000;
 
-export function useLive<T>(key: string | null, fetcher: () => Promise<T>) {
+export function useLive<T>(
+  key: string | null,
+  fetcher: () => Promise<T>,
+  refreshMs: number = REFRESH_MS
+) {
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const result = useSWR<T>(key, fetcher, {
-    refreshInterval: REFRESH_MS,
+    refreshInterval: refreshMs,
     refreshWhenHidden: false,
     revalidateOnFocus: true,
     keepPreviousData: true,
