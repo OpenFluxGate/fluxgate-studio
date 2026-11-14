@@ -8,6 +8,7 @@ import {
   type CreateRuleRequest,
   exportRules,
   fetchAudit,
+  fetchTimeseries,
   fetchTopRejected,
   importRules,
   lookupKey,
@@ -158,7 +159,7 @@ describe('console API', () => {
       );
     vi.stubGlobal('fetch', fetchMock);
 
-    await fetchTopRejected('24h', 5, 'checkout api');
+    await fetchTopRejected({ window: '24h' }, 5, 'checkout api');
     await fetchAudit({ action: 'RULE_UPDATE', q: 'r1', page: 2, size: 50 });
 
     expect(fetchMock.mock.calls[0][0]).toBe(
@@ -166,6 +167,11 @@ describe('console API', () => {
     );
     expect(fetchMock.mock.calls[1][0]).toBe(
       '/api/proxy/api/audit?page=2&size=50&action=RULE_UPDATE&q=r1'
+    );
+
+    await fetchTimeseries({ from: '1', to: '2' }, 'a');
+    expect(fetchMock.mock.calls[2][0]).toBe(
+      '/api/proxy/api/monitoring/timeseries?from=1&to=2&ruleSetId=a'
     );
   });
 });

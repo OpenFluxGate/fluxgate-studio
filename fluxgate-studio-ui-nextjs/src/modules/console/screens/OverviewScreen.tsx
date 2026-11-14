@@ -23,9 +23,9 @@ export function OverviewScreen() {
   const now = useNow();
   const [range, setRange] = useState<Range>('1h');
 
-  const overview = useLive(`overview:${range}`, () => fetchOverview(range));
-  const series = useLive(`series:${range}`, () => fetchTimeseries(range));
-  const top = useLive(`top:${range}`, () => fetchTopRejected(range, 10));
+  const overview = useLive(`overview:${range}`, () => fetchOverview({ window: range }));
+  const series = useLive(`series:${range}`, () => fetchTimeseries({ window: range }));
+  const top = useLive(`top:${range}`, () => fetchTopRejected({ window: range }, 10));
   const stats = useLive('stats', fetchDashboardStats);
 
   const data = overview.data;

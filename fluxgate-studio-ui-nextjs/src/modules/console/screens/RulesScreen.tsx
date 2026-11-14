@@ -54,7 +54,7 @@ export function RulesScreen() {
   const { t, locale } = useI18n();
   const { isAdmin } = useMe();
   const rules = useSWR('rules', async () => (await fetchRules()).map(mapApiRuleToRule));
-  const daily = useLive('overview:24h', () => fetchOverview('24h'));
+  const daily = useLive('overview:24h', () => fetchOverview({ window: '24h' }));
 
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<Rule | null | undefined>(undefined);

@@ -19,7 +19,8 @@
     "next-auth": "^4.24.15",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "swr": "^2.5.1"
+    "swr": "^2.5.1",
+    "uplot": "^1.6.32"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

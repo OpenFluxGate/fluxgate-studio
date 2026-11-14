@@ -27,3 +27,17 @@ export function formatDateTime(timestamp: number): string {
   const date = new Date(timestamp);
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+
+export function formatBucket(millis: number): string {
+  return millis < 60_000 ? `${millis / 1000}s` : `${millis / 60_000}m`;
+}
+
+export function formatHourMinute(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+export function formatTimestamp(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${formatClock(timestamp)}`;
+}

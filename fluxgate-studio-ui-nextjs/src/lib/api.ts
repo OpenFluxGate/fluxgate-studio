@@ -226,15 +226,20 @@ export async function fetchMe(): Promise<ApiMe> {
   return handleResponse<ApiMe>(await fetch(`${API_BASE_PATH}/api/me`));
 }
 
-export async function fetchOverview(range: string): Promise<ApiOverview> {
-  const params = new URLSearchParams({ window: range });
+export type RangeParams = Record<string, string>;
+
+export async function fetchOverview(range: RangeParams): Promise<ApiOverview> {
+  const params = new URLSearchParams(range);
   return handleResponse<ApiOverview>(
     await fetch(`${API_BASE_PATH}/api/monitoring/overview?${params.toString()}`)
   );
 }
 
-export async function fetchTimeseries(range: string, ruleSetId?: string): Promise<ApiTimeseries> {
-  const params = new URLSearchParams({ window: range });
+export async function fetchTimeseries(
+  range: RangeParams,
+  ruleSetId?: string
+): Promise<ApiTimeseries> {
+  const params = new URLSearchParams(range);
   if (ruleSetId) params.set('ruleSetId', ruleSetId);
   return handleResponse<ApiTimeseries>(
     await fetch(`${API_BASE_PATH}/api/monitoring/timeseries?${params.toString()}`)
@@ -242,11 +247,12 @@ export async function fetchTimeseries(range: string, ruleSetId?: string): Promis
 }
 
 export async function fetchTopRejected(
-  range: string,
+  range: RangeParams,
   limit = 20,
   ruleSetId?: string
 ): Promise<ApiRejectedKey[]> {
-  const params = new URLSearchParams({ window: range, limit: String(limit) });
+  const params = new URLSearchParams(range);
+  params.set('limit', String(limit));
   if (ruleSetId) params.set('ruleSetId', ruleSetId);
   return handleResponse<ApiRejectedKey[]>(
     await fetch(`${API_BASE_PATH}/api/monitoring/top-rejected?${params.toString()}`)
