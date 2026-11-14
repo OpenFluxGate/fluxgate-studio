@@ -62,6 +62,7 @@ public class SecurityConfig {
   private static final String ROLE_ADMIN = "ADMIN";
   private static final String ROLE_USER = "USER";
   private static final String RULES_PATTERN = "/api/rules/**";
+  private static final String BRANDING_PATH = "/api/branding";
 
   /**
    * Every path springdoc serves the OpenAPI document on. {@code /api-docs/**} also matches the bare
@@ -129,6 +130,12 @@ public class SecurityConfig {
                     // only when explicitly opted in (the dev profile does, production must not).
                     .requestMatchers(API_DOCS_PATTERNS)
                     .access(apiDocsAuthorization())
+                    // The sign in page and the browser tab read the logo and favicon before
+                    // anyone signs in. Changing them is admin only.
+                    .requestMatchers(HttpMethod.GET, BRANDING_PATH)
+                    .permitAll()
+                    .requestMatchers(BRANDING_PATH)
+                    .hasRole(ROLE_ADMIN)
                     // Key lookup and the audit log expose member identifiers, so they are admin
                     // only
                     .requestMatchers("/api/keys/**", "/api/audit/**")

@@ -49,6 +49,8 @@ fluxgate:
     audit:
       collection: ${STUDIO_AUDIT_COLLECTION:studio_audit_log}
       retention: ${STUDIO_AUDIT_RETENTION:730d}
+    settings:
+      collection: ${STUDIO_SETTINGS_COLLECTION:studio_settings}
 
   # MongoDB rule storage
   mongo:
