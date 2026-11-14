@@ -52,6 +52,9 @@ NEXTAUTH_SECRET=your-secret-key
 KEYCLOAK_CLIENT_ID=fluxgate-studio
 KEYCLOAK_CLIENT_SECRET=fluxgate-studio-secret
 KEYCLOAK_ISSUER=http://keycloak:8080/realms/fluxgate
+# Optional: console language before the operator picks one (en or ko), and a link on the overview
+NEXT_PUBLIC_DEFAULT_LOCALE=en
+NEXT_PUBLIC_EXTERNAL_DASHBOARD_URL=
 ```
 
 Use Node 22. For the root Compose fixture, map `keycloak` to `127.0.0.1` on the host as

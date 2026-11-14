@@ -32,11 +32,14 @@
 
 ## 주요 기능
 
-- **규칙 관리**: Rate Limit 규칙 생성, 수정, 삭제, 활성화/비활성화
-- **대시보드**: 실시간 통계 및 전체 규칙 현황
-- **인증**: Keycloak OAuth2/OIDC 연동
-- **다크/라이트 테마**: 사용자 맞춤 UI 테마
-- **규칙 시뮬레이션**: 배포 전 Rate Limit 규칙 테스트
+- **모니터링 콘솔**: 서비스가 남긴 판정 이력(`rate_limit_events`)으로 허용·차단 추이, 많이 차단된 키, 규칙 묶음별 마지막 판정을 보여 줍니다. Redis는 읽지 않습니다.
+- **규칙 관리**: 규칙 묶음별 표, 한도의 실제 의미 문장(`60s·30`은 "처음 30회 연속, 이후 2초마다 1회"), 저장 전 바뀐 값 확인
+- **키 조회**(admin): 특정 키가 지금 막혀 있는지, 언제 풀리는지, 최근 판정. 조회는 변경 기록에 먼저 남깁니다.
+- **변경 기록**(admin): 누가 무엇을 만들고, 바꾸고, 지우고, 가져오고, 게시했는지와 누가 어떤 키를 조회했는지
+- **인증**: Keycloak OAuth2/OIDC. `ROLE_USER`는 읽기(키는 마스킹), `ROLE_ADMIN`은 쓰기
+- **Grafana 스타일 대시보드**: 시간 범위 프리셋(5분~24시간), 시계열 드래그 확대와 축소, 자동 갱신(끄기·10s·30s·1m), 모든 패널을 거르는 규칙 묶음 변수, 접히는 행, 패널 메뉴(크게 보기·데이터 보기·CSV), TV 모드(`?kiosk`, Esc로 끝내기). 대시보드 상태는 주소(`?from=now-1h&to=now&refresh=10s&ruleSet=...`)에 남아 링크로 같은 화면을 열 수 있습니다.
+- **다크 기본**, 라이트·시스템 테마, 한국어·영어
+- **규칙 시뮬레이션**: 규칙 구간에 몰아치는 요청을 미리 계산
 
 ## 기술 스택
 
@@ -193,6 +196,27 @@ Keycloak 관리 콘솔: `http://keycloak:8080/admin` (admin/admin)
 - `PUT /api/rules/{id}` - 규칙 수정
 - `DELETE /api/rules/{id}` - 규칙 삭제
 - `PATCH /api/rules/{id}/toggle` - 규칙 활성화/비활성화 토글
+
+### 모니터링, 키 조회, 변경 기록
+- `GET /api/me` - 현재 사용자와 역할
+- `GET /api/monitoring/overview?window=5m|15m|1h|6h|24h` 또는 `?from=&to=`(epoch ms, 최대 24시간) - 전체와 규칙 묶음별 판정
+- `GET /api/monitoring/timeseries?window=&ruleSetId=` - 구간별 허용·차단 건수
+- `GET /api/monitoring/top-rejected?window=&ruleSetId=&limit=` - 많이 차단된 키, `ROLE_USER`에게는 마스킹
+- `GET /api/keys/transforms` (admin) - 키 변환 목록
+- `POST /api/keys/decisions` (admin) - 키 조회. 변경 기록에 먼저 남기고, 남기지 못하면 503
+- `GET /api/audit` (admin) - 변경 기록 검색. 조회 입력값은 마스킹
+- `GET /api/audit/{id}` (admin) - 변경 기록 한 건, 원문
+
+규칙과 정책 변경은 성공한 뒤 변경 기록에 남깁니다. 기록에 실패하면 변경은 유지하고 응답에 `X-Studio-Audit: failed`를 붙이며, 콘솔이 경고를 띄웁니다.
+
+설정은 `fluxgate.studio.monitoring.*`(이벤트 DB와 컬렉션, 인덱스 자동 생성, 캐시 10초, 쿼리 제한 5초, 키 변환)과 `fluxgate.studio.audit.*`(컬렉션, 보관 기간 기본 730일)입니다. 기동할 때 이벤트 컬렉션에 인덱스 세 개(`{timestamp: 1}`, `{ruleSetId: 1, timestamp: 1}`, `{userId: 1, timestamp: -1}`)를 만들고, 공용 DB에서는 `FLUXGATE_EVENT_CREATE_INDEXES=false`로 끄고 DBA에 요청합니다. UI 환경변수는 `NEXT_PUBLIC_DEFAULT_LOCALE`(기본 `en`)과 `NEXT_PUBLIC_EXTERNAL_DASHBOARD_URL`입니다.
+
+로컬에서 데모 데이터(최근 2시간 판정)를 넣으려면:
+
+```bash
+docker cp docker/demo-events.js fluxgate-mongo:/tmp/demo-events.js
+docker exec fluxgate-mongo mongosh --quiet -u fluxgate -p fluxgate123 --authenticationDatabase admin fluxgate --file /tmp/demo-events.js
+```
 
 ### API 문서
 - Swagger UI: `http://localhost:8090/swagger-ui.html` (`prod` 프로필에서는 비활성화)

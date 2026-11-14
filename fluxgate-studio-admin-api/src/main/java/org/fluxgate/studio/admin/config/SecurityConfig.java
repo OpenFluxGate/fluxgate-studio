@@ -129,6 +129,10 @@ public class SecurityConfig {
                     // only when explicitly opted in (the dev profile does, production must not).
                     .requestMatchers(API_DOCS_PATTERNS)
                     .access(apiDocsAuthorization())
+                    // Key lookup and the audit log expose member identifiers, so they are admin
+                    // only
+                    .requestMatchers("/api/keys/**", "/api/audit/**")
+                    .hasRole(ROLE_ADMIN)
                     // Read-only dry-run, deliberately available to the read-only role
                     .requestMatchers(HttpMethod.POST, "/api/rules/*/simulate")
                     .hasAnyRole(ROLE_USER, ROLE_ADMIN)

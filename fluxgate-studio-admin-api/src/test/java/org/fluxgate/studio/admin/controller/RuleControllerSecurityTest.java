@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.List;
 import java.util.Map;
+import org.fluxgate.studio.admin.audit.AuditService;
 import org.fluxgate.studio.admin.config.SecurityConfig;
 import org.fluxgate.studio.admin.dto.response.ImportResultResponse;
 import org.fluxgate.studio.admin.dto.response.RateBandResponse;
@@ -60,6 +61,7 @@ class RuleControllerSecurityTest {
   @Autowired private MockMvc mockMvc;
 
   @MockBean private RuleService ruleService;
+  @MockBean private AuditService auditService;
 
   private static RuleResponse rule(String id) {
     return new RuleResponse(

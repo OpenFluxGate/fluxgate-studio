@@ -47,6 +47,39 @@ beforeEach(() => {
 });
 
 describe('BFF proxy route', () => {
+  it.each([
+    [['api', 'monitoring', 'overview'], '/api/monitoring/overview'],
+    [['api', 'keys', 'decisions'], '/api/keys/decisions'],
+    [['api', 'audit'], '/api/audit'],
+    [['api', 'me'], '/api/me'],
+  ])('forwards the console path %j', async (segments, expected) => {
+    const response = await GET(requestFor('GET'), contextFor(segments));
+
+    expect(response.status).toBe(200);
+    const [target] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(target.pathname).toBe(expected);
+  });
+
+  it('still refuses paths outside the console API', async () => {
+    const response = await GET(requestFor('GET'), contextFor(['api', 'rule-sets', 'a', 'active']));
+
+    expect(response.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('passes the audit failure header through to the browser', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('{}', {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'x-studio-audit': 'failed' },
+      })
+    );
+
+    const response = await GET(requestFor('GET'), contextFor(['api', 'rules']));
+
+    expect(response.headers.get('x-studio-audit')).toBe('failed');
+  });
+
   it('forwards an allow-listed path to the Admin API with the server-side token', async () => {
     const response = await GET(
       requestFor('GET', '?page=0', { authorization: 'Bearer client-forged', cookie: 'a=b' }),

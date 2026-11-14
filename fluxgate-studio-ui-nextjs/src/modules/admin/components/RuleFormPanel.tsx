@@ -4,6 +4,9 @@ import React, { useState } from 'react';
 
 import { Edit2, Plus, Trash2, XCircle } from 'lucide-react';
 
+import { describeBand } from '@/lib/ruleMeaning';
+import { useI18n } from '@/modules/console/I18nProvider';
+
 import { useTheme } from '../contexts/ThemeContext';
 import { type FieldErrors, type RateBand, type Rule } from '../types';
 
@@ -77,6 +80,7 @@ export function validateRule(formData: FormData): FieldErrors {
 
 export const RuleFormPanel = ({ rule, onClose, onSave, serverErrors }: RuleFormPanelProps) => {
   const { theme } = useTheme();
+  const { locale } = useI18n();
   const [clientErrors, setClientErrors] = useState<FieldErrors>({});
   // Server messages describe the payload that was submitted, so they are dropped as soon as the
   // operator starts editing again.
@@ -160,11 +164,9 @@ export const RuleFormPanel = ({ rule, onClose, onSave, serverErrors }: RuleFormP
     errors[name] ? theme.colors.dangerBorder : theme.colors.border;
 
   return (
-    <div
-      className={`fixed inset-0 ${theme.colors.bgOverlay} z-50 flex items-center justify-center overflow-y-auto p-4 backdrop-blur-sm`}
-    >
+    <div className={`fixed inset-0 ${theme.colors.bgOverlay} z-50 flex justify-end`}>
       <div
-        className={`${theme.colors.bgSecondary} ${theme.colors.border} w-full max-w-4xl overflow-hidden rounded-2xl border ${theme.colors.shadow} my-4`}
+        className={`${theme.colors.bgSecondary} ${theme.colors.border} h-full w-full max-w-4xl overflow-y-auto border-l ${theme.colors.shadow}`}
       >
         <div
           className={`p-4 ${theme.colors.borderSubtle} border-b bg-gradient-to-r ${theme.colors.gradientGlow}`}
@@ -319,59 +321,64 @@ export const RuleFormPanel = ({ rule, onClose, onSave, serverErrors }: RuleFormP
                     key={idx}
                     className={`flex items-start gap-2 p-3 ${theme.colors.bgTertiary} rounded-lg ${theme.colors.borderSubtle} border`}
                   >
-                    <div className="grid flex-1 grid-cols-3 gap-2">
-                      <div>
-                        <label
-                          htmlFor={`band-window-${idx}`}
-                          className={`block text-[10px] ${theme.colors.textMuted} mb-1`}
-                        >
-                          Window (sec)
-                        </label>
-                        <input
-                          id={`band-window-${idx}`}
-                          type="number"
-                          min={1}
-                          value={band.windowSeconds}
-                          onChange={(e) => updateBand(idx, 'windowSeconds', Number(e.target.value))}
-                          aria-invalid={!!errors[`bands[${idx}].windowSeconds`]}
-                          className={`w-full px-2 py-1.5 ${theme.colors.bgInput} ${inputBorder(`bands[${idx}].windowSeconds`)} rounded border text-xs ${theme.colors.textPrimary} focus:outline-none ${theme.colors.borderFocus}`}
-                        />
-                        {fieldError(`bands[${idx}].windowSeconds`)}
+                    <div className="flex-1">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label
+                            htmlFor={`band-window-${idx}`}
+                            className={`block text-[10px] ${theme.colors.textMuted} mb-1`}
+                          >
+                            Window (sec)
+                          </label>
+                          <input
+                            id={`band-window-${idx}`}
+                            type="number"
+                            min={1}
+                            value={band.windowSeconds}
+                            onChange={(e) =>
+                              updateBand(idx, 'windowSeconds', Number(e.target.value))
+                            }
+                            aria-invalid={!!errors[`bands[${idx}].windowSeconds`]}
+                            className={`w-full px-2 py-1.5 ${theme.colors.bgInput} ${inputBorder(`bands[${idx}].windowSeconds`)} rounded border text-xs ${theme.colors.textPrimary} focus:outline-none ${theme.colors.borderFocus}`}
+                          />
+                          {fieldError(`bands[${idx}].windowSeconds`)}
+                        </div>
+                        <div>
+                          <label
+                            htmlFor={`band-capacity-${idx}`}
+                            className={`block text-[10px] ${theme.colors.textMuted} mb-1`}
+                          >
+                            Capacity
+                          </label>
+                          <input
+                            id={`band-capacity-${idx}`}
+                            type="number"
+                            min={1}
+                            value={band.capacity}
+                            onChange={(e) => updateBand(idx, 'capacity', Number(e.target.value))}
+                            aria-invalid={!!errors[`bands[${idx}].capacity`]}
+                            className={`w-full px-2 py-1.5 ${theme.colors.bgInput} ${inputBorder(`bands[${idx}].capacity`)} rounded border text-xs ${theme.colors.textPrimary} focus:outline-none ${theme.colors.borderFocus}`}
+                          />
+                          {fieldError(`bands[${idx}].capacity`)}
+                        </div>
+                        <div>
+                          <label
+                            htmlFor={`band-label-${idx}`}
+                            className={`block text-[10px] ${theme.colors.textMuted} mb-1`}
+                          >
+                            Label
+                          </label>
+                          <input
+                            id={`band-label-${idx}`}
+                            type="text"
+                            value={band.label}
+                            onChange={(e) => updateBand(idx, 'label', e.target.value)}
+                            className={`w-full px-2 py-1.5 ${theme.colors.bgInput} ${theme.colors.border} rounded border text-xs ${theme.colors.textPrimary} focus:outline-none ${theme.colors.borderFocus}`}
+                            placeholder="100-per-min"
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label
-                          htmlFor={`band-capacity-${idx}`}
-                          className={`block text-[10px] ${theme.colors.textMuted} mb-1`}
-                        >
-                          Capacity
-                        </label>
-                        <input
-                          id={`band-capacity-${idx}`}
-                          type="number"
-                          min={1}
-                          value={band.capacity}
-                          onChange={(e) => updateBand(idx, 'capacity', Number(e.target.value))}
-                          aria-invalid={!!errors[`bands[${idx}].capacity`]}
-                          className={`w-full px-2 py-1.5 ${theme.colors.bgInput} ${inputBorder(`bands[${idx}].capacity`)} rounded border text-xs ${theme.colors.textPrimary} focus:outline-none ${theme.colors.borderFocus}`}
-                        />
-                        {fieldError(`bands[${idx}].capacity`)}
-                      </div>
-                      <div>
-                        <label
-                          htmlFor={`band-label-${idx}`}
-                          className={`block text-[10px] ${theme.colors.textMuted} mb-1`}
-                        >
-                          Label
-                        </label>
-                        <input
-                          id={`band-label-${idx}`}
-                          type="text"
-                          value={band.label}
-                          onChange={(e) => updateBand(idx, 'label', e.target.value)}
-                          className={`w-full px-2 py-1.5 ${theme.colors.bgInput} ${theme.colors.border} rounded border text-xs ${theme.colors.textPrimary} focus:outline-none ${theme.colors.borderFocus}`}
-                          placeholder="100-per-min"
-                        />
-                      </div>
+                      <p className="text-muted mt-1 text-[11px]">{describeBand(band, locale)}</p>
                     </div>
                     {formData.bands.length > 1 && (
                       <button

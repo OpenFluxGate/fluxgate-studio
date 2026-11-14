@@ -111,7 +111,190 @@ class ApiError extends Error {
 
 const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' };
 
+export const AUDIT_FAILED_EVENT = 'studio:audit-failed';
+
+function notifyAuditFailure(response: Response): void {
+  if (response.headers.get('x-studio-audit') === 'failed' && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUDIT_FAILED_EVENT));
+  }
+}
+
+export interface ApiMe {
+  username: string;
+  name: string;
+  roles: string[];
+  canWrite: boolean;
+}
+
+export interface ApiBucket {
+  start: number;
+  allowed: number;
+  rejected: number;
+}
+
+export interface ApiRuleSetSummary {
+  ruleSetId: string;
+  total: number;
+  rejected: number;
+  rejectRate: number;
+  lastDecisionAt: number | null;
+  trend: number[];
+}
+
+export interface ApiOverview {
+  window: string;
+  from: number;
+  to: number;
+  total: number;
+  rejected: number;
+  rejectRate: number;
+  ruleSets: ApiRuleSetSummary[];
+}
+
+export interface ApiTimeseries {
+  window: string;
+  from: number;
+  to: number;
+  bucketMillis: number;
+  buckets: ApiBucket[];
+}
+
+export interface ApiRejectedKey {
+  ruleSetId: string;
+  key: string;
+  masked: boolean;
+  rejected: number;
+  lastRejectedAt: number;
+}
+
+export interface ApiKeyDecision {
+  timestamp: number;
+  ruleSetId: string | null;
+  ruleId: string | null;
+  endpoint: string | null;
+  method: string | null;
+  allowed: boolean;
+  remainingTokens: number;
+  retryAfterMs: number;
+}
+
+export type ApiKeyStatusName = 'ALLOWED' | 'BLOCKED' | 'RECOVERED';
+
+export interface ApiKeyStatus {
+  ruleSetId: string | null;
+  status: ApiKeyStatusName;
+  lastDecisionAt: number;
+  lastAllowed: boolean;
+  remainingTokens: number;
+  blockedUntil: number | null;
+  allowed: number;
+  rejected: number;
+}
+
+export interface ApiKeyLookup {
+  key: string;
+  transform: string;
+  window: string;
+  from: number;
+  to: number;
+  bucketMillis: number;
+  ruleSets: ApiKeyStatus[];
+  buckets: ApiBucket[];
+  recent: ApiKeyDecision[];
+}
+
+export interface ApiAuditEntry {
+  id: string;
+  at: string;
+  actor: { subject: string | null; username: string; name: string };
+  action: string;
+  target: Record<string, unknown> | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  detail: Record<string, unknown> | null;
+}
+
+export interface AuditSearch {
+  action?: string;
+  actor?: string;
+  q?: string;
+  page: number;
+  size: number;
+}
+
+export async function fetchMe(): Promise<ApiMe> {
+  return handleResponse<ApiMe>(await fetch(`${API_BASE_PATH}/api/me`));
+}
+
+export type RangeParams = Record<string, string>;
+
+export async function fetchOverview(range: RangeParams): Promise<ApiOverview> {
+  const params = new URLSearchParams(range);
+  return handleResponse<ApiOverview>(
+    await fetch(`${API_BASE_PATH}/api/monitoring/overview?${params.toString()}`)
+  );
+}
+
+export async function fetchTimeseries(
+  range: RangeParams,
+  ruleSetId?: string
+): Promise<ApiTimeseries> {
+  const params = new URLSearchParams(range);
+  if (ruleSetId) params.set('ruleSetId', ruleSetId);
+  return handleResponse<ApiTimeseries>(
+    await fetch(`${API_BASE_PATH}/api/monitoring/timeseries?${params.toString()}`)
+  );
+}
+
+export async function fetchTopRejected(
+  range: RangeParams,
+  limit = 20,
+  ruleSetId?: string
+): Promise<ApiRejectedKey[]> {
+  const params = new URLSearchParams(range);
+  params.set('limit', String(limit));
+  if (ruleSetId) params.set('ruleSetId', ruleSetId);
+  return handleResponse<ApiRejectedKey[]>(
+    await fetch(`${API_BASE_PATH}/api/monitoring/top-rejected?${params.toString()}`)
+  );
+}
+
+export async function fetchKeyTransforms(): Promise<string[]> {
+  return handleResponse<string[]>(await fetch(`${API_BASE_PATH}/api/keys/transforms`));
+}
+
+export async function lookupKey(request: {
+  value: string;
+  transform: string;
+  window: string;
+}): Promise<ApiKeyLookup> {
+  return handleResponse<ApiKeyLookup>(
+    await fetch(`${API_BASE_PATH}/api/keys/decisions`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(request),
+    })
+  );
+}
+
+export async function fetchAudit(search: AuditSearch): Promise<ApiPage<ApiAuditEntry>> {
+  const params = new URLSearchParams({ page: String(search.page), size: String(search.size) });
+  if (search.action) params.set('action', search.action);
+  if (search.actor) params.set('actor', search.actor);
+  if (search.q) params.set('q', search.q);
+  return handleResponse<ApiPage<ApiAuditEntry>>(
+    await fetch(`${API_BASE_PATH}/api/audit?${params.toString()}`)
+  );
+}
+
+export async function fetchAuditEntry(id: string): Promise<ApiAuditEntry> {
+  return handleResponse<ApiAuditEntry>(
+    await fetch(`${API_BASE_PATH}/api/audit/${encodeURIComponent(id)}`)
+  );
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
+  notifyAuditFailure(response);
   if (!response.ok) {
     // Handle 401 Unauthorized - session might be expired
     if (response.status === 401) {
