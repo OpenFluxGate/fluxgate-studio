@@ -241,44 +241,48 @@ export function OverviewScreen() {
             }}
             csvName="top-rejected.csv"
           >
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <th className={TH}>{t('col.key')}</th>
-                  <th className={TH}>{t('col.ruleSet')}</th>
-                  <th className={`${TH} w-32`}>{t('col.rejected')}</th>
-                  <th className={TH}>{t('col.lastRejected')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topRows.map((row) => (
-                  <tr key={`${row.ruleSetId}:${row.key}`}>
-                    <td className={`${TD} num`}>
-                      {isAdmin && !row.masked ? (
-                        <Link
-                          href={`/keys?value=${encodeURIComponent(row.key)}&transform=none`}
-                          className="text-s1 hover:underline"
-                        >
-                          {row.key}
-                        </Link>
-                      ) : (
-                        row.key
-                      )}
-                    </td>
-                    <td className={`${TD} num text-fg2`}>{row.ruleSetId}</td>
-                    <td className={TD}>
-                      <BarGauge
-                        value={row.rejected}
-                        max={maxRejected}
-                        color="--c-s2"
-                        label={formatCount(row.rejected)}
-                      />
-                    </td>
-                    <td className={`${TD} text-muted`}>{ago(row.lastRejectedAt)}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className={TH}>{t('col.key')}</th>
+                    <th className={TH}>{t('col.ruleSet')}</th>
+                    <th className={`${TH} w-32`}>{t('col.rejected')}</th>
+                    <th className={TH}>{t('col.lastRejected')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {topRows.map((row) => (
+                    <tr key={`${row.ruleSetId}:${row.key}`}>
+                      <td className={`${TD} num`}>
+                        {isAdmin && !row.masked ? (
+                          <Link
+                            href={`/keys?value=${encodeURIComponent(row.key)}&transform=none`}
+                            className="text-s1 hover:underline"
+                          >
+                            {row.key}
+                          </Link>
+                        ) : (
+                          row.key
+                        )}
+                      </td>
+                      <td className={`${TD} num text-fg2 whitespace-nowrap`}>{row.ruleSetId}</td>
+                      <td className={TD}>
+                        <BarGauge
+                          value={row.rejected}
+                          max={maxRejected}
+                          color="--c-s2"
+                          label={formatCount(row.rejected)}
+                        />
+                      </td>
+                      <td className={`${TD} text-muted whitespace-nowrap`}>
+                        {ago(row.lastRejectedAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </Panel>
         </div>
       </Row>

@@ -6,7 +6,14 @@ import { useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 
 import { type ApiKeyLookup, fetchKeyTransforms, lookupKey } from '@/lib/api';
-import { formatClock, formatCount, formatDateTime, formatTimestamp } from '@/lib/format';
+import {
+  formatClock,
+  formatCount,
+  formatDateTime,
+  formatHourMinute,
+  formatMonthDay,
+  formatTimestamp,
+} from '@/lib/format';
 import { type MessageKey } from '@/lib/i18n';
 
 import { TimeSeries } from '../charts';
@@ -189,7 +196,7 @@ export function KeysScreen() {
                     },
                   ]}
                   height={large ? 480 : 160}
-                  formatTime={formatDateTime}
+                  formatTime={result.window === '7d' ? formatMonthDay : formatHourMinute}
                   formatTooltipTime={formatTimestamp}
                 />
               </div>

@@ -5,6 +5,7 @@ import {
   formatBucket,
   formatCount,
   formatHourMinute,
+  formatMonthDay,
   formatPercent,
   formatTimestamp,
 } from './format';
@@ -37,5 +38,6 @@ describe('time formatting for panels', () => {
     const ts = new Date(2026, 10, 14, 5, 3, 9).getTime();
     expect(formatTimestamp(ts)).toBe('2026-11-14 05:03:09');
     expect(formatHourMinute(ts)).toBe('05:03');
+    expect(formatMonthDay(ts)).toBe('11-14');
   });
 });

@@ -41,3 +41,8 @@ export function formatTimestamp(timestamp: number): string {
   const date = new Date(timestamp);
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${formatClock(timestamp)}`;
 }
+
+export function formatMonthDay(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}

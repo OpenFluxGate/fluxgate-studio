@@ -25,7 +25,8 @@ import { useKiosk } from './kiosk';
 import { usePersistentFlag } from './persistentFlag';
 import { useNow } from './useLive';
 
-export const TH = 'border-b border-line px-2 py-1.5 text-left text-[11px] font-medium text-s1';
+export const TH =
+  'border-b border-line px-2 py-1.5 text-left text-[11px] font-medium text-s1 whitespace-nowrap';
 export const TD = 'border-b border-line/60 px-2 py-1.5 align-top';
 export const BUTTON =
   'inline-flex items-center gap-1 rounded border border-line-strong bg-panel2 px-2 py-1 text-xs text-fg hover:border-fg2 disabled:opacity-50';

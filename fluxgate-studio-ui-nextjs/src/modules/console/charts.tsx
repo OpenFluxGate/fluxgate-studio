@@ -90,6 +90,7 @@ export function TimeSeries({
         axes: [
           {
             ...axis,
+            space: 72,
             values: (_plot, splits) =>
               splits.map((split) => latest.current.formatTime(split * 1000)),
           },
@@ -287,7 +288,7 @@ export function BarGauge({
 }) {
   const ratio = max > 0 ? Math.min(1, value / max) : 0;
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex min-w-28 items-center gap-2">
       <div className="bg-panel2 h-2 flex-1 overflow-hidden rounded-sm">
         <div
           className="h-full rounded-sm"
