@@ -269,6 +269,9 @@ export function OverviewScreen() {
                   {set.ruleSetId}
                 </option>
               ))}
+              {state.ruleSet && !allSets.some((set) => set.ruleSetId === state.ruleSet) && (
+                <option value={state.ruleSet}>{state.ruleSet}</option>
+              )}
             </select>
           </label>
         </div>
@@ -344,14 +347,17 @@ export function OverviewScreen() {
             }
             state={{ ...seriesState, empty: false }}
             delta={
-              series.data && (
+              series.data &&
+              (summary.total === 0 ? (
+                t('overview.noDecisions')
+              ) : (
                 <Delta
                   current={summary.rate}
                   previous={previousSummary ? previousSummary.rate : null}
                   points
                   badWhenUp
                 />
-              )
+              ))
             }
           />
           <StatPanel

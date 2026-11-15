@@ -77,11 +77,12 @@ function useDebounced<T>(value: T, delay = 300): T {
   return debounced;
 }
 
-function changedFields(entry: ApiAuditEntry): string[] {
+/** Fields whose readable value changed. An empty object and an empty list both read as none. */
+function changedFields(entry: ApiAuditEntry, locale: Locale = 'en'): string[] {
   const before = entry.before ?? {};
   const after = entry.after ?? {};
   return Object.keys({ ...before, ...after }).filter(
-    (field) => JSON.stringify(before[field]) !== JSON.stringify(after[field])
+    (field) => valueLabel(field, before[field], locale) !== valueLabel(field, after[field], locale)
   );
 }
 
@@ -95,7 +96,7 @@ function summary(entry: ApiAuditEntry, t: Translate, locale: Locale): string {
       .map((field) => `${fieldLabel(field, locale)} ${valueLabel(field, snapshot[field], locale)}`)
       .join(' · ');
   }
-  const fields = changedFields(entry);
+  const fields = changedFields(entry, locale);
   if (fields.length === 0) {
     return entry.detail && Object.keys(entry.detail).length
       ? Object.entries(entry.detail)
@@ -131,7 +132,7 @@ function ActionBadge({ action }: { action: string }) {
 
 function Detail({ entry }: { entry: ApiAuditEntry }) {
   const { t, locale } = useI18n();
-  const fields = changedFields(entry);
+  const fields = changedFields(entry, locale);
   const snapshot =
     entry.action === 'RULE_CREATE'
       ? entry.after

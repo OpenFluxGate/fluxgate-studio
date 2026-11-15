@@ -225,7 +225,7 @@ export function KeysScreen() {
                     {t(`keys.status.${status.status}` as MessageKey)}
                   </div>
                   <div className="num text-fg2 text-[13px]">
-                    {formatTimestamp(status.lastDecisionAt)}
+                    {t('keys.lastDecision', { time: formatTimestamp(status.lastDecisionAt) })}
                     <span aria-hidden> · </span>
                     {status.blockedUntil
                       ? t(status.status === 'BLOCKED' ? 'keys.blockedUntil' : 'keys.releasedAt', {

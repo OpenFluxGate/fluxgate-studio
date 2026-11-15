@@ -358,6 +358,12 @@ export const en = {
   'unit.seconds': '{value}s',
   'rules.listTitle': 'Rule list',
   'audit.listTitle': 'Entries',
+  'overview.noDecisions': 'No decisions in this range',
+  'keys.lastDecision': 'Last decision {time}',
+  'rules.turnOff': 'Turn rule off',
+  'rules.turnOn': 'Turn rule on',
+  'rules.turnOffWarning': 'While it is off, services stop applying this limit.',
+  'rules.turnOnWarning': 'Services start applying this limit as soon as it is on.',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -717,6 +723,12 @@ export const ko: Record<MessageKey, string> = {
   'unit.seconds': '{value}초',
   'rules.listTitle': '규칙 목록',
   'audit.listTitle': '기록 목록',
+  'overview.noDecisions': '이 기간 판정 없음',
+  'keys.lastDecision': '마지막 판정 {time}',
+  'rules.turnOff': '규칙 끄기',
+  'rules.turnOn': '규칙 켜기',
+  'rules.turnOffWarning': '끄는 동안 서비스는 이 한도를 적용하지 않습니다.',
+  'rules.turnOnWarning': '켜면 서비스가 이 한도를 바로 적용합니다.',
 };
 
 export const messages: Record<Locale, Record<MessageKey, string>> = { en, ko };

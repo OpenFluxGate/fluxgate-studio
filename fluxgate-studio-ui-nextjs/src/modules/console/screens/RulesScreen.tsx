@@ -467,8 +467,20 @@ export function RulesScreen() {
           title={pendingTitle(pending)}
           changes={pending.changes}
           busy={busy}
-          confirmLabel={pending.kind === 'delete' ? t('rules.deleteConfirmLabel') : undefined}
-          warning={pending.kind === 'delete' ? t('rules.deleteWarning') : undefined}
+          confirmLabel={
+            pending.kind === 'delete'
+              ? t('rules.deleteConfirmLabel')
+              : pending.kind === 'toggle'
+                ? t(pending.rule.enabled ? 'rules.turnOff' : 'rules.turnOn')
+                : undefined
+          }
+          warning={
+            pending.kind === 'delete'
+              ? t('rules.deleteWarning')
+              : pending.kind === 'toggle'
+                ? t(pending.rule.enabled ? 'rules.turnOffWarning' : 'rules.turnOnWarning')
+                : undefined
+          }
           onCancel={() => setPending(null)}
           onConfirm={confirmPending}
         />
