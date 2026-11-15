@@ -75,7 +75,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <KioskContext.Provider value={kioskValue}>
       <a
         href="#main"
-        className="bg-s1 sr-only z-[70] rounded px-3 py-2 text-white focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
+        className="bg-primary sr-only z-[70] rounded px-3 py-2 text-white focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
       >
         {t('common.skip')}
       </a>
@@ -107,7 +107,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     {active && (
                       <span
                         aria-hidden
-                        className="bg-s1 absolute top-2 bottom-2 left-0 w-0.5 rounded"
+                        className="bg-primary absolute top-2 bottom-2 left-0 w-0.5 rounded"
                       />
                     )}
                     <Icon size={17} aria-hidden className="shrink-0" />

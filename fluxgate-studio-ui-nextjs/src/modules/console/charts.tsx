@@ -30,6 +30,30 @@ interface Hover {
   flip: boolean;
 }
 
+/** Annotations closer than this many pixels share one marker. */
+const MARKER_GAP = 12;
+
+interface Marker {
+  left: number;
+  top: number;
+  notes: Annotation[];
+}
+
+/** Groups annotations that would overlap on screen into one marker. */
+export function clusterAnnotations(
+  positions: { x: number; note: Annotation }[],
+  gap = MARKER_GAP
+): { x: number; notes: Annotation[] }[] {
+  const sorted = [...positions].sort((a, b) => a.x - b.x);
+  const clusters: { x: number; notes: Annotation[] }[] = [];
+  for (const { x, note } of sorted) {
+    const last = clusters[clusters.length - 1];
+    if (last && x - last.x < gap) last.notes.push(note);
+    else clusters.push({ x, notes: [note] });
+  }
+  return clusters;
+}
+
 function token(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#8e9196';
 }
@@ -84,6 +108,8 @@ export function TimeSeries({
   const chart = useRef<uPlot | null>(null);
   const latest = useRef({ times, series, onZoom, annotations });
   const [hover, setHover] = useState<Hover | null>(null);
+  const [markers, setMarkers] = useState<Marker[]>([]);
+  const { t } = useI18n();
   const { resolved } = useTheme();
   const signature = series.map((spec) => `${spec.label}:${spec.color}`).join('|');
 
@@ -103,7 +129,7 @@ export function TimeSeries({
       font: '11px Inter, system-ui, sans-serif',
       labelFont: '11px Inter, system-ui, sans-serif',
     };
-    const marker = token('--c-warning');
+    const marker = token('--c-annotation');
     const plot = new uPlot(
       {
         width: element.clientWidth,
@@ -143,26 +169,31 @@ export function TimeSeries({
         hooks: {
           draw: [
             (u) => {
+              const positions = latest.current.annotations
+                .map((note) => ({ x: u.valToPos(note.time / 1000, 'x'), note }))
+                .filter(({ x }) => x >= 0 && x <= u.bbox.width / uPlot.pxRatio);
+              const clusters = clusterAnnotations(positions);
               const context = u.ctx;
               context.save();
               context.strokeStyle = marker;
-              context.fillStyle = marker;
-              context.lineWidth = 1.5;
-              context.setLineDash([4, 4]);
-              for (const note of latest.current.annotations) {
-                const x = u.valToPos(note.time / 1000, 'x', true);
-                if (x < u.bbox.left || x > u.bbox.left + u.bbox.width) continue;
+              context.lineWidth = 1.5 * uPlot.pxRatio;
+              context.setLineDash([4 * uPlot.pxRatio, 4 * uPlot.pxRatio]);
+              for (const cluster of clusters) {
+                const x = u.bbox.left + cluster.x * uPlot.pxRatio;
                 context.beginPath();
                 context.moveTo(x, u.bbox.top);
                 context.lineTo(x, u.bbox.top + u.bbox.height);
                 context.stroke();
-                context.beginPath();
-                context.moveTo(x - 5, u.bbox.top);
-                context.lineTo(x + 5, u.bbox.top);
-                context.lineTo(x, u.bbox.top + 7);
-                context.fill();
               }
               context.restore();
+              const next = clusters.map((cluster) => ({
+                left: u.over.offsetLeft + cluster.x,
+                top: u.over.offsetTop,
+                notes: cluster.notes,
+              }));
+              setMarkers((previous) =>
+                JSON.stringify(previous) === JSON.stringify(next) ? previous : next
+              );
             },
           ],
           setSelect: [
@@ -218,6 +249,45 @@ export function TimeSeries({
   return (
     <div className="relative" onMouseLeave={() => setHover(null)}>
       <div ref={host} />
+      {markers.map((item) => (
+        <span
+          key={`${item.left}-${item.notes[0].time}`}
+          className="group absolute z-20 -translate-x-1/2"
+          style={{ left: item.left, top: item.top - 9 }}
+        >
+          <button
+            type="button"
+            aria-label={item.notes
+              .map((note) => `${formatTooltipTime(note.time)} ${note.text}`)
+              .join(', ')}
+            className="bg-annotation text-bg flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-none font-semibold"
+          >
+            {item.notes.length > 1 ? item.notes.length : <MarkerGlyph inverted />}
+          </button>
+          <span
+            role="tooltip"
+            className="border-line-strong bg-panel2 pointer-events-none absolute top-5 left-1/2 z-30 hidden w-72 -translate-x-1/2 rounded-md border px-2.5 py-2 text-xs shadow-xl group-focus-within:block group-hover:block"
+          >
+            <span className="text-muted mb-1 block">
+              {t('chart.annotations', { count: item.notes.length })}
+            </span>
+            {item.notes.map((note) => (
+              <span key={`${note.time}-${note.text}`} className="mt-1 flex gap-1.5">
+                <span className="num text-muted shrink-0">{formatTooltipTime(note.time)}</span>
+                <span className="text-fg">{note.text}</span>
+              </span>
+            ))}
+          </span>
+        </span>
+      ))}
+      {markers.length > 0 && (
+        <div className="text-muted flex items-center gap-1.5 px-1 pt-1 text-xs">
+          <MarkerGlyph />
+          {t('chart.annotations', {
+            count: markers.reduce((sum, item) => sum + item.notes.length, 0),
+          })}
+        </div>
+      )}
       {point && (
         <div
           role="status"
@@ -248,8 +318,9 @@ export function TimeSeries({
           {notes.map((note) => (
             <div
               key={`${note.time}-${note.text}`}
-              className="border-line text-warn mt-1.5 border-t pt-1.5"
+              className="border-line text-fg2 mt-1.5 flex gap-1.5 border-t pt-1.5"
             >
+              <MarkerGlyph />
               {note.text}
             </div>
           ))}
@@ -259,49 +330,54 @@ export function TimeSeries({
   );
 }
 
-export function Legend({ series, unit }: { series: SeriesSpec[]; unit?: string }) {
-  const { t } = useI18n();
-  const head = 'px-2 py-1 text-right text-xs font-medium text-muted';
+/** Small downward triangle in the annotation color. */
+function MarkerGlyph({ inverted = false }: { inverted?: boolean }) {
   return (
-    <table className="mt-1 w-auto min-w-80 text-xs">
-      <thead>
-        <tr>
-          <th scope="col" className="text-muted px-2 py-1 text-left text-xs font-medium">
-            {t('legend.series')}
-            {unit ? ` (${unit})` : ''}
-          </th>
-          <th scope="col" className={head}>
-            {t('legend.mean')}
-          </th>
-          <th scope="col" className={head}>
-            {t('legend.max')}
-          </th>
-          <th scope="col" className={head}>
-            {t('legend.last')}
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {series.map((spec) => {
-          const stats = legendStats(spec.values.filter((value): value is number => value !== null));
-          return (
-            <tr key={spec.label}>
-              <td className="text-fg2 px-2 py-0.5">
-                <span
-                  aria-hidden
-                  className="mr-2 inline-block h-0.5 w-3 align-middle"
-                  style={{ background: `var(${spec.color})` }}
-                />
-                {spec.label}
-              </td>
-              <td className="num px-2 text-right">{stats.mean.toFixed(1)}</td>
-              <td className="num px-2 text-right">{formatCount(stats.max)}</td>
-              <td className="num px-2 text-right">{formatCount(stats.last)}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <svg
+      aria-hidden
+      width="8"
+      height="7"
+      viewBox="0 0 8 7"
+      className={`mt-[3px] shrink-0 ${inverted ? 'fill-bg' : 'fill-annotation'}`}
+    >
+      <path d="M0 0h8L4 7z" />
+    </svg>
+  );
+}
+
+/** One line of mean, max and last for a series, shared by every chart panel. */
+export function SeriesStats({
+  values,
+  unit,
+  label,
+  color,
+}: {
+  values: (number | null)[];
+  unit: string;
+  label?: string;
+  color?: string;
+}) {
+  const { t } = useI18n();
+  const stats = legendStats(values.filter((value): value is number => value !== null));
+  return (
+    <p className="num text-muted flex flex-wrap items-center gap-x-1 px-3 pb-2 text-xs">
+      {label && (
+        <span className="text-fg2 mr-1 inline-flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="inline-block h-0.5 w-3"
+            style={{ background: `var(${color ?? '--c-s1'})` }}
+          />
+          {label}
+        </span>
+      )}
+      {t('legend.mean')} <span className="text-fg2">{stats.mean.toFixed(1)}</span>
+      <span aria-hidden> · </span>
+      {t('legend.max')} <span className="text-fg2">{formatCount(stats.max)}</span>
+      <span aria-hidden> · </span>
+      {t('legend.last')} <span className="text-fg2">{formatCount(stats.last)}</span>
+      <span className="ml-1">({unit})</span>
+    </p>
   );
 }
 

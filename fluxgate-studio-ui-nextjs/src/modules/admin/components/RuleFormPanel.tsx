@@ -212,7 +212,12 @@ export const RuleFormPanel = ({
           <button type="button" className={BUTTON} onClick={close}>
             {t('common.cancel')}
           </button>
-          <button type="submit" form="rule-form" className={BUTTON_PRIMARY}>
+          <button
+            type="submit"
+            form="rule-form"
+            className={BUTTON_PRIMARY}
+            disabled={Boolean(rule) && !dirty}
+          >
             {t('form.save')}
           </button>
         </>
@@ -503,7 +508,7 @@ export const RuleFormPanel = ({
 
         <aside className="border-line bg-bg/40 min-w-0 border-t p-4 lg:border-t-0 lg:border-l">
           <h3 className="text-muted mb-2 text-xs font-medium">{t('form.preview')}</h3>
-          <pre className="mono border-line bg-panel2 text-fg2 rounded-md border p-3 text-xs break-all whitespace-pre-wrap">
+          <pre className="mono border-line bg-panel2 text-fg2 rounded-md border p-3 text-xs break-words whitespace-pre-wrap">
             {JSON.stringify(
               {
                 ...formData,

@@ -10,11 +10,21 @@ import { type ApiKeyLookup, fetchKeyTransforms, lookupKey } from '@/lib/api';
 import { formatBucket, formatClock, formatCount, formatTimestamp } from '@/lib/format';
 import { type MessageKey } from '@/lib/i18n';
 
-import { Legend, type SeriesSpec, TimeSeries } from '../charts';
+import { type SeriesSpec, SeriesStats, TimeSeries } from '../charts';
 import { BUTTON, BUTTON_PRIMARY, Field, INPUT } from '../controls';
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
-import { Forbidden, Notice, PageHeader, Panel, SeverityIcon, TD, TH, WindowPicker } from '../ui';
+import {
+  Forbidden,
+  Notice,
+  PageHeader,
+  PageIntro,
+  Panel,
+  SeverityIcon,
+  TD,
+  TH,
+  WindowPicker,
+} from '../ui';
 
 const WINDOWS = ['1h', '24h', '7d'] as const;
 type Range = (typeof WINDOWS)[number];
@@ -27,7 +37,9 @@ function Timeline({ result }: { result: ApiKeyLookup }) {
   const { t, locale } = useI18n();
   const times = useMemo(() => result.buckets.map((bucket) => bucket.start), [result]);
   const series: SeriesSpec[] = useMemo(() => {
-    const settled = result.buckets.map((bucket) => bucket.start + result.bucketMillis <= result.to);
+    const settled = result.buckets.map(
+      (bucket) => bucket.start >= result.from && bucket.start + result.bucketMillis <= result.to
+    );
     return [
       {
         label: t('decision.allowed'),
@@ -67,7 +79,15 @@ function Timeline({ result }: { result: ApiKeyLookup }) {
             bucketMillis={result.bucketMillis}
             formatTooltipTime={formatTimestamp}
           />
-          <Legend series={series} unit={unit} />
+          {series.map((spec) => (
+            <SeriesStats
+              key={spec.label}
+              values={spec.values}
+              unit={unit}
+              label={spec.label}
+              color={spec.color}
+            />
+          ))}
         </div>
       )}
     </Panel>
@@ -117,9 +137,8 @@ export function KeysScreen() {
 
   return (
     <div>
-      <PageHeader title={t('keys.title')}>
-        <span className="text-muted text-xs">{t('keys.audited')}</span>
-      </PageHeader>
+      <PageHeader title={t('keys.title')} />
+      <PageIntro>{t('keys.intro')}</PageIntro>
 
       <form
         role="search"
@@ -196,6 +215,7 @@ export function KeysScreen() {
                 key={status.ruleSetId ?? '-'}
                 title={status.ruleSetId ?? '-'}
                 description={t('keys.basis')}
+                menu={false}
               >
                 <div className="space-y-1.5 px-3 pb-3">
                   <div

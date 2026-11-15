@@ -25,12 +25,32 @@ export function valueLabel(field: string, value: unknown, locale: Locale): strin
   if (field === 'scope') return scopeLabel(String(value), locale);
   if (field === 'onLimitExceedPolicy') return policyLabel(String(value), locale);
   if (field === 'keyStrategyId') return keyStrategyLabel(String(value), locale);
+  if ((field === 'logo' || field === 'favicon') && typeof value === 'string') {
+    return imageLabel(value, locale);
+  }
   if (typeof value === 'boolean') return translate(locale, value ? 'value.true' : 'value.false');
   if (Array.isArray(value)) {
     return value.length ? value.join(', ') : translate(locale, 'value.empty');
   }
   if (typeof value === 'object') {
-    return Object.keys(value).length ? JSON.stringify(value) : translate(locale, 'value.empty');
+    const entries = Object.entries(value as Record<string, unknown>).filter(
+      ([, item]) => !(Array.isArray(item) && item.length === 0) && item !== null && item !== ''
+    );
+    return entries.length
+      ? entries.map(([key, item]) => `${key}: ${valueLabel(key, item, locale)}`).join(', ')
+      : translate(locale, 'value.empty');
   }
   return String(value);
+}
+
+/** Turns an audit description such as "image/svg+xml, 0.2 KB, 19df83b0" into "SVG image, 0.2 KB". */
+function imageLabel(description: string, locale: Locale): string {
+  const [mediaType, size] = description.split(', ');
+  if (!mediaType?.startsWith('image/') || !size) return description;
+  const type = mediaType
+    .slice('image/'.length)
+    .replace('svg+xml', 'svg')
+    .replace(/^(x-icon|vnd\.microsoft\.icon)$/, 'ico')
+    .toUpperCase();
+  return translate(locale, 'value.customImage', { type, size });
 }

@@ -44,7 +44,7 @@ export function LoginScreen({ error }: { error?: string }) {
             onClick={handleLogin}
             disabled={isLoading}
             aria-busy={isLoading}
-            className="bg-s1 hover:bg-s1-strong inline-flex h-9 w-full items-center justify-center gap-1.5 rounded px-3 text-[13px] font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            className="bg-primary hover:bg-primary-hover inline-flex h-9 w-full items-center justify-center gap-1.5 rounded px-3 text-[13px] font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLoading ? t('login.redirecting') : t('login.signIn')}
             <ArrowRight size={15} aria-hidden />

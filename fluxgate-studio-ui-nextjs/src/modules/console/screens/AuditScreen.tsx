@@ -27,7 +27,7 @@ import { fieldLabel, valueLabel } from '@/lib/labels';
 import { Badge, BUTTON, BUTTON_QUIET, Field, INPUT } from '../controls';
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
-import { Forbidden, PageHeader, Panel, TD, TH, WindowPicker } from '../ui';
+import { Forbidden, PageHeader, PageIntro, Panel, TD, TH, WindowPicker } from '../ui';
 
 const ACTIONS = [
   'RULE_CREATE',
@@ -54,16 +54,16 @@ const SNAPSHOT_FIELDS = ['scope', 'bands', 'enabled'];
 
 type BadgeTone = 'neutral' | 'ok' | 'warn' | 'bad' | 'info';
 const ACTION_STYLE: Record<string, { tone: BadgeTone; icon: typeof Plus }> = {
-  RULE_CREATE: { tone: 'ok', icon: Plus },
-  RULE_UPDATE: { tone: 'info', icon: Pencil },
+  RULE_CREATE: { tone: 'neutral', icon: Plus },
+  RULE_UPDATE: { tone: 'neutral', icon: Pencil },
   RULE_TOGGLE: { tone: 'neutral', icon: Power },
   RULE_DELETE: { tone: 'bad', icon: Trash2 },
   RULES_DELETE_ALL: { tone: 'bad', icon: Trash2 },
-  RULES_IMPORT: { tone: 'info', icon: Upload },
-  POLICY_PUBLISH: { tone: 'info', icon: Send },
+  RULES_IMPORT: { tone: 'neutral', icon: Upload },
+  POLICY_PUBLISH: { tone: 'neutral', icon: Send },
   POLICY_ROLLBACK: { tone: 'warn', icon: Undo2 },
   KEY_LOOKUP: { tone: 'neutral', icon: Search },
-  BRANDING_UPDATE: { tone: 'info', icon: ImageUp },
+  BRANDING_UPDATE: { tone: 'neutral', icon: ImageUp },
 };
 
 type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string;
@@ -171,7 +171,9 @@ function Detail({ entry }: { entry: ApiAuditEntry }) {
             {fields.map((field) => (
               <tr key={field}>
                 <td className={`${TD} text-fg2`}>{fieldLabel(field, locale)}</td>
-                <td className={`${TD} text-muted decoration-bad/60 line-through`}>
+                <td
+                  className={`${TD} text-muted ${entry.before?.[field] == null ? '' : 'decoration-bad/60 line-through'}`}
+                >
                   {valueLabel(field, entry.before?.[field], locale)}
                 </td>
                 <td className={TD}>
@@ -267,11 +269,8 @@ export function AuditScreen() {
 
   return (
     <div>
-      <PageHeader title={t('audit.title')}>
-        {result.data && (
-          <span className="num text-muted text-xs">{t('audit.count', { total })}</span>
-        )}
-      </PageHeader>
+      <PageHeader title={t('audit.title')} />
+      <PageIntro>{t('audit.intro')}</PageIntro>
 
       <form
         role="search"
@@ -341,6 +340,11 @@ export function AuditScreen() {
 
       <Panel
         title={t('audit.title')}
+        actions={
+          result.data && (
+            <span className="num text-muted text-xs">{t('audit.count', { total })}</span>
+          )
+        }
         data={{
           headers: [
             t('col.time'),
@@ -382,9 +386,9 @@ export function AuditScreen() {
               <colgroup>
                 <col className="w-9" />
                 <col className="w-40" />
-                <col className="w-36" />
                 <col className="w-32" />
-                <col className="w-60" />
+                <col className="w-28" />
+                <col className="w-44 xl:w-64" />
                 <col />
               </colgroup>
               <thead>

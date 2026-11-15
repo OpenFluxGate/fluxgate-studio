@@ -27,6 +27,7 @@ import { RuleFormPanel, SimulationPanel } from '@/modules/admin';
 import { type FieldErrors, type Rule, ruleIdentity } from '@/modules/admin/types';
 
 import { ConfirmChangeDialog } from '../ConfirmChangeDialog';
+import { Field } from '../controls';
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
 import {
@@ -37,6 +38,7 @@ import {
   INPUT,
   Notice,
   PageHeader,
+  PageIntro,
   Panel,
   TD,
   TH,
@@ -203,20 +205,6 @@ export function RulesScreen() {
   return (
     <div>
       <PageHeader title={t('rules.title')}>
-        <label htmlFor="rule-search" className="sr-only">
-          {t('rules.searchLabel')}
-        </label>
-        <input
-          id="rule-search"
-          name="q"
-          type="search"
-          autoComplete="off"
-          spellCheck={false}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={`${t('rules.search')}…`}
-          className={`${INPUT} w-64`}
-        />
         <button type="button" className={BUTTON} onClick={onExport}>
           <Download size={14} aria-hidden />
           {t('rules.export')}
@@ -253,6 +241,26 @@ export function RulesScreen() {
           <Badge icon={Eye}>{t('rules.readOnly')}</Badge>
         )}
       </PageHeader>
+      <PageIntro>{t('rules.intro')}</PageIntro>
+      <form
+        role="search"
+        className="border-line bg-panel mb-4 flex flex-wrap items-end gap-3 rounded-md border p-3"
+        onSubmit={(event) => event.preventDefault()}
+      >
+        <Field id="rule-search" label={t('rules.searchLabel')} className="min-w-64 flex-1">
+          <input
+            id="rule-search"
+            name="q"
+            type="search"
+            autoComplete="off"
+            spellCheck={false}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={`${t('rules.search')}…`}
+            className={`${INPUT} w-full`}
+          />
+        </Field>
+      </form>
 
       {error && (
         <Notice tone="bad" onClose={() => setError(null)}>
@@ -323,9 +331,7 @@ export function RulesScreen() {
                     >
                       <span className="mono">{ruleSetId ?? t('rules.unassigned')}</span>
                       {ruleSetId && (
-                        <span
-                          className={`num ml-3 text-xs font-normal ${rejectedBySet.get(ruleSetId) ? 'text-bad' : 'text-muted'}`}
-                        >
+                        <span className="num text-muted ml-3 text-xs font-normal">
                           {t('rules.rejected24h', {
                             count: formatCount(rejectedBySet.get(ruleSetId) ?? 0),
                           })}
@@ -336,7 +342,7 @@ export function RulesScreen() {
                   {members.map((rule) => (
                     <tr key={ruleIdentity(rule)} className="hover:bg-panel2/60">
                       <td className={TD}>
-                        <div className="mono text-fg" translate="no">
+                        <div className="mono text-fg whitespace-nowrap" translate="no">
                           {rule.id}
                         </div>
                         {rule.name !== rule.id && (
@@ -378,13 +384,15 @@ export function RulesScreen() {
                           >
                             <span
                               aria-hidden
-                              className={`relative inline-block h-5 w-9 rounded-full transition-colors ${rule.enabled ? 'bg-s1' : 'bg-line-strong'}`}
+                              className={`relative inline-block h-5 w-9 rounded-full transition-colors ${rule.enabled ? 'bg-primary' : 'bg-line-strong'}`}
                             >
                               <span
                                 className={`absolute top-0.5 left-0 h-4 w-4 rounded-full bg-white shadow transition-transform ${rule.enabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`}
                               />
                             </span>
-                            {t(rule.enabled ? 'rules.status.on' : 'rules.status.off')}
+                            <span className="whitespace-nowrap">
+                              {t(rule.enabled ? 'rules.status.on' : 'rules.status.off')}
+                            </span>
                           </button>
                         ) : (
                           <Badge tone={rule.enabled ? 'ok' : 'neutral'}>

@@ -17,14 +17,7 @@ import {
 } from '@/lib/api';
 import { formatAgo, formatBucket, formatCount, formatPercent, formatTimestamp } from '@/lib/format';
 import { type MessageKey } from '@/lib/i18n';
-import {
-  BAD_RATE,
-  bucketRates,
-  legendStats,
-  rateSeverity,
-  summarize,
-  WARN_RATE,
-} from '@/lib/stats';
+import { BAD_RATE, bucketRates, rateSeverity, summarize, WARN_RATE } from '@/lib/stats';
 import {
   apiRangeParams,
   DEFAULT_RANGE,
@@ -34,7 +27,14 @@ import {
   zoomTo,
 } from '@/lib/timeRange';
 
-import { type Annotation, BarGauge, type SeriesSpec, Sparkline, TimeSeries } from '../charts';
+import {
+  type Annotation,
+  BarGauge,
+  type SeriesSpec,
+  SeriesStats,
+  Sparkline,
+  TimeSeries,
+} from '../charts';
 import { useI18n } from '../I18nProvider';
 import { useKiosk } from '../kiosk';
 import { useMe } from '../MeProvider';
@@ -57,8 +57,9 @@ import { useLive, useNow } from '../useLive';
 const RATE_SCALE = 0.2;
 
 /** Points of the bucket still being counted are left out so the line does not fall to zero. */
-function settled(buckets: ApiBucket[], bucketMillis: number, to: number) {
-  return buckets.map((bucket) => bucket.start + bucketMillis <= to);
+/** A bucket is drawn only when it lies wholly inside the range, so partial edges never dip. */
+function settled(buckets: ApiBucket[], bucketMillis: number, from: number, to: number) {
+  return buckets.map((bucket) => bucket.start >= from && bucket.start + bucketMillis <= to);
 }
 
 function Delta({
@@ -94,21 +95,6 @@ function Delta({
       <span className={`num ${tone}`}>{text}</span>
       <span className="ml-1">{t('overview.vsPrevious', { delta: '' }).trim()}</span>
     </span>
-  );
-}
-
-function SeriesStats({ values, unit }: { values: (number | null)[]; unit: string }) {
-  const { t } = useI18n();
-  const stats = legendStats(values.filter((value): value is number => value !== null));
-  return (
-    <p className="num text-muted px-3 pb-2 text-xs">
-      {t('legend.mean')} <span className="text-fg2">{stats.mean.toFixed(1)}</span>
-      <span aria-hidden> · </span>
-      {t('legend.max')} <span className="text-fg2">{formatCount(stats.max)}</span>
-      <span aria-hidden> · </span>
-      {t('legend.last')} <span className="text-fg2">{formatCount(stats.last)}</span>
-      <span className="ml-1">({unit})</span>
-    </p>
   );
 }
 
@@ -161,7 +147,7 @@ export function OverviewScreen() {
   const buckets = useMemo(() => series.data?.buckets ?? [], [series.data]);
   const bucketMillis = series.data?.bucketMillis ?? 60_000;
   const complete = useMemo(
-    () => (series.data ? settled(buckets, bucketMillis, series.data.to) : []),
+    () => (series.data ? settled(buckets, bucketMillis, series.data.from, series.data.to) : []),
     [buckets, bucketMillis, series.data]
   );
   const times = useMemo(() => buckets.map((bucket) => bucket.start), [buckets]);
@@ -191,7 +177,15 @@ export function OverviewScreen() {
         .filter((entry) => entry.action !== 'KEY_LOOKUP')
         .map((entry) => ({
           time: Date.parse(entry.at),
-          text: `${t(`action.${entry.action}` as MessageKey)} · ${[entry.target?.ruleSetId, entry.target?.ruleId].filter(Boolean).join(' / ')} · ${entry.actor.name || entry.actor.username}`,
+          text: [
+            t(`action.${entry.action}` as MessageKey),
+            entry.target?.setting
+              ? t('settings.branding')
+              : [entry.target?.ruleSetId, entry.target?.ruleId].filter(Boolean).join(' / '),
+            entry.actor.name || entry.actor.username,
+          ]
+            .filter(Boolean)
+            .join(' · '),
         })),
     [notesSource.data, t]
   );
@@ -333,7 +327,15 @@ export function OverviewScreen() {
             unit="%"
             severity={series.data ? rateSeverity(summary.rate) : undefined}
             spark={bucketRates(settledBuckets)}
-            color="--c-warning"
+            color={series.data ? severityMark(rateSeverity(summary.rate)) : '--c-warning'}
+            actions={
+              <span className="num text-muted text-[11px] whitespace-nowrap">
+                {t('overview.thresholdsShort', {
+                  warn: formatPercent(WARN_RATE),
+                  bad: formatPercent(BAD_RATE),
+                })}
+              </span>
+            }
             state={{ ...seriesState, empty: false }}
             delta={
               series.data && (
@@ -350,6 +352,12 @@ export function OverviewScreen() {
             title={t('overview.activeRules')}
             value={stats.data ? String(stats.data.activeRules) : '–'}
             unit={stats.data ? `/ ${stats.data.totalRules}` : undefined}
+            delta={
+              stats.data &&
+              t('overview.disabledRules', {
+                count: stats.data.totalRules - stats.data.activeRules,
+              })
+            }
             state={{
               loading: !stats.data && !stats.error,
               error: stats.data ? undefined : stats.error,

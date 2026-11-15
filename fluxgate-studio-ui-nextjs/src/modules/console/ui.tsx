@@ -64,12 +64,12 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
   const environment = process.env.NEXT_PUBLIC_ENV_LABEL;
   return (
     <div className="border-line bg-panel sticky top-0 z-30 -mx-4 mb-4 flex h-12 items-center gap-3 border-b px-4">
-      <nav aria-label="breadcrumb" className="flex min-w-0 items-center gap-1.5 text-[13px]">
+      <nav aria-label="breadcrumb" className="flex shrink-0 items-center gap-1.5 text-[13px]">
         <span className="text-muted">FluxGate</span>
         <span aria-hidden className="text-faint">
           /
         </span>
-        <h1 className="text-fg truncate text-[15px] font-semibold">{title}</h1>
+        <h1 className="text-fg text-[15px] font-semibold whitespace-nowrap">{title}</h1>
       </nav>
       {environment && (
         <span
@@ -165,6 +165,7 @@ export function Panel({
   actions,
   className = '',
   bodyClassName = '',
+  menu = true,
   data,
   csvName,
   state,
@@ -175,6 +176,7 @@ export function Panel({
   actions?: React.ReactNode;
   className?: string;
   bodyClassName?: string;
+  menu?: boolean;
   data?: TableData;
   csvName?: string;
   state?: PanelState;
@@ -209,42 +211,44 @@ export function Panel({
           )}
           <div className="ml-auto flex items-center gap-1">
             {actions}
-            <div ref={rootRef} className="relative">
-              <button
-                ref={triggerRef}
-                type="button"
-                aria-label={`${title} ${t('panel.menu')}`}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                onClick={() => setMenuOpen(!menuOpen)}
-                className="text-muted hover:bg-panel2 hover:text-fg inline-flex h-7 w-7 items-center justify-center rounded transition-colors"
-              >
-                <EllipsisVertical size={15} aria-hidden />
-              </button>
-              {menuOpen && (
-                <MenuList label={`${title} ${t('panel.menu')}`}>
-                  <MenuItem icon={Maximize2} onSelect={() => choose('view')}>
-                    {t('panel.view')}
-                  </MenuItem>
-                  {data && (
-                    <MenuItem icon={Table2} onSelect={() => choose('data')}>
-                      {t('panel.data')}
+            {menu && (
+              <div ref={rootRef} className="relative">
+                <button
+                  ref={triggerRef}
+                  type="button"
+                  aria-label={`${title} ${t('panel.menu')}`}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  onClick={() => setMenuOpen(!menuOpen)}
+                  className="text-muted hover:bg-panel2 hover:text-fg inline-flex h-7 w-7 items-center justify-center rounded transition-colors"
+                >
+                  <EllipsisVertical size={15} aria-hidden />
+                </button>
+                {menuOpen && (
+                  <MenuList label={`${title} ${t('panel.menu')}`}>
+                    <MenuItem icon={Maximize2} onSelect={() => choose('view')}>
+                      {t('panel.view')}
                     </MenuItem>
-                  )}
-                  {data && (
-                    <MenuItem
-                      icon={Download}
-                      onSelect={() => {
-                        closeMenu(true);
-                        downloadCsv(csvName ?? 'panel.csv', toCsv(data.headers, data.rows));
-                      }}
-                    >
-                      {t('panel.csv')}
-                    </MenuItem>
-                  )}
-                </MenuList>
-              )}
-            </div>
+                    {data && (
+                      <MenuItem icon={Table2} onSelect={() => choose('data')}>
+                        {t('panel.data')}
+                      </MenuItem>
+                    )}
+                    {data && (
+                      <MenuItem
+                        icon={Download}
+                        onSelect={() => {
+                          closeMenu(true);
+                          downloadCsv(csvName ?? 'panel.csv', toCsv(data.headers, data.rows));
+                        }}
+                      >
+                        {t('panel.csv')}
+                      </MenuItem>
+                    )}
+                  </MenuList>
+                )}
+              </div>
+            )}
           </div>
         </header>
       )}
@@ -325,6 +329,7 @@ export function StatPanel({
   color = '--c-s1',
   delta,
   description,
+  actions,
   state,
 }: {
   title: string;
@@ -335,12 +340,14 @@ export function StatPanel({
   color?: string;
   delta?: React.ReactNode;
   description?: string;
+  actions?: React.ReactNode;
   state?: PanelState;
 }) {
   return (
     <Panel
       title={title}
       description={description}
+      actions={actions}
       state={state}
       data={
         spark
@@ -404,7 +411,7 @@ export function WindowPicker<T extends string>({
           role="radio"
           aria-checked={option === value}
           onClick={() => onChange(option)}
-          className={`h-full rounded-sm px-2.5 text-xs transition-colors ${option === value ? 'bg-s1 font-medium text-white' : 'text-fg2 hover:bg-line hover:text-fg'}`}
+          className={`h-full rounded-sm px-2.5 text-xs transition-colors ${option === value ? 'bg-primary font-medium text-white' : 'text-fg2 hover:bg-line hover:text-fg'}`}
         >
           {t(`window.${option}` as MessageKey)}
         </button>
@@ -440,18 +447,18 @@ export function Notice({
   children,
   onClose,
 }: {
-  tone?: 'info' | 'bad' | 'warn';
+  tone?: 'info' | 'ok' | 'bad' | 'warn';
   children: React.ReactNode;
   onClose?: () => void;
 }) {
   const { t } = useI18n();
-  const style =
-    tone === 'bad'
-      ? 'border-bad/50 bg-bad-soft text-bad'
-      : tone === 'warn'
-        ? 'border-warn-line bg-warn-soft text-warn'
-        : 'border-line bg-panel2 text-fg2';
-  const Icon = tone === 'bad' ? XOctagon : tone === 'warn' ? AlertTriangle : Info;
+  const style = {
+    bad: 'border-bad/50 bg-bad-soft text-bad',
+    warn: 'border-warn-line bg-warn-soft text-warn',
+    ok: 'border-ok/40 bg-ok-soft text-ok',
+    info: 'border-line bg-panel2 text-fg2',
+  }[tone];
+  const Icon = { bad: XOctagon, warn: AlertTriangle, ok: CheckCircle2, info: Info }[tone];
   return (
     <div
       role={tone === 'bad' ? 'alert' : 'status'}
@@ -471,6 +478,11 @@ export function Notice({
       )}
     </div>
   );
+}
+
+/** One line under the header that says what the screen is for. */
+export function PageIntro({ children }: { children: React.ReactNode }) {
+  return <p className="text-muted -mt-1 mb-4 max-w-3xl text-[13px]">{children}</p>;
 }
 
 export function Forbidden() {

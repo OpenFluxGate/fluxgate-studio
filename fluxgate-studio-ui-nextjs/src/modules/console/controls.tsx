@@ -2,12 +2,14 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
+import { Check } from 'lucide-react';
+
 export const BUTTON =
-  'inline-flex h-8 items-center justify-center gap-1.5 rounded border border-line-strong bg-panel2 px-3 text-[13px] text-fg transition-colors hover:border-fg2 hover:bg-line disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex h-8 items-center justify-center gap-1.5 rounded border border-line-strong bg-panel2 px-3 text-[13px] text-fg transition-colors hover:border-fg2 hover:bg-line disabled:cursor-not-allowed disabled:opacity-50 shrink-0 whitespace-nowrap';
 export const BUTTON_PRIMARY =
-  'inline-flex h-8 items-center justify-center gap-1.5 rounded bg-s1 px-3 text-[13px] font-medium text-white transition-colors hover:bg-s1-strong disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex h-8 items-center justify-center gap-1.5 rounded bg-primary px-3 text-[13px] font-medium text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 shrink-0 whitespace-nowrap';
 export const BUTTON_DANGER =
-  'inline-flex h-8 items-center justify-center gap-1.5 rounded bg-s2 px-3 text-[13px] font-medium text-white transition-colors hover:bg-s2-strong disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex h-8 items-center justify-center gap-1.5 rounded bg-s2 px-3 text-[13px] font-medium text-white transition-colors hover:bg-s2-strong disabled:cursor-not-allowed disabled:opacity-50 shrink-0 whitespace-nowrap';
 export const BUTTON_QUIET =
   'inline-flex h-7 items-center gap-1 rounded px-2 text-xs text-fg2 transition-colors hover:bg-panel2 hover:text-fg';
 export const INPUT =
@@ -117,7 +119,7 @@ export function Badge({
   }[tone];
   return (
     <span
-      className={`inline-flex h-5 items-center gap-1 rounded border px-1.5 text-[11px] font-medium whitespace-nowrap ${style}`}
+      className={`inline-flex h-5 items-center gap-1 rounded border px-1.5 text-xs font-medium whitespace-nowrap ${style}`}
     >
       {Icon && <Icon size={11} aria-hidden />}
       {children}
@@ -227,7 +229,7 @@ export function MenuItem({
     >
       {Icon ? <Icon size={14} aria-hidden /> : null}
       <span className="flex-1">{children}</span>
-      {checked && <span aria-hidden className="bg-s1 h-1.5 w-1.5 rounded-full" />}
+      {checked && <Check size={14} aria-hidden className="text-s1-text" />}
     </button>
   );
 }

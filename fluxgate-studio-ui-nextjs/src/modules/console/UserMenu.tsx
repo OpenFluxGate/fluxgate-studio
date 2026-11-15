@@ -46,7 +46,7 @@ export function UserMenu() {
       >
         <span
           aria-hidden
-          className="bg-s1 flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold text-white"
+          className="bg-primary flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold text-white"
         >
           {me ? initials(name) : ''}
         </span>

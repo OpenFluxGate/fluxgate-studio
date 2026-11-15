@@ -22,7 +22,7 @@ import { BRANDING_KEY, BrandMark, useBranding } from '../branding';
 import { Badge, BUTTON, BUTTON_PRIMARY } from '../controls';
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
-import { Notice, PageHeader, Panel } from '../ui';
+import { Notice, PageHeader, PageIntro, Panel } from '../ui';
 
 interface Option<T extends string> {
   value: T;
@@ -77,7 +77,7 @@ function Segmented<T extends string>({
             lang={option.lang}
             onClick={() => onChange(option.value)}
             onKeyDown={(event) => move(event, index)}
-            className={`h-full min-w-20 rounded px-3 text-[13px] transition-colors ${checked ? 'bg-s1 font-medium text-white' : 'text-fg2 hover:bg-line hover:text-fg'}`}
+            className={`h-full min-w-20 rounded px-3 text-[13px] transition-colors ${checked ? 'bg-primary font-medium text-white' : 'text-fg2 hover:bg-line hover:text-fg'}`}
           >
             {option.label}
           </button>
@@ -173,15 +173,15 @@ function ImageSetting({
       title={
         <span className="flex items-center gap-2">
           {t(kind === 'logo' ? 'settings.logo' : 'settings.favicon')}
-          <Badge tone={value ? 'info' : 'neutral'}>
-            {t(value ? 'settings.custom' : 'settings.default')}
-          </Badge>
+          <Badge>{t(value ? 'settings.custom' : 'settings.default')}</Badge>
         </span>
       }
       help={t(kind === 'logo' ? 'settings.logoHint' : 'settings.faviconHint')}
     >
       <div className="flex flex-wrap items-start gap-4">
-        {kind === 'logo' ? <LogoPreviews logo={value} /> : <FaviconPreview favicon={value} />}
+        <div className="flex w-[15.5rem] gap-4">
+          {kind === 'logo' ? <LogoPreviews logo={value} /> : <FaviconPreview favicon={value} />}
+        </div>
         {editable && (
           <div className="flex flex-col gap-2 self-center">
             <input
@@ -231,7 +231,7 @@ export function SettingsScreen() {
     favicon: null,
   });
   const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState<{ tone: 'info' | 'bad'; text: string } | null>(null);
+  const [notice, setNotice] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
 
   const saved: Images = {
     logo: branding.data?.logo ?? null,
@@ -280,7 +280,7 @@ export function SettingsScreen() {
       const result = await saveBranding(current);
       await mutate(BRANDING_KEY, result, { revalidate: false });
       setDraft(null);
-      setNotice({ tone: 'info', text: t('settings.saved') });
+      setNotice({ tone: 'ok', text: t('settings.saved') });
     } catch (error) {
       setNotice({
         tone: 'bad',
@@ -299,9 +299,11 @@ export function SettingsScreen() {
   return (
     <div>
       <PageHeader title={t('settings.title')} />
+      <PageIntro>{t('settings.intro')}</PageIntro>
       <div className="max-w-5xl">
         <Panel
           title={t('settings.preferences')}
+          menu={false}
           description={t('settings.preferencesHelp')}
           className="mb-4"
         >
@@ -328,6 +330,7 @@ export function SettingsScreen() {
 
         <Panel
           title={t('settings.branding')}
+          menu={false}
           description={t('settings.brandingHelp')}
           actions={
             isAdmin ? (

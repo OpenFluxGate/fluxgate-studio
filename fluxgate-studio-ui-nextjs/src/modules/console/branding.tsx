@@ -38,7 +38,7 @@ export function BrandMark({ size = 20, logo }: { size?: number; logo?: string | 
   return (
     <span
       aria-hidden
-      className="bg-s1 inline-flex shrink-0 items-center justify-center rounded text-white"
+      className="bg-primary inline-flex shrink-0 items-center justify-center rounded text-white"
       style={{ width: size, height: size }}
     >
       <Gauge size={Math.round(size * 0.62)} />

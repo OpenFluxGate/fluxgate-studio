@@ -75,7 +75,9 @@ export function ConfirmChangeDialog({
             {changes.map((change) => (
               <tr key={change.field}>
                 <td className={`${TD} text-fg2`}>{fieldLabel(change.field, locale)}</td>
-                <td className={`${TD} text-muted decoration-bad/60 line-through`}>
+                <td
+                  className={`${TD} text-muted ${change.before ? 'decoration-bad/60 line-through' : ''}`}
+                >
                   {change.before || t('value.empty')}
                 </td>
                 <td className={TD}>

@@ -7,7 +7,7 @@ import { CheckCircle2, XOctagon } from 'lucide-react';
 import { simulateRule } from '@/lib/api';
 import { formatCount } from '@/lib/format';
 import { formatLimit } from '@/lib/ruleMeaning';
-import { BUTTON, BUTTON_PRIMARY, Field, INPUT } from '@/modules/console/controls';
+import { Badge, BUTTON, BUTTON_PRIMARY, Field, INPUT } from '@/modules/console/controls';
 import { useI18n } from '@/modules/console/I18nProvider';
 import { Modal } from '@/modules/console/overlay';
 import { Notice, TD, TH } from '@/modules/console/ui';
@@ -200,8 +200,13 @@ export const SimulationPanel = ({ rule, onClose }: SimulationPanelProps) => {
                     <td className={`${TD} num text-right`}>{formatCount(band.available)}</td>
                     <td className={`${TD} num text-right`}>{formatCount(band.consumed)}</td>
                     <td className={`${TD} num text-right`}>{formatCount(band.remaining)}</td>
-                    <td className={`${TD} ${band.exceeded ? 'text-bad' : 'text-ok'}`}>
-                      {band.exceeded ? t('sim.exceeded') : t('sim.within')}
+                    <td className={TD}>
+                      <Badge
+                        tone={band.exceeded ? 'bad' : 'ok'}
+                        icon={band.exceeded ? XOctagon : CheckCircle2}
+                      >
+                        {band.exceeded ? t('sim.exceeded') : t('sim.within')}
+                      </Badge>
                     </td>
                   </tr>
                 ))}

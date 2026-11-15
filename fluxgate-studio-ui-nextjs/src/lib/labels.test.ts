@@ -15,7 +15,16 @@ describe('labels', () => {
     expect(valueLabel('enabled', true, 'en')).toBe('on');
     expect(valueLabel('tags', [], 'ko')).toBe('없음');
     expect(valueLabel('attributes', {}, 'ko')).toBe('없음');
-    expect(valueLabel('attributes', { tier: 'gold' }, 'ko')).toBe('{"tier":"gold"}');
+    expect(valueLabel('attributes', { tier: 'gold' }, 'ko')).toBe('tier: gold');
     expect(valueLabel('name', null, 'en')).toBe('none');
+  });
+  it('describes stored images and nested values for people', () => {
+    expect(valueLabel('logo', 'image/svg+xml, 0.2 KB, 19df83b0', 'ko')).toBe('SVG 이미지, 0.2 KB');
+    expect(valueLabel('favicon', 'image/x-icon, 1.1 KB, aa', 'en')).toBe('ICO image, 1.1 KB');
+    expect(valueLabel('logo', 'unreadable', 'en')).toBe('unreadable');
+    expect(valueLabel('attributes', { tags: [] }, 'ko')).toBe('없음');
+    expect(valueLabel('attributes', { tags: ['a', 'b'], tier: 'gold' }, 'en')).toBe(
+      'tags: a, b, tier: gold'
+    );
   });
 });
