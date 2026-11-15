@@ -16,6 +16,7 @@ import {
   XOctagon,
 } from 'lucide-react';
 
+import { ApiError } from '@/lib/api';
 import { downloadCsv, toCsv } from '@/lib/csv';
 import { formatAgo, formatClock } from '@/lib/format';
 import { type MessageKey } from '@/lib/i18n';
@@ -57,6 +58,15 @@ export interface PanelState {
   onRetry?: () => void;
 }
 
+function envLabel(
+  value: string,
+  t: (key: MessageKey, vars?: Record<string, string | number>) => string
+): string {
+  const key = `env.${value.toLowerCase()}` as MessageKey;
+  const text = t(key);
+  return text === key ? value : text;
+}
+
 export function PageHeader({ title, children }: { title: string; children?: React.ReactNode }) {
   const { t } = useI18n();
   const { kiosk } = useKiosk();
@@ -74,9 +84,9 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
       {environment && (
         <span
           title={t('env.label')}
-          className="border-warn-line text-warn rounded border px-1.5 text-[11px] font-medium"
+          className="border-line-strong text-fg2 rounded border px-1.5 text-[11px] font-medium"
         >
-          {environment}
+          {envLabel(environment, t)}
         </span>
       )}
       <div className="ml-auto flex items-center gap-2">{children}</div>
@@ -126,6 +136,21 @@ export function Skeleton({ lines = 3, height = 'h-3' }: { lines?: number; height
   );
 }
 
+/** A message people can act on, whatever the server sent. */
+export function errorText(
+  error: unknown,
+  t: (key: MessageKey, vars?: Record<string, string | number>) => string
+): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return t('error.session');
+    if (error.status === 403) return t('common.forbidden');
+    if (error.status >= 500) return t('error.server');
+    return error.message;
+  }
+  if (error instanceof TypeError) return t('error.network');
+  return error instanceof Error ? error.message : String(error);
+}
+
 function StateBody({ state, children }: { state?: PanelState; children: React.ReactNode }) {
   const { t } = useI18n();
   if (state?.error) {
@@ -135,7 +160,13 @@ function StateBody({ state, children }: { state?: PanelState; children: React.Re
           <XOctagon size={14} aria-hidden />
           {t('common.loadFailed')}
         </span>
-        <span className="text-muted">{(state.error as Error).message}</span>
+        <span className="text-fg2">{errorText(state.error, t)}</span>
+        {state.error instanceof Error && state.error.message && (
+          <details className="text-muted text-[11px]">
+            <summary className="hover:text-fg cursor-pointer">{t('error.details')}</summary>
+            <span className="mono mt-1 block">{state.error.message}</span>
+          </details>
+        )}
         {state.onRetry && (
           <button type="button" className={BUTTON} onClick={state.onRetry}>
             <RotateCw size={13} aria-hidden />

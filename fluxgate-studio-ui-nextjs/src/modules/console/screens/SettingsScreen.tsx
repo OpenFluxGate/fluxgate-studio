@@ -241,6 +241,12 @@ export function SettingsScreen() {
   const dirty = draft !== null && (draft.logo !== saved.logo || draft.favicon !== saved.favicon);
 
   useEffect(() => {
+    if (notice?.tone !== 'ok') return;
+    const timer = window.setTimeout(() => setNotice(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener('beforeunload', warn);
@@ -345,9 +351,9 @@ export function SettingsScreen() {
             onRetry: () => void branding.mutate(),
           }}
         >
-          {notice && (
+          {notice?.tone === 'bad' && (
             <div className="px-4 pt-1">
-              <Notice tone={notice.tone} onClose={() => setNotice(null)}>
+              <Notice tone="bad" onClose={() => setNotice(null)}>
                 {notice.text}
               </Notice>
             </div>
@@ -401,6 +407,13 @@ export function SettingsScreen() {
           </footer>
         </Panel>
       </div>
+      {notice?.tone === 'ok' && (
+        <div className="fixed right-4 bottom-4 z-50 w-80">
+          <Notice tone="ok" onClose={() => setNotice(null)}>
+            {notice.text}
+          </Notice>
+        </div>
+      )}
     </div>
   );
 }

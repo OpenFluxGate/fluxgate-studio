@@ -83,7 +83,9 @@ function Delta({
   const up = change > 0;
   const flat = Math.abs(change) < (points ? 0.05 : 0.005);
   const text = flat
-    ? '0'
+    ? points
+      ? '0%p'
+      : '0%'
     : points
       ? `${up ? '+' : ''}${change.toFixed(1)}%p`
       : `${up ? '+' : ''}${(change * 100).toFixed(0)}%`;
@@ -259,7 +261,7 @@ export function OverviewScreen() {
               name="ruleSet"
               value={state.ruleSet ?? ''}
               onChange={(event) => update({ ruleSet: event.target.value || null })}
-              className="mono bg-panel text-fg h-full min-w-40 px-2 text-[13px] focus-visible:outline-none"
+              className="bg-panel text-fg h-full min-w-40 px-2 text-[13px] focus-visible:outline-none"
             >
               <option value="">{t('var.all')}</option>
               {allSets.map((set) => (
@@ -323,11 +325,15 @@ export function OverviewScreen() {
           <StatPanel
             title={t('overview.rejectRate')}
             description={t('overview.thresholds')}
-            value={series.data ? (summary.rate * 100).toFixed(1) : '–'}
-            unit="%"
-            severity={series.data ? rateSeverity(summary.rate) : undefined}
+            value={series.data && summary.total > 0 ? (summary.rate * 100).toFixed(1) : '–'}
+            unit={series.data && summary.total > 0 ? '%' : undefined}
+            severity={series.data && summary.total > 0 ? rateSeverity(summary.rate) : undefined}
             spark={bucketRates(settledBuckets)}
-            color={series.data ? severityMark(rateSeverity(summary.rate)) : '--c-warning'}
+            color={
+              series.data && summary.total > 0
+                ? severityMark(rateSeverity(summary.rate))
+                : '--c-warning'
+            }
             actions={
               <span className="num text-muted text-[11px] whitespace-nowrap">
                 {t('overview.thresholdsShort', {
@@ -368,12 +374,13 @@ export function OverviewScreen() {
       </Row>
 
       <Row id="trend" title={t('row.trend')}>
-        <div className="grid items-start gap-3 xl:grid-cols-3">
+        <div className="grid gap-3 xl:grid-cols-3">
           <div className="flex min-w-0 flex-col gap-3 xl:col-span-2">
             <Panel
               title={`${t('overview.allowedSeries')} · ${formatBucket(bucketMillis, locale)}`}
               description={chartHelp}
               state={seriesState}
+              bodyClassName="min-h-[232px] flex flex-col justify-center"
               data={{
                 headers: [t('col.time'), t('decision.allowed'), t('decision.rejected')],
                 rows: buckets.map((bucket) => [
@@ -399,7 +406,12 @@ export function OverviewScreen() {
                       formatTooltipTime={formatTimestamp}
                     />
                   </div>
-                  <SeriesStats values={allowed[0].values} unit={unit} />
+                  <SeriesStats
+                    values={allowed[0].values}
+                    unit={unit}
+                    label={allowed[0].label}
+                    color={allowed[0].color}
+                  />
                 </>
               )}
             </Panel>
@@ -407,6 +419,7 @@ export function OverviewScreen() {
               title={`${t('overview.rejectedSeries')} · ${formatBucket(bucketMillis, locale)}`}
               description={chartHelp}
               state={seriesState}
+              bodyClassName="min-h-[232px] flex flex-col justify-center"
             >
               {(large) => (
                 <>
@@ -423,83 +436,92 @@ export function OverviewScreen() {
                       formatTooltipTime={formatTimestamp}
                     />
                   </div>
-                  <SeriesStats values={rejected[0].values} unit={unit} />
+                  <SeriesStats
+                    values={rejected[0].values}
+                    unit={unit}
+                    label={rejected[0].label}
+                    color={rejected[0].color}
+                  />
                 </>
               )}
             </Panel>
           </div>
-          <Panel
-            title={t('overview.topRejected')}
-            description={t('overview.topHelp')}
-            state={{
-              loading: !top.data && !top.error,
-              error: top.data ? undefined : top.error,
-              empty: !!top.data && topRows.length === 0,
-              onRetry: () => void top.mutate(),
-            }}
-            data={{
-              headers: [t('col.key'), t('col.ruleSet'), t('col.rejected'), t('col.lastRejected')],
-              rows: topRows.map((row) => [
-                row.key,
-                row.ruleSetId,
-                row.rejected,
-                formatTimestamp(row.lastRejectedAt),
-              ]),
-            }}
-            csvName="top-rejected.csv"
-          >
-            <div className="overflow-x-auto">
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr>
-                    <th scope="col" className={TH}>
-                      {t('col.keyAndSet')}
-                    </th>
-                    <th scope="col" className={`${TH} w-36`}>
-                      {t('col.rejected')}
-                    </th>
-                    <th scope="col" className={TH}>
-                      {t('col.lastRejected')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topRows.map((row) => (
-                    <tr key={`${row.ruleSetId}:${row.key}`}>
-                      <td className={`${TD} mono whitespace-nowrap`}>
-                        {isAdmin && !row.masked ? (
-                          <Link
-                            href={`/keys?value=${encodeURIComponent(row.key)}&transform=none`}
-                            className="text-s1-text hover:underline"
-                          >
-                            {row.key}
-                          </Link>
-                        ) : (
-                          row.key
-                        )}
-                        <div className="text-muted text-[11px]">{row.ruleSetId}</div>
-                      </td>
-                      <td className={TD}>
-                        <BarGauge
-                          value={row.rejected}
-                          max={maxRejected}
-                          color="--c-s2"
-                          label={formatCount(row.rejected)}
-                          labelWidth="w-8"
-                        />
-                      </td>
-                      <td
-                        className={`${TD} num text-muted whitespace-nowrap`}
-                        title={formatTimestamp(row.lastRejectedAt)}
-                      >
-                        {ago(row.lastRejectedAt)}
-                      </td>
+          <div className="min-w-0 xl:relative">
+            <Panel
+              className="xl:absolute xl:inset-0 xl:flex xl:flex-col"
+              bodyClassName="xl:min-h-0 xl:flex-1 xl:overflow-y-auto"
+              title={t('overview.topRejected')}
+              description={t('overview.topHelp')}
+              state={{
+                loading: !top.data && !top.error,
+                error: top.data ? undefined : top.error,
+                empty: !!top.data && topRows.length === 0,
+                onRetry: () => void top.mutate(),
+              }}
+              data={{
+                headers: [t('col.key'), t('col.ruleSet'), t('col.rejected'), t('col.lastRejected')],
+                rows: topRows.map((row) => [
+                  row.key,
+                  row.ruleSetId,
+                  row.rejected,
+                  formatTimestamp(row.lastRejectedAt),
+                ]),
+              }}
+              csvName="top-rejected.csv"
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr>
+                      <th scope="col" className={TH}>
+                        {t('col.keyAndSet')}
+                      </th>
+                      <th scope="col" className={`${TH} w-36`}>
+                        {t('col.rejected')}
+                      </th>
+                      <th scope="col" className={TH}>
+                        {t('col.lastRejected')}
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Panel>
+                  </thead>
+                  <tbody>
+                    {topRows.map((row) => (
+                      <tr key={`${row.ruleSetId}:${row.key}`}>
+                        <td className={`${TD} mono whitespace-nowrap`}>
+                          {isAdmin && !row.masked ? (
+                            <Link
+                              href={`/keys?value=${encodeURIComponent(row.key)}&transform=none`}
+                              className="text-s1-text hover:underline"
+                            >
+                              {row.key}
+                            </Link>
+                          ) : (
+                            row.key
+                          )}
+                          <div className="text-muted text-[11px]">{row.ruleSetId}</div>
+                        </td>
+                        <td className={TD}>
+                          <BarGauge
+                            value={row.rejected}
+                            max={maxRejected}
+                            color="--c-s2"
+                            label={formatCount(row.rejected)}
+                            labelWidth="w-8"
+                          />
+                        </td>
+                        <td
+                          className={`${TD} num text-muted whitespace-nowrap`}
+                          title={formatTimestamp(row.lastRejectedAt)}
+                        >
+                          {ago(row.lastRejectedAt)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+          </div>
         </div>
       </Row>
 

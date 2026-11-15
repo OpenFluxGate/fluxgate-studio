@@ -142,12 +142,10 @@ export function TimeSeries({
         },
         scales: { x: { time: true }, y: { range: (_u, _min, max) => [0, Math.max(1, max * 1.1)] } },
         axes: [
-          { ...axis, space: 64, values: (_plot, splits) => timeTicks(splits) },
+          { ...axis, space: 64, size: 34, values: (_plot, splits) => timeTicks(splits) },
           {
             ...axis,
             size: 52,
-            label: yLabel,
-            labelSize: yLabel ? 16 : 0,
             incrs: COUNT_INCREMENTS,
             values: (_plot, splits) => splits.map((split) => formatCount(split)),
           },
@@ -247,83 +245,86 @@ export function TimeSeries({
     : [];
 
   return (
-    <div className="relative" onMouseLeave={() => setHover(null)}>
-      <div ref={host} />
-      {markers.map((item) => (
-        <span
-          key={`${item.left}-${item.notes[0].time}`}
-          className="group absolute z-20 -translate-x-1/2"
-          style={{ left: item.left, top: item.top - 9 }}
-        >
-          <button
-            type="button"
-            aria-label={item.notes
-              .map((note) => `${formatTooltipTime(note.time)} ${note.text}`)
-              .join(', ')}
-            className="bg-annotation text-bg flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-none font-semibold"
-          >
-            {item.notes.length > 1 ? item.notes.length : <MarkerGlyph inverted />}
-          </button>
+    <div onMouseLeave={() => setHover(null)}>
+      {yLabel && <div className="text-muted px-1 pb-1 text-[11px]">{yLabel}</div>}
+      <div className="relative">
+        <div ref={host} />
+        {markers.map((item) => (
           <span
-            role="tooltip"
-            className="border-line-strong bg-panel2 pointer-events-none absolute top-5 left-1/2 z-30 hidden w-72 -translate-x-1/2 rounded-md border px-2.5 py-2 text-xs shadow-xl group-focus-within:block group-hover:block"
+            key={`${item.left}-${item.notes[0].time}`}
+            className="group absolute z-20 -translate-x-1/2"
+            style={{ left: item.left, top: item.top - 9 }}
           >
-            <span className="text-muted mb-1 block">
-              {t('chart.annotations', { count: item.notes.length })}
-            </span>
-            {item.notes.map((note) => (
-              <span key={`${note.time}-${note.text}`} className="mt-1 flex gap-1.5">
-                <span className="num text-muted shrink-0">{formatTooltipTime(note.time)}</span>
-                <span className="text-fg">{note.text}</span>
+            <button
+              type="button"
+              aria-label={item.notes
+                .map((note) => `${formatTooltipTime(note.time)} ${note.text}`)
+                .join(', ')}
+              className="bg-annotation text-bg flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-none font-semibold"
+            >
+              {item.notes.length > 1 ? item.notes.length : <MarkerGlyph inverted />}
+            </button>
+            <span
+              role="tooltip"
+              className="border-line-strong bg-panel2 pointer-events-none absolute top-5 left-1/2 z-30 hidden w-72 -translate-x-1/2 rounded-md border px-2.5 py-2 text-xs shadow-xl group-focus-within:block group-hover:block"
+            >
+              <span className="text-muted mb-1 block">
+                {t('chart.annotations', { count: item.notes.length })}
               </span>
-            ))}
+              {item.notes.map((note) => (
+                <span key={`${note.time}-${note.text}`} className="mt-1 flex gap-1.5">
+                  <span className="num text-muted shrink-0">{formatTooltipTime(note.time)}</span>
+                  <span className="text-fg">{note.text}</span>
+                </span>
+              ))}
+            </span>
           </span>
-        </span>
-      ))}
+        ))}
+        {point && (
+          <div
+            role="status"
+            className="border-line-strong bg-panel2 pointer-events-none absolute z-30 max-w-72 min-w-36 rounded-md border px-2.5 py-2 text-xs shadow-xl"
+            style={{
+              left: point.left,
+              top: Math.max(0, point.top - 12),
+              transform: point.flip ? 'translateX(calc(-100% - 12px))' : 'translateX(12px)',
+            }}
+          >
+            <div className="num text-muted mb-1">{formatTooltipTime(start)}</div>
+            {series.map((spec) => {
+              const value = spec.values[point.idx];
+              return (
+                <div key={spec.label} className="flex items-center gap-2">
+                  <span
+                    aria-hidden
+                    className="inline-block h-0.5 w-3"
+                    style={{ background: `var(${spec.color})` }}
+                  />
+                  <span className="text-fg2">{spec.label}</span>
+                  <span className="num text-fg ml-auto">
+                    {value === null || value === undefined ? '…' : formatCount(value)}
+                  </span>
+                </div>
+              );
+            })}
+            {notes.map((note) => (
+              <div
+                key={`${note.time}-${note.text}`}
+                className="border-line text-fg2 mt-1.5 flex gap-1.5 border-t pt-1.5"
+              >
+                <MarkerGlyph />
+                {note.text}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       {markers.length > 0 && (
         <div className="text-muted flex items-center gap-1.5 px-1 pt-1 text-xs">
           <MarkerGlyph />
           {t('chart.annotations', {
             count: markers.reduce((sum, item) => sum + item.notes.length, 0),
           })}
-        </div>
-      )}
-      {point && (
-        <div
-          role="status"
-          className="border-line-strong bg-panel2 pointer-events-none absolute z-10 max-w-72 min-w-36 rounded-md border px-2.5 py-2 text-xs shadow-xl"
-          style={{
-            left: point.left,
-            top: Math.max(0, point.top - 12),
-            transform: point.flip ? 'translateX(calc(-100% - 12px))' : 'translateX(12px)',
-          }}
-        >
-          <div className="num text-muted mb-1">{formatTooltipTime(start)}</div>
-          {series.map((spec) => {
-            const value = spec.values[point.idx];
-            return (
-              <div key={spec.label} className="flex items-center gap-2">
-                <span
-                  aria-hidden
-                  className="inline-block h-0.5 w-3"
-                  style={{ background: `var(${spec.color})` }}
-                />
-                <span className="text-fg2">{spec.label}</span>
-                <span className="num text-fg ml-auto">
-                  {value === null || value === undefined ? '…' : formatCount(value)}
-                </span>
-              </div>
-            );
-          })}
-          {notes.map((note) => (
-            <div
-              key={`${note.time}-${note.text}`}
-              className="border-line text-fg2 mt-1.5 flex gap-1.5 border-t pt-1.5"
-            >
-              <MarkerGlyph />
-              {note.text}
-            </div>
-          ))}
         </div>
       )}
     </div>

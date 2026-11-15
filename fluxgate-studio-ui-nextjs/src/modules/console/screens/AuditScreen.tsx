@@ -339,7 +339,7 @@ export function AuditScreen() {
       </form>
 
       <Panel
-        title={t('audit.title')}
+        title={t('audit.listTitle')}
         actions={
           result.data && (
             <span className="num text-muted text-xs">{t('audit.count', { total })}</span>
@@ -453,8 +453,8 @@ export function AuditScreen() {
                         <td className={`${TD} mono text-fg2 truncate`} title={target(entry, t)}>
                           {target(entry, t)}
                         </td>
-                        <td className={`${TD} text-fg2 truncate`} title={text}>
-                          {text || '–'}
+                        <td className={`${TD} text-fg2`} title={text}>
+                          <span className="line-clamp-2">{text || '–'}</span>
                         </td>
                       </tr>
                       {open && (
@@ -472,34 +472,36 @@ export function AuditScreen() {
             </table>
           </div>
         )}
-        <footer className="text-muted flex items-center justify-between gap-2 px-3 py-2 text-xs">
-          <span className="num">
-            {t('common.items', {
-              from: total ? page * PAGE_SIZE + 1 : 0,
-              to: Math.min(total, (page + 1) * PAGE_SIZE),
-              total,
-            })}
-          </span>
-          <span className="flex items-center gap-2">
-            <button
-              type="button"
-              className={BUTTON}
-              disabled={page === 0}
-              onClick={() => setPage(page - 1)}
-            >
-              {t('common.previous')}
-            </button>
-            <span className="num">{t('common.page', { page: page + 1, pages })}</span>
-            <button
-              type="button"
-              className={BUTTON}
-              disabled={page + 1 >= pages}
-              onClick={() => setPage(page + 1)}
-            >
-              {t('common.next')}
-            </button>
-          </span>
-        </footer>
+        {total > 0 && (
+          <footer className="text-muted flex items-center justify-between gap-2 px-3 py-2 text-xs">
+            <span className="num">
+              {t('common.items', {
+                from: total ? page * PAGE_SIZE + 1 : 0,
+                to: Math.min(total, (page + 1) * PAGE_SIZE),
+                total,
+              })}
+            </span>
+            <span className="flex items-center gap-2">
+              <button
+                type="button"
+                className={BUTTON}
+                disabled={page === 0}
+                onClick={() => setPage(page - 1)}
+              >
+                {t('common.previous')}
+              </button>
+              <span className="num">{t('common.page', { page: page + 1, pages })}</span>
+              <button
+                type="button"
+                className={BUTTON}
+                disabled={page + 1 >= pages}
+                onClick={() => setPage(page + 1)}
+              >
+                {t('common.next')}
+              </button>
+            </span>
+          </footer>
+        )}
       </Panel>
     </div>
   );

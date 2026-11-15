@@ -27,7 +27,7 @@ export function Tooltip({ text, align = 'center' }: { text: string; align?: Alig
   return (
     <span
       role="tooltip"
-      className={`bg-fg text-bg pointer-events-none absolute top-full z-50 mt-1.5 rounded px-2 py-1 text-[11px] font-normal whitespace-nowrap opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 ${TOOLTIP_ALIGN[align]}`}
+      className={`border-line-strong bg-panel2 text-fg pointer-events-none absolute top-full z-50 mt-1.5 rounded border px-2 py-1 text-[11px] font-normal whitespace-nowrap opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 ${TOOLTIP_ALIGN[align]}`}
     >
       {text}
     </span>

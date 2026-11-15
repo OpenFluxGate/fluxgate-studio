@@ -33,7 +33,7 @@ export function ConfirmChangeDialog({
   return (
     <Modal
       title={t('rules.confirmTitle')}
-      description={<span className="mono">{title}</span>}
+      description={title}
       onClose={onCancel}
       size="md"
       footer={

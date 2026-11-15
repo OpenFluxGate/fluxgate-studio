@@ -174,7 +174,7 @@ export function KeysScreen() {
             value={value}
             onChange={(event) => setValue(event.target.value)}
             placeholder={t('keys.placeholder')}
-            className={`${INPUT} mono w-full`}
+            className={`${INPUT} mono w-full placeholder:font-sans`}
           />
         </Field>
         <div>
@@ -312,41 +312,45 @@ export function KeysScreen() {
                       </td>
                       <td className={`${TD} num text-right`}>{decision.remainingTokens}</td>
                       <td className={`${TD} num text-right`}>
-                        {decision.allowed ? '–' : `${(decision.retryAfterMs / 1000).toFixed(1)}s`}
+                        {decision.allowed
+                          ? '–'
+                          : t('unit.seconds', { value: (decision.retryAfterMs / 1000).toFixed(1) })}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <footer className="text-muted flex items-center justify-between gap-2 px-3 py-2 text-xs">
-              <span className="num">
-                {t('common.items', {
-                  from: recent.length ? page * PAGE_SIZE + 1 : 0,
-                  to: Math.min(recent.length, (page + 1) * PAGE_SIZE),
-                  total: recent.length,
-                })}
-              </span>
-              <span className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className={BUTTON}
-                  disabled={page === 0}
-                  onClick={() => setPage(page - 1)}
-                >
-                  {t('common.previous')}
-                </button>
-                <span className="num">{t('common.page', { page: page + 1, pages })}</span>
-                <button
-                  type="button"
-                  className={BUTTON}
-                  disabled={page + 1 >= pages}
-                  onClick={() => setPage(page + 1)}
-                >
-                  {t('common.next')}
-                </button>
-              </span>
-            </footer>
+            {recent.length > 0 && (
+              <footer className="text-muted flex items-center justify-between gap-2 px-3 py-2 text-xs">
+                <span className="num">
+                  {t('common.items', {
+                    from: recent.length ? page * PAGE_SIZE + 1 : 0,
+                    to: Math.min(recent.length, (page + 1) * PAGE_SIZE),
+                    total: recent.length,
+                  })}
+                </span>
+                <span className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className={BUTTON}
+                    disabled={page === 0}
+                    onClick={() => setPage(page - 1)}
+                  >
+                    {t('common.previous')}
+                  </button>
+                  <span className="num">{t('common.page', { page: page + 1, pages })}</span>
+                  <button
+                    type="button"
+                    className={BUTTON}
+                    disabled={page + 1 >= pages}
+                    onClick={() => setPage(page + 1)}
+                  >
+                    {t('common.next')}
+                  </button>
+                </span>
+              </footer>
+            )}
           </Panel>
         </div>
       )}

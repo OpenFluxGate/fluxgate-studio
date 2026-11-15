@@ -270,7 +270,7 @@ export function RulesScreen() {
       {notice && <Notice onClose={() => setNotice(null)}>{notice}</Notice>}
 
       <Panel
-        title={t('rules.title')}
+        title={t('rules.listTitle')}
         state={{
           loading: !rules.data && !rules.error,
           error: rules.data ? undefined : rules.error,

@@ -139,7 +139,7 @@ export const en = {
   'window.6h': '6 hours',
   'range.last': 'Last {window}',
   'range.absolute': '{from} to {to}',
-  'range.zoomOut': 'Zoom out',
+  'range.zoomOut': 'Widen time range',
   'refresh.now': 'Refresh',
   'refresh.interval': 'Auto refresh',
   'refresh.off': 'Off',
@@ -347,6 +347,17 @@ export const en = {
   'audit.intro': 'Who changed rules, policies or settings, and who looked up which key.',
   'settings.intro': 'Your language and theme, and the console branding every user sees.',
   'value.customImage': '{type} image, {size}',
+  'error.server': 'The server could not answer. Try again in a moment.',
+  'error.network': 'The console could not reach the server. Check the connection and try again.',
+  'error.session': 'Your session ended. Sign in again.',
+  'error.details': 'Details',
+  'env.local': 'Local',
+  'env.dev': 'Development',
+  'env.staging': 'Staging',
+  'env.production': 'Production',
+  'unit.seconds': '{value}s',
+  'rules.listTitle': 'Rule list',
+  'audit.listTitle': 'Entries',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -487,7 +498,7 @@ export const ko: Record<MessageKey, string> = {
   'window.6h': '6시간',
   'range.last': '최근 {window}',
   'range.absolute': '{from} ~ {to}',
-  'range.zoomOut': '축소',
+  'range.zoomOut': '시간 범위 넓히기',
   'refresh.now': '새로고침',
   'refresh.interval': '자동 갱신',
   'refresh.off': '끄기',
@@ -695,6 +706,17 @@ export const ko: Record<MessageKey, string> = {
   'audit.intro': '누가 규칙, 정책, 설정을 바꿨는지, 누가 어떤 키를 조회했는지 기록합니다.',
   'settings.intro': '내 언어와 테마, 모든 사용자에게 보이는 콘솔 브랜딩을 설정합니다.',
   'value.customImage': '{type} 이미지, {size}',
+  'error.server': '서버가 응답하지 못했습니다. 잠시 뒤 다시 시도하세요.',
+  'error.network': '서버에 연결하지 못했습니다. 연결을 확인하고 다시 시도하세요.',
+  'error.session': '로그인이 만료되었습니다. 다시 로그인하세요.',
+  'error.details': '자세히',
+  'env.local': '로컬',
+  'env.dev': '개발',
+  'env.staging': '스테이징',
+  'env.production': '운영',
+  'unit.seconds': '{value}초',
+  'rules.listTitle': '규칙 목록',
+  'audit.listTitle': '기록 목록',
 };
 
 export const messages: Record<Locale, Record<MessageKey, string>> = { en, ko };
