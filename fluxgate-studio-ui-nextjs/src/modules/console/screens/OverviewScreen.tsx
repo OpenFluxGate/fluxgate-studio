@@ -212,6 +212,7 @@ export function OverviewScreen() {
   const ago = (timestamp: number | null) =>
     timestamp && now ? formatAgo(timestamp, now, locale) : t('overview.never');
 
+  const seriesSettled = Boolean(series.data) && !series.error && summary.total > 0;
   const seriesState = {
     loading: !series.data && !series.error,
     error: !series.data && !invalidRange ? series.error : undefined,
@@ -386,7 +387,7 @@ export function OverviewScreen() {
               title={`${t('overview.allowedSeries')} · ${formatBucket(bucketMillis, locale)}`}
               description={chartHelp}
               state={seriesState}
-              bodyClassName="min-h-[232px] flex flex-col justify-center"
+              bodyClassName={`flex min-h-[232px] flex-col ${seriesSettled ? '' : 'justify-center'}`}
               data={{
                 headers: [t('col.time'), t('decision.allowed'), t('decision.rejected')],
                 rows: buckets.map((bucket) => [
@@ -425,7 +426,7 @@ export function OverviewScreen() {
               title={`${t('overview.rejectedSeries')} · ${formatBucket(bucketMillis, locale)}`}
               description={chartHelp}
               state={seriesState}
-              bodyClassName="min-h-[232px] flex flex-col justify-center"
+              bodyClassName={`flex min-h-[232px] flex-col ${seriesSettled ? '' : 'justify-center'}`}
             >
               {(large) => (
                 <>
@@ -455,7 +456,7 @@ export function OverviewScreen() {
           <div className="min-w-0 xl:relative">
             <Panel
               className="xl:absolute xl:inset-0 xl:flex xl:flex-col"
-              bodyClassName="xl:min-h-0 xl:flex-1 xl:overflow-y-auto"
+              bodyClassName="xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:[mask-image:linear-gradient(to_bottom,black_calc(100%-32px),transparent)]"
               title={t('overview.topRejected')}
               description={t('overview.topHelp')}
               state={{

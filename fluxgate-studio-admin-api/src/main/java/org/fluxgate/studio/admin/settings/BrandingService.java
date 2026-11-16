@@ -53,7 +53,7 @@ public class BrandingService {
 
     Branding previous = store.branding().orElse(Branding.DEFAULT);
     Branding next =
-        new Branding(logo, favicon, clock.millis(), AuditActor.from(authentication).username());
+        new Branding(logo, favicon, clock.millis(), AuditActor.from(authentication).name());
     store.saveBranding(next);
 
     boolean audited =

@@ -67,7 +67,16 @@ function envLabel(
   return text === key ? value : text;
 }
 
-export function PageHeader({ title, children }: { title: string; children?: React.ReactNode }) {
+export function PageHeader({
+  title,
+  heading = true,
+  children,
+}: {
+  title: string;
+  /** False when the page shows its own large title below the header. */
+  heading?: boolean;
+  children?: React.ReactNode;
+}) {
   const { t } = useI18n();
   const { kiosk } = useKiosk();
   if (kiosk) return null;
@@ -79,7 +88,13 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
         <span aria-hidden className="text-faint">
           /
         </span>
-        <h1 className="text-fg text-[15px] font-semibold whitespace-nowrap">{title}</h1>
+        {heading ? (
+          <h1 className="text-fg text-[15px] font-semibold whitespace-nowrap">{title}</h1>
+        ) : (
+          <span aria-current="page" className="text-fg text-[13px] font-medium whitespace-nowrap">
+            {title}
+          </span>
+        )}
       </nav>
       {environment && (
         <span
@@ -512,8 +527,13 @@ export function Notice({
 }
 
 /** One line under the header that says what the screen is for. */
-export function PageIntro({ children }: { children: React.ReactNode }) {
-  return <p className="text-muted -mt-1 mb-4 max-w-3xl text-[13px]">{children}</p>;
+export function PageIntro({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-4">
+      <h1 className="text-fg text-xl font-semibold tracking-tight">{title}</h1>
+      <p className="text-muted mt-0.5 max-w-3xl text-[13px]">{children}</p>
+    </div>
+  );
 }
 
 export function Forbidden() {

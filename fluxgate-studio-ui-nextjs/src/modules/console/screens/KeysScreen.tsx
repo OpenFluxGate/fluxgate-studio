@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import { Search } from 'lucide-react';
 import useSWR from 'swr';
@@ -9,22 +9,14 @@ import useSWR from 'swr';
 import { type ApiKeyLookup, fetchKeyTransforms, lookupKey } from '@/lib/api';
 import { formatBucket, formatClock, formatCount, formatTimestamp } from '@/lib/format';
 import { type MessageKey } from '@/lib/i18n';
+import { windowLabel } from '@/lib/timeRange';
 
 import { type SeriesSpec, SeriesStats, TimeSeries } from '../charts';
 import { BUTTON, BUTTON_PRIMARY, Field, INPUT } from '../controls';
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
-import {
-  Forbidden,
-  Notice,
-  PageHeader,
-  PageIntro,
-  Panel,
-  SeverityIcon,
-  TD,
-  TH,
-  WindowPicker,
-} from '../ui';
+import { RangeMenu } from '../TimeRangePicker';
+import { Forbidden, Notice, PageHeader, PageIntro, Panel, SeverityIcon, TD, TH } from '../ui';
 
 const WINDOWS = ['1h', '24h', '7d'] as const;
 type Range = (typeof WINDOWS)[number];
@@ -95,14 +87,19 @@ function Timeline({ result }: { result: ApiKeyLookup }) {
 }
 
 export function KeysScreen() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { isAdmin, loading } = useMe();
   const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const transforms = useSWR(isAdmin ? 'key-transforms' : null, fetchKeyTransforms);
 
   const [value, setValue] = useState(params.get('value') ?? '');
   const [transform, setTransform] = useState(params.get('transform') ?? 'none');
-  const [range, setRange] = useState<Range>('24h');
+  const [range, setRange] = useState<Range>(() => {
+    const requested = params.get('window');
+    return (WINDOWS as readonly string[]).includes(requested ?? '') ? (requested as Range) : '24h';
+  });
   const [result, setResult] = useState<ApiKeyLookup | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -114,6 +111,9 @@ export function KeysScreen() {
     setError(null);
     try {
       setResult(await lookupKey({ value: value.trim(), transform, window: nextRange }));
+      // The address keeps the lookup, so the link reopens the same key and window.
+      const query = new URLSearchParams({ value: value.trim(), transform, window: nextRange });
+      router.replace(`${pathname}?${query.toString()}`, { scroll: false });
       setPage(0);
     } catch (err) {
       setResult(null);
@@ -137,8 +137,19 @@ export function KeysScreen() {
 
   return (
     <div>
-      <PageHeader title={t('keys.title')} />
-      <PageIntro>{t('keys.intro')}</PageIntro>
+      <PageHeader heading={false} title={t('keys.title')}>
+        <RangeMenu
+          label={t('keys.window')}
+          value={range}
+          options={WINDOWS}
+          format={(option) => windowLabel(option, locale)}
+          onChange={(next) => {
+            setRange(next);
+            if (result) void run(next);
+          }}
+        />
+      </PageHeader>
+      <PageIntro title={t('keys.title')}>{t('keys.intro')}</PageIntro>
 
       <form
         role="search"
@@ -177,20 +188,6 @@ export function KeysScreen() {
             className={`${INPUT} mono w-full placeholder:font-sans`}
           />
         </Field>
-        <div>
-          <span id="key-window-label" className="text-fg2 mb-1 block text-xs font-medium">
-            {t('keys.window')}
-          </span>
-          <WindowPicker
-            label={t('keys.window')}
-            value={range}
-            options={WINDOWS}
-            onChange={(next) => {
-              setRange(next);
-              if (result) void run(next);
-            }}
-          />
-        </div>
         <button type="submit" className={BUTTON_PRIMARY} disabled={busy || !value.trim()}>
           <Search size={14} aria-hidden />
           {busy ? t('common.loading') : t('keys.lookup')}

@@ -19,10 +19,12 @@ import {
   updateRule,
 } from '@/lib/api';
 import { formatCount } from '@/lib/format';
+import { type MessageKey } from '@/lib/i18n';
 import { scopeLabel } from '@/lib/labels';
 import { mapApiRuleToRule, mapRuleToCreateRequest, mapRuleToUpdateRequest } from '@/lib/mappers';
 import { diffRules, type FieldChange } from '@/lib/ruleDiff';
 import { describeBand, formatLimit } from '@/lib/ruleMeaning';
+import { windowLabel } from '@/lib/timeRange';
 import { RuleFormPanel, SimulationPanel } from '@/modules/admin';
 import { type FieldErrors, type Rule, ruleIdentity } from '@/modules/admin/types';
 
@@ -30,6 +32,7 @@ import { ConfirmChangeDialog } from '../ConfirmChangeDialog';
 import { Field } from '../controls';
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
+import { RangeMenu } from '../TimeRangePicker';
 import {
   Badge,
   BUTTON,
@@ -66,11 +69,15 @@ function toFieldErrors(details: string[]): FieldErrors {
   return errors;
 }
 
+const COUNT_WINDOWS = ['1h', '6h', '24h'] as const;
+type CountWindow = (typeof COUNT_WINDOWS)[number];
+
 export function RulesScreen() {
   const { t, locale } = useI18n();
   const { isAdmin } = useMe();
   const rules = useSWR('rules', async () => (await fetchRules()).map(mapApiRuleToRule));
-  const daily = useLive('overview:24h', () => fetchOverview({ window: '24h' }));
+  const [countWindow, setCountWindow] = useState<CountWindow>('24h');
+  const daily = useLive(`overview:${countWindow}`, () => fetchOverview({ window: countWindow }));
 
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<Rule | null | undefined>(undefined);
@@ -204,7 +211,14 @@ export function RulesScreen() {
 
   return (
     <div>
-      <PageHeader title={t('rules.title')}>
+      <PageHeader heading={false} title={t('rules.title')}>
+        <RangeMenu
+          label={t('rules.countWindow')}
+          value={countWindow}
+          options={COUNT_WINDOWS}
+          format={(option) => windowLabel(option, locale)}
+          onChange={setCountWindow}
+        />
         <button type="button" className={BUTTON} onClick={onExport}>
           <Download size={14} aria-hidden />
           {t('rules.export')}
@@ -241,7 +255,7 @@ export function RulesScreen() {
           <Badge icon={Eye}>{t('rules.readOnly')}</Badge>
         )}
       </PageHeader>
-      <PageIntro>{t('rules.intro')}</PageIntro>
+      <PageIntro title={t('rules.title')}>{t('rules.intro')}</PageIntro>
       <form
         role="search"
         className="border-line bg-panel mb-4 flex flex-wrap items-end gap-3 rounded-md border p-3"
@@ -332,7 +346,8 @@ export function RulesScreen() {
                       <span className="mono">{ruleSetId ?? t('rules.unassigned')}</span>
                       {ruleSetId && (
                         <span className="num text-muted ml-3 text-xs font-normal">
-                          {t('rules.rejected24h', {
+                          {t('rules.rejectedIn', {
+                            window: t(`window.${countWindow}` as MessageKey),
                             count: formatCount(rejectedBySet.get(ruleSetId) ?? 0),
                           })}
                         </span>

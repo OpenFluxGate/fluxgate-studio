@@ -23,11 +23,13 @@ import { type ApiAuditEntry, fetchAudit, fetchAuditEntry } from '@/lib/api';
 import { formatTimestamp } from '@/lib/format';
 import { type Locale, type MessageKey } from '@/lib/i18n';
 import { fieldLabel, valueLabel } from '@/lib/labels';
+import { windowLabel } from '@/lib/timeRange';
 
 import { Badge, BUTTON, BUTTON_QUIET, Field, INPUT } from '../controls';
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
-import { Forbidden, PageHeader, PageIntro, Panel, TD, TH, WindowPicker } from '../ui';
+import { RangeMenu } from '../TimeRangePicker';
+import { Forbidden, PageHeader, PageIntro, Panel, TD, TH } from '../ui';
 
 const ACTIONS = [
   'RULE_CREATE',
@@ -270,8 +272,16 @@ export function AuditScreen() {
 
   return (
     <div>
-      <PageHeader title={t('audit.title')} />
-      <PageIntro>{t('audit.intro')}</PageIntro>
+      <PageHeader heading={false} title={t('audit.title')}>
+        <RangeMenu
+          label={t('audit.period')}
+          value={period}
+          options={PERIODS}
+          format={(option) => windowLabel(option, locale)}
+          onChange={resetPage(setPeriod)}
+        />
+      </PageHeader>
+      <PageIntro title={t('audit.title')}>{t('audit.intro')}</PageIntro>
 
       <form
         role="search"
@@ -317,20 +327,9 @@ export function AuditScreen() {
             value={q}
             onChange={(event) => resetPage(setQ)(event.target.value)}
             placeholder={t('audit.targetPlaceholder')}
-            className={`${INPUT} mono w-full`}
+            className={`${INPUT} mono w-full placeholder:font-sans`}
           />
         </Field>
-        <div>
-          <span aria-hidden className="text-fg2 mb-1 block text-xs font-medium">
-            {t('audit.period')}
-          </span>
-          <WindowPicker
-            label={t('audit.period')}
-            value={period}
-            options={PERIODS}
-            onChange={resetPage(setPeriod)}
-          />
-        </div>
         {filtered && (
           <button type="button" className={BUTTON_QUIET} onClick={clear}>
             <X size={14} aria-hidden />
@@ -451,8 +450,17 @@ export function AuditScreen() {
                         <td className={`${TD} truncate`} title={entry.actor.username}>
                           {entry.actor.name || entry.actor.username}
                         </td>
-                        <td className={`${TD} mono text-fg2 truncate`} title={target(entry, t)}>
-                          {target(entry, t)}
+                        <td className={`${TD} mono text-fg2`} title={target(entry, t)}>
+                          {entry.target?.ruleSetId && entry.target?.ruleId ? (
+                            <>
+                              <div className="truncate">{String(entry.target.ruleSetId)}</div>
+                              <div className="text-muted truncate text-xs">
+                                {String(entry.target.ruleId)}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="truncate">{target(entry, t)}</div>
+                          )}
                         </td>
                         <td className={`${TD} text-fg2`} title={text}>
                           <span className="line-clamp-2">{text || '–'}</span>

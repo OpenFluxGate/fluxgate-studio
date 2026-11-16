@@ -304,8 +304,8 @@ export function SettingsScreen() {
 
   return (
     <div>
-      <PageHeader title={t('settings.title')} />
-      <PageIntro>{t('settings.intro')}</PageIntro>
+      <PageHeader heading={false} title={t('settings.title')} />
+      <PageIntro title={t('settings.title')}>{t('settings.intro')}</PageIntro>
       <div className="max-w-5xl">
         <Panel
           title={t('settings.preferences')}

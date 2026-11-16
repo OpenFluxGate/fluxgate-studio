@@ -120,6 +120,14 @@ export function zoomOut(range: TimeRange, now: number): TimeRange {
   return { kind: 'absolute', from: end - span, to: end };
 }
 
+/** Label of a fixed window such as 24h, for example "최근 24시간", or "전체 기간" for all. */
+export function windowLabel(window: string, locale: Locale): string {
+  if (window === 'all') return translate(locale, 'window.all');
+  return translate(locale, 'range.last', {
+    window: translate(locale, `window.${window}` as MessageKey),
+  });
+}
+
 export function rangeLabel(range: TimeRange, locale: Locale): string {
   if (range.kind === 'relative') {
     return translate(locale, 'range.last', {

@@ -30,12 +30,20 @@ interface Hover {
   flip: boolean;
 }
 
+const MARKER_SIDE = {
+  start: 'left-0',
+  center: 'left-1/2 -translate-x-1/2',
+  end: 'right-0',
+};
+
 /** Annotations closer than this many pixels share one marker. */
 const MARKER_GAP = 12;
 
 interface Marker {
   left: number;
   top: number;
+  /** Where the note list opens, so it stays inside the chart near either edge. */
+  side: 'start' | 'center' | 'end';
   notes: Annotation[];
 }
 
@@ -142,7 +150,16 @@ export function TimeSeries({
         },
         scales: { x: { time: true }, y: { range: (_u, _min, max) => [0, Math.max(1, max * 1.1)] } },
         axes: [
-          { ...axis, space: 64, size: 34, values: (_plot, splits) => timeTicks(splits) },
+          {
+            ...axis,
+            space: 64,
+            size: 34,
+            // The first tick would touch the 0 of the y axis, so labels at the very edge are dropped.
+            values: (plot, splits) =>
+              timeTicks(splits).map((label, index) =>
+                plot.valToPos(splits[index], 'x') < 28 ? '' : label
+              ),
+          },
           {
             ...axis,
             size: 52,
@@ -187,6 +204,12 @@ export function TimeSeries({
               const next = clusters.map((cluster) => ({
                 left: u.over.offsetLeft + cluster.x,
                 top: u.over.offsetTop,
+                side:
+                  cluster.x > u.over.clientWidth - 160
+                    ? ('end' as const)
+                    : cluster.x < 160
+                      ? ('start' as const)
+                      : ('center' as const),
                 notes: cluster.notes,
               }));
               setMarkers((previous) =>
@@ -266,7 +289,7 @@ export function TimeSeries({
             </button>
             <span
               role="tooltip"
-              className="border-line-strong bg-panel2 pointer-events-none absolute top-5 left-1/2 z-30 hidden w-72 -translate-x-1/2 rounded-md border px-2.5 py-2 text-xs shadow-xl group-focus-within:block group-hover:block"
+              className={`border-line-strong bg-panel2 pointer-events-none absolute top-5 z-30 hidden w-72 rounded-md border px-2.5 py-2 text-xs shadow-xl group-focus-within:block group-hover:block ${MARKER_SIDE[item.side]}`}
             >
               <span className="text-muted mb-1 block">
                 {t('chart.annotations', { count: item.notes.length })}

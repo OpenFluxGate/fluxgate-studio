@@ -82,7 +82,6 @@ export const en = {
   'rules.importNotJson': 'The file is not valid JSON.',
   'rules.readOnly': 'Read only',
   'rules.unassigned': 'No rule set',
-  'rules.rejected24h': '{count} rejected in 24h',
   'rules.confirmTitle': 'Review the change',
   'rules.confirmNew': 'New rule {id}',
   'rules.confirmWarning':
@@ -364,6 +363,8 @@ export const en = {
   'rules.turnOn': 'Turn rule on',
   'rules.turnOffWarning': 'While it is off, services stop applying this limit.',
   'rules.turnOnWarning': 'Services start applying this limit as soon as it is on.',
+  'rules.rejectedIn': '{count} rejected in {window}',
+  'rules.countWindow': 'Rejection count window',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -447,7 +448,6 @@ export const ko: Record<MessageKey, string> = {
   'rules.importNotJson': '파일이 올바른 JSON이 아닙니다.',
   'rules.readOnly': '읽기 전용',
   'rules.unassigned': '묶음 없음',
-  'rules.rejected24h': '24시간 차단 {count}',
   'rules.confirmTitle': '변경 내용 확인',
   'rules.confirmNew': '새 규칙 {id}',
   'rules.confirmWarning':
@@ -729,6 +729,8 @@ export const ko: Record<MessageKey, string> = {
   'rules.turnOn': '규칙 켜기',
   'rules.turnOffWarning': '끄는 동안 서비스는 이 한도를 적용하지 않습니다.',
   'rules.turnOnWarning': '켜면 서비스가 이 한도를 바로 적용합니다.',
+  'rules.rejectedIn': '{window} 차단 {count}',
+  'rules.countWindow': '차단 집계 기간',
 };
 
 export const messages: Record<Locale, Record<MessageKey, string>> = { en, ko };
