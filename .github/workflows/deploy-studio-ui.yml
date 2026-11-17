@@ -68,6 +68,12 @@ jobs:
           cp deploy/candidate/activate-ui.sh .deployment/activate.sh
           (cd .deployment && sha256sum * > SHA256SUMS)
 
+      - name: Hold production activation pending operational review
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo 'Production activation is disabled in code: reboot recovery and API/UI mixed-version compatibility are not verified. Repository variables cannot bypass this hold.' >&2
+          exit 1
+
       - name: Require verified production activation
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:

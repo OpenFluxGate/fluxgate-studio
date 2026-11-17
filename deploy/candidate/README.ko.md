@@ -1,3 +1,5 @@
+> Production activation is currently HARD-BLOCKED in both workflows, independent of repository variables. Removing that code hold requires operational review of reboot recovery and mixed API/UI version compatibility. The pending marker does NOT stop systemd from starting a service after reboot. Independent API/UI deployment can leave mixed versions; no compatibility claim is made. No production activation is permitted yet.
+
 # Studio 0.5.0 배포 안전 경로
 
 API/UI workflow에 연결된 활성화 스크립트입니다. **실제 운영 검증과 활성화 승인은 아직 완료되지 않았습니다.** 운영 변수 두 개가 모두 true가 아니면 업로드 전에 실패합니다: `STUDIO_SAFE_DEPLOY_ENABLED`, `STUDIO_AUDIT_RETENTION_REVIEWED`. 변수는 사용자 승인을 대체하지 않습니다.
@@ -17,7 +19,7 @@ SSH가 끊기면 GitHub는 결과를 모를 수 있습니다. **재시도 전** 
 
 #8의 audit retention opt-in 수정(405c548)을 보존했습니다. 운영 환경이 TTL 생성을 명시적으로 켜는지, 기존 인덱스/데이터/보존정책은 여전히 확인해야 합니다. TTL 삭제 데이터는 JAR 롤백으로 복원되지 않습니다. 데이터 호환성/보존정책 검토 전 활성화하지 마세요.
 
-실제 Ubuntu의 sudo/systemd-run/lock/권한, SSH 단절 시 실행 유지, 디스크 공간, runtime 설정, 외부 접근 및 인증된 기능 검증은 남아 있습니다. 테스트는 실제 서비스를 실행하거나 DB를 변경하지 않습니다. API6/UI8/통합 workflow3 = 17개 mock 테스트가 통과했습니다. UI는 TERM 중단 복구를 포함합니다. 파일·디렉터리 전환 사이의 짧은 서비스 중단은 있습니다. API/UI 두 컴포넌트의 원자적 동시 배포는 보장하지 않습니다.
+실제 Ubuntu의 sudo/systemd-run/lock/권한, SSH 단절 시 실행 유지, 디스크 공간, runtime 설정, 외부 접근 및 인증된 기능 검증은 남아 있습니다. 테스트는 실제 서비스를 실행하거나 DB를 변경하지 않습니다. API6/UI8/통합 workflow3 = 21개 mock 테스트가 통과했습니다. UI는 TERM 중단 복구를 포함합니다. 파일·디렉터리 전환 사이의 짧은 서비스 중단은 있습니다. API/UI 두 컴포넌트의 원자적 동시 배포는 보장하지 않습니다.
 
 ## Additional review hardening
 

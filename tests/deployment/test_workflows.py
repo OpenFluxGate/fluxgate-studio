@@ -15,6 +15,10 @@ class WorkflowContracts(unittest.TestCase):
                 steps=doc['jobs']['build-and-deploy']['steps']
                 names=[x.get('name') for x in steps]
                 gate=names.index('Require verified production activation')
+                hold=names.index('Hold production activation pending operational review')
+                self.assertLess(hold,gate)
+                held=subprocess.run(['bash','-c',steps[hold]['run']],capture_output=True)
+                self.assertNotEqual(held.returncode,0)
                 upload=names.index('Upload staging bundle without stopping service')
                 activate=names.index('Activate staged release with server-owned lifetime')
                 self.assertLess(gate,upload); self.assertLess(upload,activate)
