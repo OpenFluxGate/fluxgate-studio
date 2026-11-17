@@ -37,7 +37,14 @@ rollback() {
   trap - ERR INT TERM
   set +e
   echo 'Activation failed; restoring previous artifact' >&2
-  sudo -n systemctl stop "$unit"
+  if ! sudo -n systemctl stop "$unit"; then
+    echo 'CRITICAL: rollback stop failed; artifact unchanged, manual recovery required' >&2
+    exit 1
+  fi
+  if [[ $(sudo -n systemctl show "$unit" --property=ActiveState --value) != inactive ]] || [[ $(sudo -n systemctl show "$unit" --property=MainPID --value) != 0 ]]; then
+    echo 'CRITICAL: rollback process still active; artifact unchanged, manual recovery required' >&2
+    exit 1
+  fi
   if ! cp -p "$backup/previous.jar" "$backup/restore.jar" || ! mv -f "$backup/restore.jar" "$live"; then
     echo 'CRITICAL: artifact restoration failed; manual recovery required' >&2
     exit 1
@@ -53,6 +60,8 @@ rollback() {
 printf '%s\n' "$backup" > "$marker"
 trap rollback ERR INT TERM
 sudo -n systemctl stop "$unit"
+[[ $(sudo -n systemctl show "$unit" --property=ActiveState --value) == inactive ]]
+[[ $(sudo -n systemctl show "$unit" --property=MainPID --value) == 0 ]]
 mv -f "$backup/next.jar" "$live"
 sudo -n systemctl start "$unit"
 health

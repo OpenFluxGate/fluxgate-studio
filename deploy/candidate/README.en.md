@@ -9,3 +9,9 @@ After SSH loss, inspect `fluxgate-deploy-{api|ui}-RUN_ID-RUN_ATTEMPT`, pending m
 PR #8 retention opt-in fix 405c548 is preserved. Actual runtime opt-in, existing TTL indexes/data and retention policy still require review. Artifact rollback cannot restore TTL-deleted records. Production sudo/systemd-run/locking/permissions, disk space, SSH-disconnect behavior, runtime configuration, external access and authenticated functional checks are unverified.
 
 Seventeen offline mocks pass: API6, UI8 (including TERM rollback), integrated workflow contracts3. No real service or DB was touched.
+
+## Additional review hardening
+
+Every SCP/SSH action requires LIGHTSAIL_HOST_FINGERPRINT. The pre-upload gate rejects absent/malformed SHA256 fingerprints. Obtain and verify the server host fingerprint over an independent trusted channel before configuring it; do not infer or trust-on-first-use from the deployment connection. No fingerprint value has been registered. Checksums do not authenticate SSH hosts.
+
+Rollback must successfully stop the service AND observe ActiveState=inactive/MainPID=0 before replacing any file. Failure preserves the pending marker and new artifact for manual recovery. Process-model tests distinguish running version/PID from on-disk bytes. Real service-user ownership/readability and sudo/systemd-run permissions remain deployment prerequisites, not mock-proven facts.

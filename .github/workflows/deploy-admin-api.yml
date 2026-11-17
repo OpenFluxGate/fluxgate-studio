@@ -77,7 +77,9 @@ jobs:
         env:
           ENABLED: ${{ vars.STUDIO_SAFE_DEPLOY_ENABLED }}
           RETENTION_REVIEWED: ${{ vars.STUDIO_AUDIT_RETENTION_REVIEWED }}
+          HOST_FINGERPRINT: ${{ secrets.LIGHTSAIL_HOST_FINGERPRINT }}
         run: |
+          [[ "$HOST_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}=?$ ]] || { echo 'Production blocked: independently verified SSH host fingerprint required.' >&2; exit 1; }
           test "$RETENTION_REVIEWED" = true || { echo 'Production blocked: audit TTL may delete existing data. Resolve retention behavior and obtain required approval before enabling.' >&2; exit 1; }
           test "$ENABLED" = true || { echo 'Production activation blocked: validate server permissions, recovery and data compatibility before enabling STUDIO_SAFE_DEPLOY_ENABLED.' >&2; exit 1; }
 
@@ -88,6 +90,7 @@ jobs:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          fingerprint: ${{ secrets.LIGHTSAIL_HOST_FINGERPRINT }}
           source: ".deployment/*"
           target: "/opt/fluxgate/admin-api/.deploy-staging/${{ github.run_id }}-${{ github.run_attempt }}"
           strip_components: 1
@@ -99,6 +102,7 @@ jobs:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          fingerprint: ${{ secrets.LIGHTSAIL_HOST_FINGERPRINT }}
           command_timeout: 15m
           script: |
             set -eu

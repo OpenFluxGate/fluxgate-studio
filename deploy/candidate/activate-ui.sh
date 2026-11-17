@@ -35,7 +35,14 @@ cp -a "$staged" "$backup/next"
 rollback() {
   trap - ERR INT TERM
   set +e
-  sudo -n systemctl stop "$unit"
+  if ! sudo -n systemctl stop "$unit"; then
+    echo 'CRITICAL: rollback stop failed; artifact unchanged, manual recovery required' >&2
+    exit 1
+  fi
+  if [[ $(sudo -n systemctl show "$unit" --property=ActiveState --value) != inactive ]] || [[ $(sudo -n systemctl show "$unit" --property=MainPID --value) != 0 ]]; then
+    echo 'CRITICAL: rollback process still active; artifact unchanged, manual recovery required' >&2
+    exit 1
+  fi
   if [[ -d $backup/previous ]]; then
     if [[ -e $live ]] && ! mv "$live" "$backup/failed"; then echo 'CRITICAL: failed tree cannot be preserved' >&2; exit 1; fi
     if ! mv "$backup/previous" "$live"; then echo 'CRITICAL: restore failed' >&2; exit 1; fi
@@ -51,6 +58,8 @@ rollback() {
 printf '%s\n' "$backup" > "$marker"
 trap rollback ERR INT TERM
 sudo -n systemctl stop "$unit"
+[[ $(sudo -n systemctl show "$unit" --property=ActiveState --value) == inactive ]]
+[[ $(sudo -n systemctl show "$unit" --property=MainPID --value) == 0 ]]
 mv "$live" "$backup/previous"
 mv "$backup/next" "$live"
 sudo -n systemctl start "$unit"

@@ -25,6 +25,8 @@ printf '%s\\n' "$*" >> "$ROOT/events"
 case "$1" in
 show) case "$*" in
 *LoadState*) echo loaded;;
+*ActiveState*) echo inactive;;
+*MainPID*) echo 0;;
 *ExecStart*) echo "/usr/bin/java -jar ${TARGET}";; esac;;
 start) if [[ $FAILURE == start && $(cat "$LIVE") == new ]]; then exit 1; fi;;
 stop) if [[ $FAILURE == stop && ! -f $ROOT/stopped ]]; then touch "$ROOT/stopped"; exit 1; fi;;

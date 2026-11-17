@@ -27,6 +27,8 @@ printf '%s\\n' "$*" >> "$ROOT/events"
 case "$1" in
 show) case "$*" in
 *LoadState*) echo loaded;;
+*ActiveState*) echo inactive;;
+*MainPID*) echo 0;;
 *WorkingDirectory*) echo "$ROOT/.next/standalone";;
 *ExecStart*) echo "/usr/bin/node $ROOT/.next/standalone/server.js";; esac;;
 start) if [[ $FAILURE == term && $(cat "$ROOT/.next/standalone/server.js") == new ]]; then kill -TERM "$PPID"; exit 1; fi

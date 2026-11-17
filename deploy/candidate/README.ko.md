@@ -18,3 +18,9 @@ SSH가 끊기면 GitHub는 결과를 모를 수 있습니다. **재시도 전** 
 #8의 audit retention opt-in 수정(405c548)을 보존했습니다. 운영 환경이 TTL 생성을 명시적으로 켜는지, 기존 인덱스/데이터/보존정책은 여전히 확인해야 합니다. TTL 삭제 데이터는 JAR 롤백으로 복원되지 않습니다. 데이터 호환성/보존정책 검토 전 활성화하지 마세요.
 
 실제 Ubuntu의 sudo/systemd-run/lock/권한, SSH 단절 시 실행 유지, 디스크 공간, runtime 설정, 외부 접근 및 인증된 기능 검증은 남아 있습니다. 테스트는 실제 서비스를 실행하거나 DB를 변경하지 않습니다. API6/UI8/통합 workflow3 = 17개 mock 테스트가 통과했습니다. UI는 TERM 중단 복구를 포함합니다. 파일·디렉터리 전환 사이의 짧은 서비스 중단은 있습니다. API/UI 두 컴포넌트의 원자적 동시 배포는 보장하지 않습니다.
+
+## Additional review hardening
+
+Every SCP/SSH action requires LIGHTSAIL_HOST_FINGERPRINT. The pre-upload gate rejects absent/malformed SHA256 fingerprints. Obtain and verify the server host fingerprint over an independent trusted channel before configuring it; do not infer or trust-on-first-use from the deployment connection. No fingerprint value has been registered. Checksums do not authenticate SSH hosts.
+
+Rollback must successfully stop the service AND observe ActiveState=inactive/MainPID=0 before replacing any file. Failure preserves the pending marker and new artifact for manual recovery. Process-model tests distinguish running version/PID from on-disk bytes. Real service-user ownership/readability and sudo/systemd-run permissions remain deployment prerequisites, not mock-proven facts.
