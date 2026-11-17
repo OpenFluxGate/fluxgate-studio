@@ -302,7 +302,7 @@ export function Panel({
           </div>
         </header>
       )}
-      {state?.staleError && (
+      {Boolean(state?.staleError) && (
         <div
           role="status"
           className="border-warn-line bg-warn-soft text-warn mx-3 mb-2 flex flex-wrap items-center gap-2 rounded border px-2 py-1.5 text-xs"
