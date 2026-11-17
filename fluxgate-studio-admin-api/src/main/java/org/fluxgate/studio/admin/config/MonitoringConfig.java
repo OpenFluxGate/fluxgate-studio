@@ -52,14 +52,21 @@ public class MonitoringConfig {
 
   @Bean
   public ApplicationRunner monitoringIndexes(
-      MongoEventStore events, MongoAuditStore audit, MonitoringProperties properties) {
+      MongoEventStore events,
+      MongoAuditStore audit,
+      MonitoringProperties properties,
+      AuditProperties auditProperties) {
     return args -> {
       if (properties.createIndexes()) {
         ensure("Event history", events::ensureIndexes);
       } else {
         log.info("Event history index creation is disabled");
       }
-      ensure("Audit log", audit::ensureIndexes);
+      if (auditProperties.createIndexes()) {
+        ensure("Audit log", audit::ensureIndexes);
+      } else {
+        log.info("Audit index management is disabled; existing retention policy is unchanged");
+      }
     };
   }
 

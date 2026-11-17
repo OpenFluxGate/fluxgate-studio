@@ -48,6 +48,9 @@ fluxgate:
       key-transforms: none,sha256
     audit:
       collection: ${STUDIO_AUDIT_COLLECTION:studio_audit_log}
+      # Opt in only after reviewing the collection, retention policy, and backup.
+      # A TTL index can irreversibly delete historical records; existing indexes are never removed.
+      create-indexes: ${STUDIO_AUDIT_CREATE_INDEXES:false}
       retention: ${STUDIO_AUDIT_RETENTION:730d}
     settings:
       collection: ${STUDIO_SETTINGS_COLLECTION:studio_settings}

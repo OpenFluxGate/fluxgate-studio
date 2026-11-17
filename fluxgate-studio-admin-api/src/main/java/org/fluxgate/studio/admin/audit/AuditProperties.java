@@ -7,4 +7,5 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties(prefix = "fluxgate.studio.audit")
 public record AuditProperties(
     @DefaultValue("studio_audit_log") String collection,
-    @DefaultValue("730d") Duration retention) {}
+    @DefaultValue("730d") Duration retention,
+    @DefaultValue("false") boolean createIndexes) {}

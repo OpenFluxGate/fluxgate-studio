@@ -168,3 +168,18 @@ The script binds its own Studio instance to `127.0.0.1:8099` and an ephemeral JW
 It checks anonymous, unsigned, and wrong-audience rejection; reader mutation denial; actor-spoof rejection; authenticated publication; immediate denial on both authz Pods after an ACL-only generation; unchanged counter epoch; operation replay; stale CAS rejection; invalid-ACL rejection without pointer mutation; and rollback to a new revision. A finally block republishes the initial ACL without resetting counters and verifies the existing fixture identity receives 200 or 429 from both Pods. It terminates only its own Java/JWKS processes and removes temporary signing material. This proof creates durable revisions and may consume quota; it does not reset the fixture's counter epoch.
 
 Success writes optional `studio-policy-live.json` evidence and prints status/check results. No JWT, private key, raw authentication header, or transport exception details are printed. Failed validation or restoration exits nonzero and emits no new success evidence. These results prove the exercised local fixture, not a production deployment.
+
+## Audit retention and upgrade safety
+
+Audit index management is disabled by default (`STUDIO_AUDIT_CREATE_INDEXES=false`).
+This preserves existing database indexes and retention policies; it does **not** disable or remove
+an existing TTL index. Audit writes and reads continue without automatic index management.
+`FLUXGATE_EVENT_CREATE_INDEXES` controls only event-history indexes, not audit indexes.
+
+Only set `STUDIO_AUDIT_CREATE_INDEXES=true` after reviewing the actual audit collection, its
+existing indexes, the approved retention period, and a tested backup/restore plan. With index
+management enabled, positive `STUDIO_AUDIT_RETENTION` (default `730d`) requests a TTL index on
+`at`; MongoDB can then permanently delete older records. Changing retention does not migrate
+an existing TTL index: conflicting index options are logged and startup continues. Such policy
+changes require a separately approved database maintenance procedure. An application binary
+rollback cannot recover TTL-deleted records or undo indexes created by a prior deployment.

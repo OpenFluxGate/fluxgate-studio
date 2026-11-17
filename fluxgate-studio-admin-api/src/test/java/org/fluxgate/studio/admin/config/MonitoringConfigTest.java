@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 
 import java.time.Duration;
 import java.util.List;
+import org.fluxgate.studio.admin.audit.AuditProperties;
 import org.fluxgate.studio.admin.audit.MongoAuditStore;
 import org.fluxgate.studio.admin.exception.StorageConnectionException;
 import org.fluxgate.studio.admin.monitoring.MongoEventStore;
@@ -40,6 +41,7 @@ class MonitoringConfigTest {
               assertThat(context).hasNotFailed();
               assertThat(context).hasSingleBean(MongoEventStore.class);
               assertThat(context).hasSingleBean(MongoAuditStore.class);
+              assertThat(context.getBean(AuditProperties.class).createIndexes()).isFalse();
               assertThatThrownBy(
                       () ->
                           context
@@ -55,11 +57,39 @@ class MonitoringConfigTest {
     MongoAuditStore audit = mock(MongoAuditStore.class);
 
     config
-        .monitoringIndexes(events, audit, properties(false))
+        .monitoringIndexes(
+            events,
+            audit,
+            properties(false),
+            new AuditProperties("studio_audit_log", Duration.ofDays(730), true))
         .run(new DefaultApplicationArguments());
 
     verify(events, never()).ensureIndexes();
     verify(audit).ensureIndexes();
+  }
+
+  @Test
+  void preservesAuditIndexesUnlessExplicitlyEnabled() throws Exception {
+    MongoEventStore events = mock(MongoEventStore.class);
+    MongoAuditStore audit = mock(MongoAuditStore.class);
+    config
+        .monitoringIndexes(
+            events,
+            audit,
+            properties(true),
+            new AuditProperties("studio_audit_log", Duration.ofDays(730), false))
+        .run(new DefaultApplicationArguments());
+    verify(events).ensureIndexes();
+    verify(audit, never()).ensureIndexes();
+  }
+
+  @Test
+  void bindsExplicitAuditIndexOptIn() {
+    new ApplicationContextRunner()
+        .withUserConfiguration(MonitoringConfig.class)
+        .withPropertyValues("fluxgate.studio.audit.create-indexes=true")
+        .run(
+            context -> assertThat(context.getBean(AuditProperties.class).createIndexes()).isTrue());
   }
 
   @Test
@@ -70,7 +100,11 @@ class MonitoringConfigTest {
     doThrow(new IllegalStateException("not authorized")).when(audit).ensureIndexes();
 
     config
-        .monitoringIndexes(events, audit, properties(true))
+        .monitoringIndexes(
+            events,
+            audit,
+            properties(true),
+            new AuditProperties("studio_audit_log", Duration.ofDays(730), true))
         .run(new DefaultApplicationArguments());
 
     verify(events).ensureIndexes();
