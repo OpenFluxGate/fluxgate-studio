@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 
-import uPlot from 'uplot';
+import type uPlot from 'uplot';
 
 import { formatCount, formatHourMinute, formatMonthDay } from '@/lib/format';
 import { legendStats } from '@/lib/stats';
@@ -114,6 +114,8 @@ export function TimeSeries({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const chart = useRef<uPlot | null>(null);
+  const [Plot, setPlot] = useState<typeof uPlot | null>(null);
+  const [chartLoadFailed, setChartLoadFailed] = useState(false);
   const latest = useRef({ times, series, onZoom, annotations });
   const [hover, setHover] = useState<Hover | null>(null);
   const [markers, setMarkers] = useState<Marker[]>([]);
@@ -122,13 +124,28 @@ export function TimeSeries({
   const signature = series.map((spec) => `${spec.label}:${spec.color}`).join('|');
 
   useEffect(() => {
+    let active = true;
+    // A browser locale or chunk-load failure must not take down the entire console.
+    import('uplot')
+      .then(({ default: Constructor }) => {
+        if (active) setPlot(() => Constructor);
+      })
+      .catch(() => {
+        if (active) setChartLoadFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     latest.current = { times, series, onZoom, annotations };
     chart.current?.setData(toData(times, series));
   }, [times, series, onZoom, annotations]);
 
   useEffect(() => {
     const element = host.current;
-    if (!element) return;
+    if (!element || !Plot) return;
     const initial = latest.current;
     const axis = {
       stroke: token('--c-muted'),
@@ -138,7 +155,7 @@ export function TimeSeries({
       labelFont: '11px Inter, system-ui, sans-serif',
     };
     const marker = token('--c-annotation');
-    const plot = new uPlot(
+    const plot = new Plot(
       {
         width: element.clientWidth,
         height,
@@ -186,15 +203,15 @@ export function TimeSeries({
             (u) => {
               const positions = latest.current.annotations
                 .map((note) => ({ x: u.valToPos(note.time / 1000, 'x'), note }))
-                .filter(({ x }) => x >= 0 && x <= u.bbox.width / uPlot.pxRatio);
+                .filter(({ x }) => x >= 0 && x <= u.bbox.width / Plot.pxRatio);
               const clusters = clusterAnnotations(positions);
               const context = u.ctx;
               context.save();
               context.strokeStyle = marker;
-              context.lineWidth = 1.5 * uPlot.pxRatio;
-              context.setLineDash([4 * uPlot.pxRatio, 4 * uPlot.pxRatio]);
+              context.lineWidth = 1.5 * Plot.pxRatio;
+              context.setLineDash([4 * Plot.pxRatio, 4 * Plot.pxRatio]);
               for (const cluster of clusters) {
-                const x = u.bbox.left + cluster.x * uPlot.pxRatio;
+                const x = u.bbox.left + cluster.x * Plot.pxRatio;
                 context.beginPath();
                 context.moveTo(x, u.bbox.top);
                 context.lineTo(x, u.bbox.top + u.bbox.height);
@@ -257,7 +274,7 @@ export function TimeSeries({
       plot.destroy();
       chart.current = null;
     };
-  }, [resolved, height, syncKey, signature, yLabel]);
+  }, [Plot, resolved, height, syncKey, signature, yLabel]);
 
   const point = hover !== null && times[hover.idx] !== undefined ? hover : null;
   const start = point ? times[point.idx] : 0;
@@ -272,6 +289,11 @@ export function TimeSeries({
       {yLabel && <div className="text-muted px-1 pb-1 text-[11px]">{yLabel}</div>}
       <div className="relative">
         <div ref={host} />
+        {chartLoadFailed && (
+          <div role="alert" data-chart-load-error className="text-muted px-3 py-6 text-sm">
+            {t('common.loadFailed')}
+          </div>
+        )}
         {markers.map((item) => (
           <span
             key={`${item.left}-${item.notes[0].time}`}
