@@ -58,9 +58,11 @@ jobs:
           mkdir .deployment
           test -s fluxgate-studio-ui-nextjs/.next/standalone/server.js
           test -s fluxgate-studio-ui-nextjs/.next/standalone/.next/BUILD_ID
-          cp -a fluxgate-studio-ui-nextjs/.next/static fluxgate-studio-ui-nextjs/.next/standalone/.next/static
+          mkdir -p fluxgate-studio-ui-nextjs/.next/standalone/.next/static
+          cp -a fluxgate-studio-ui-nextjs/.next/static/. fluxgate-studio-ui-nextjs/.next/standalone/.next/static/
           if [ -d fluxgate-studio-ui-nextjs/public ]; then
-            cp -a fluxgate-studio-ui-nextjs/public fluxgate-studio-ui-nextjs/.next/standalone/public
+            mkdir -p fluxgate-studio-ui-nextjs/.next/standalone/public
+            cp -a fluxgate-studio-ui-nextjs/public/. fluxgate-studio-ui-nextjs/.next/standalone/public/
           fi
           tar -czf .deployment/ui.tar.gz -C fluxgate-studio-ui-nextjs .next/standalone
           cp deploy/candidate/activate-ui.sh .deployment/activate.sh
