@@ -73,7 +73,7 @@ jobs:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          source: "fluxgate-studio-admin-api/target/fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar"
+          source: "fluxgate-studio-admin-api/target/fluxgate-studio-admin-api-0.5.0.jar"
           target: "/opt/fluxgate/admin-api/"
           strip_components: 2
 

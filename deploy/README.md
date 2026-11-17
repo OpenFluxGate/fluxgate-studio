@@ -2,6 +2,14 @@
 
 Studio manages mutable rule drafts and publishes authoritative policy generations through separate APIs. Editing a rule in the existing UI or `/api/rules` does not publish that draft. Publication requires one complete rules array and one complete ACL object in the same request; the server never assembles a generation by querying draft collections. The Envoy readers use the durable active-policy pointer on each request. A Redis reload notification is an optional hint after commit, and notification failure does not undo publication.
 
+## Studio release version
+
+The Admin API artifact and UI package are both version `0.5.0`. The API build produces
+`fluxgate-studio-admin-api-0.5.0.jar`; the Docker runtime still uses `/app/app.jar`.
+This version alignment does not change API schemas, ports, or server service configuration.
+Before production deployment, verify the server unit uses the intended artifact filename and
+that a tested backup/rollback path exists; changing the package version does not validate either.
+
 ## Paired core artifacts
 
 Studio uses the paired FluxGate core `MongoPolicyRepository` API and `0.5.0` artifacts.
@@ -55,7 +63,7 @@ cd fluxgate-studio-admin-api
 ```
 
 Keep `FLUXGATE_M2_DIR` in the terminal for later Maven commands. The wrapper provides Maven; Docker
-is needed for the integration-test tier. This builds `target/fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar`.
+is needed for the integration-test tier. This builds `target/fluxgate-studio-admin-api-0.5.0.jar`.
 It does not publish SNAPSHOT artifacts; release distribution still requires a paired public release.
 
 Studio obtains policy collections from the qualified `fluxgateMongoDatabase` bean supplied by
