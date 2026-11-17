@@ -183,3 +183,6 @@ management enabled, positive `STUDIO_AUDIT_RETENTION` (default `730d`) requests 
 an existing TTL index: conflicting index options are logged and startup continues. Such policy
 changes require a separately approved database maintenance procedure. An application binary
 rollback cannot recover TTL-deleted records or undo indexes created by a prior deployment.
+
+For the verified mixed-version failure modes and the limits of binary rollback, see
+[the 0.5.0 upgrade and rollback checklist](UPGRADE-ROLLBACK.md).

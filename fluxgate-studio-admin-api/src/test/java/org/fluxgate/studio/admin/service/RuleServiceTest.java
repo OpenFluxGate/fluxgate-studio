@@ -368,6 +368,29 @@ class RuleServiceTest {
     }
   }
 
+  @Test
+  void emptyTagsInEditPayloadAddsTagsToPreviouslyEmptyAttributes() {
+    when(studioRuleRepository.findById("test-rule"))
+        .thenReturn(Optional.of(createTestRule("test-rule", "Test Rule", true, 3L)));
+    when(studioRuleRepository.replaceIfVersionMatches(any(RateLimitRule.class), eq(3L)))
+        .thenReturn(true);
+    UpdateRuleRequest request =
+        new UpdateRuleRequest(
+            "Test Rule",
+            true,
+            "PER_IP",
+            "ip",
+            "REJECT_REQUEST",
+            List.of(new RateBandRequest(60L, 100L, "100-per-minute")),
+            "test-ruleset",
+            List.of(),
+            Map.of(),
+            3L);
+    RuleResponse result = ruleService.updateRule("test-rule", request, null);
+    assertThat(result.attributes()).containsEntry("tags", List.of());
+    assertThat(result.attributes()).hasSize(1);
+  }
+
   @Nested
   @DisplayName("updateRule")
   class UpdateRuleTests {
