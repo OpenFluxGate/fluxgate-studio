@@ -13,3 +13,11 @@ This is NOT production-ready: SIGKILL/reboot/SSH-disconnect recovery is not guar
 ## Latest integration
 
 Rebased onto PR #8 b0bcff1; workflow artifact validation now expects 0.5.0. Candidates remain disconnected from workflows. The UI candidate stages a complete .next tree, retains the previous directory, rolls back failed start/health/switch, and refuses local runtime .env files. Static assets/BUILD_ID are checked; public assets and package checksum still need validation. Seven additional UI mocks passed. Both candidates retain a pending marker after unhandled termination and refuse a later deployment until manual recovery review. This is fail-closed recovery detection, not durable execution or reboot recovery. Existing live stop/delete workflows remain unsafe for production activation.
+
+## Integrated workflow and explicit production blocks
+
+Local workflows now call these scripts and remove the old stop/delete-before-upload sequence. SHA256-verified bundles are staged first; UI includes static/public assets. Activation runs as a transient systemd system service with the deploying user's UID, independent of the SSH session. A disconnected client cannot know the outcome: inspect `fluxgate-deploy-{api|ui}-RUN_ID-RUN_ATTEMPT`, pending marker and backup before any retry. Reboot/SIGKILL recovery is not automatic.
+
+Both `STUDIO_SAFE_DEPLOY_ENABLED=true` and `STUDIO_AUDIT_RETENTION_REVIEWED=true` repository variables are required before uploading. Neither has been set. Variables do not replace approval. Verify real sudo/systemd-run permissions, recovery and data compatibility first. PR #8's default 730-day studio_audit_log TTL can irreversibly remove existing data: resolve policy/code review before production. Artifact rollback cannot restore deleted database records.
+
+The old eleven workflow-shape tests were replaced with three integrated workflow contracts; current count is API6/UI8/contracts3 = 17, including UI TERM rollback. Real SSH disconnection, systemd-run permissions and SIGKILL recovery remain unverified.

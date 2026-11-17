@@ -7,6 +7,7 @@ on:
     paths:
       - 'fluxgate-studio-ui-nextjs/**'
       - '.github/workflows/deploy-studio-ui.yml'
+      - 'deploy/candidate/**'
 
 permissions:
   contents: read
@@ -51,78 +52,63 @@ jobs:
           NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
         run: npm run build
 
-      - name: Verify deployment artifact
+      - name: Prepare verified deployment bundle
         run: |
+          set -euo pipefail
+          mkdir .deployment
           test -s fluxgate-studio-ui-nextjs/.next/standalone/server.js
-          test -d fluxgate-studio-ui-nextjs/.next/static
-          test -n "$(find fluxgate-studio-ui-nextjs/.next/static -type f -print -quit)"
+          test -s fluxgate-studio-ui-nextjs/.next/standalone/.next/BUILD_ID
+          cp -a fluxgate-studio-ui-nextjs/.next/static fluxgate-studio-ui-nextjs/.next/standalone/.next/static
+          if [ -d fluxgate-studio-ui-nextjs/public ]; then
+            cp -a fluxgate-studio-ui-nextjs/public fluxgate-studio-ui-nextjs/.next/standalone/public
+          fi
+          tar -czf .deployment/ui.tar.gz -C fluxgate-studio-ui-nextjs .next/standalone
+          cp deploy/candidate/activate-ui.sh .deployment/activate.sh
+          (cd .deployment && sha256sum * > SHA256SUMS)
 
-      - name: Check remote deployment prerequisites
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.LIGHTSAIL_HOST }}
-          username: ${{ secrets.LIGHTSAIL_USER }}
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          script: |
-            set -eu
-            command -v curl >/dev/null
-            command -v systemctl >/dev/null
-            test "$(sudo -n systemctl show fluxgate-studio --property=LoadState --value)" = loaded
-            test -d /opt/fluxgate/studio
-            test -w /opt/fluxgate/studio
+      - name: Require verified production activation
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          ENABLED: ${{ vars.STUDIO_SAFE_DEPLOY_ENABLED }}
+          RETENTION_REVIEWED: ${{ vars.STUDIO_AUDIT_RETENTION_REVIEWED }}
+        run: |
+          test "$RETENTION_REVIEWED" = true || { echo 'Production blocked: audit TTL may delete existing data. Resolve retention behavior and obtain required approval before enabling.' >&2; exit 1; }
+          test "$ENABLED" = true || { echo 'Production activation blocked: validate server permissions, recovery and data compatibility before enabling STUDIO_SAFE_DEPLOY_ENABLED.' >&2; exit 1; }
 
-      - name: Stop existing service
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.LIGHTSAIL_HOST }}
-          username: ${{ secrets.LIGHTSAIL_USER }}
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          script: |
-            set -eu
-            sudo -n systemctl stop fluxgate-studio
-            rm -rf /opt/fluxgate/studio/.next
-            mkdir -p /opt/fluxgate/studio
-
-      - name: Copy build to Lightsail
+      - name: Upload staging bundle without stopping service
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          source: "fluxgate-studio-ui-nextjs/.next/standalone/.,fluxgate-studio-ui-nextjs/.next/static"
-          target: "/opt/fluxgate/studio/"
+          source: ".deployment/*"
+          target: "/opt/fluxgate/studio/.deploy-staging/${{ github.run_id }}-${{ github.run_attempt }}"
           strip_components: 1
 
-      - name: Copy static files
+      - name: Activate staged release with server-owned lifetime
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          command_timeout: 15m
           script: |
             set -eu
-            mkdir -p /opt/fluxgate/studio/.next/static
-            cp -r /opt/fluxgate/studio/.next/static /opt/fluxgate/studio/.next/standalone/.next/static
-
-      - name: Start service
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.LIGHTSAIL_HOST }}
-          username: ${{ secrets.LIGHTSAIL_USER }}
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          script: |
-            set -eu
-            sudo -n systemctl start fluxgate-studio
-            healthy=false
-            for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
-              if curl --fail --silent --show-error --connect-timeout 3 --max-time 5 http://localhost:3000 >/dev/null; then
-                healthy=true
-                break
-              fi
-              sleep 5
-            done
-            sudo -n systemctl status fluxgate-studio --no-pager
-            if [ "$healthy" != true ]; then
-              echo "Deployment health check failed" >&2
-              exit 1
-            fi
+            root=/opt/fluxgate/studio
+            stage="$root/.deploy-staging/${{ github.run_id }}-${{ github.run_attempt }}"
+            test -d "$root"
+            test -w "$root"
+            test ! -e "$root/.activation-pending"
+            command -v systemd-run >/dev/null
+            command -v flock >/dev/null
+            cd "$stage"
+            sha256sum -c SHA256SUMS
+            mkdir "$stage/unpacked"
+            tar -xzf ui.tar.gz -C "$stage/unpacked"
+            artifact="$stage/unpacked/.next"
+            expected=unused
+            # The transient system service outlives this SSH client. Never retry blindly
+            # after transport failure: query its status and the pending marker first.
+            sudo -n systemd-run --unit="fluxgate-deploy-ui-${{ github.run_id }}-${{ github.run_attempt }}" --uid="$(id -un)" --property=Type=exec --wait /bin/bash "$stage/activate.sh" "$root" "$artifact" "$expected"

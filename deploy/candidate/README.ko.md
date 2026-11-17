@@ -22,3 +22,13 @@
 - 로컬 변경은 최신 #8 b0bcff1 위로 rebase했고 API artifact 검사는 0.5.0입니다. 후보 스크립트는 workflow에 연결하지 않았습니다.
 - API/UI에 미완료 marker를 추가했습니다. 성공 또는 확인된 복구 때만 제거하며 남아 있으면 다음 배포를 거부합니다. 이는 장애 후 덮어쓰기 방지이지 재부팅/SSH 단절 자동 복구 보장이 아닙니다. marker의 backup 경로와 실제 live 상태를 운영자가 확인한 후 복구해야 합니다.
 - 추가 UI mock 7개(성공, start/health/rename/stop 실패, pending marker, runtime env 차단)가 통과했습니다.
+
+## Workflow 통합 및 운영 차단
+
+현재 로컬 workflow는 후보를 실제 호출하도록 통합했습니다. 이전 stop/delete→전송 경로를 제거했습니다. 먼저 SHA256 목록과 API JAR 또는 static/public을 포함한 UI archive를 staging으로 전송합니다. 서버 checksum 검증 후 transient systemd service에서 활성화하며 SSH 클라이언트와 수명을 분리합니다. `systemd-run --wait`는 완료 결과를 기다리지만 통신 단절 시 GitHub는 결과를 모를 수 있으므로 **재시도 전** `systemctl status fluxgate-deploy-{api|ui}-RUN_ID-RUN_ATTEMPT`와 pending marker/backup 경로를 확인해야 합니다. 재부팅·SIGKILL은 자동 복구되지 않습니다.
+
+두 repository variables `STUDIO_SAFE_DEPLOY_ENABLED=true`, `STUDIO_AUDIT_RETENTION_REVIEWED=true`가 없으면 staging 업로드 전에 명시적으로 실패합니다. 이 변수들은 사용자 승인을 대체하지 않습니다. 실제 서버 권한/systemd-run과 복구 절차, 데이터 호환성 확인 후에만 별도 승인하여 설정할 수 있습니다. 지금은 설정하지 않았습니다.
+
+특히 #8 MonitoringConfig의 studio_audit_log 기본 730일 TTL은 기존 데이터 삭제 가능성이 있습니다. 보존정책/실제 데이터와 코드 수정 검토 전 운영에 적용하면 안 됩니다. JAR/디렉터리 롤백은 TTL로 삭제된 데이터를 되돌리지 못합니다.
+
+통합 후 과거 workflow 형태 전용 테스트 11개는 새 통합 계약 테스트 3개로 교체했습니다. 현재 API6/UI8/통합3 = 17개 테스트입니다. UI8은 TERM 중단 복구도 포함합니다. 실제 sudo/systemd-run/SSH단절 및 SIGKILL 복구 검증은 아직 하지 않았습니다.

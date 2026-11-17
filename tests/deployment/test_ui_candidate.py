@@ -29,7 +29,8 @@ show) case "$*" in
 *LoadState*) echo loaded;;
 *WorkingDirectory*) echo "$ROOT/.next/standalone";;
 *ExecStart*) echo "/usr/bin/node $ROOT/.next/standalone/server.js";; esac;;
-start) [[ $FAILURE == start && $(cat "$ROOT/.next/standalone/server.js") == new ]] && exit 1;;
+start) if [[ $FAILURE == term && $(cat "$ROOT/.next/standalone/server.js") == new ]]; then kill -TERM "$PPID"; exit 1; fi
+[[ $FAILURE == start && $(cat "$ROOT/.next/standalone/server.js") == new ]] && exit 1;;
 stop) if [[ $FAILURE == stop && ! -f $ROOT/stopped ]]; then touch "$ROOT/stopped"; exit 1; fi;;
 esac
 exit 0
@@ -56,6 +57,8 @@ exec /bin/mv "$@"
         code,value,_,err=self.simulate('health'); self.assertEqual(value,'old'); self.assertNotEqual(code,0); self.assertIn('restored and healthy',err)
     def test_switch_failure_rollback(self):
         code,value,_,err=self.simulate('move'); self.assertEqual(value,'old'); self.assertNotEqual(code,0); self.assertIn('restored and healthy',err)
+    def test_term_during_start_restores_old(self):
+        code,value,_,err=self.simulate('term'); self.assertEqual(value,'old'); self.assertNotEqual(code,0); self.assertIn('restored and healthy',err)
     def test_stop_failure_preserves_old(self):
         code,value,_,_=self.simulate('stop'); self.assertEqual(value,'old'); self.assertNotEqual(code,0)
     def test_pending_blocks_before_service_action(self):
