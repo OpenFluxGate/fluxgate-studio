@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 
-import { Check } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 
 export const BUTTON =
   'inline-flex h-8 items-center justify-center gap-1.5 rounded border border-line-strong bg-panel2 px-3 text-[13px] text-fg transition-colors hover:border-fg2 hover:bg-line disabled:cursor-not-allowed disabled:opacity-50 shrink-0 whitespace-nowrap';
@@ -240,4 +240,176 @@ export function MenuLabel({ children }: { children: React.ReactNode }) {
 
 export function MenuDivider() {
   return <div role="separator" className="border-line my-1 border-t" />;
+}
+
+export interface SelectOption<T extends string> {
+  value: T;
+  label: string;
+}
+
+/**
+ * Next highlighted option for a key press in an open list, or null when the key does not move it.
+ * Typing a letter jumps to the next option whose label starts with it.
+ */
+export function moveOption(labels: string[], current: number, key: string): number | null {
+  const last = labels.length - 1;
+  if (last < 0) return null;
+  if (key === 'ArrowDown') return Math.min(last, current + 1);
+  if (key === 'ArrowUp') return Math.max(0, current - 1);
+  if (key === 'Home' || key === 'PageUp') return 0;
+  if (key === 'End' || key === 'PageDown') return last;
+  if (key.length === 1 && key.trim()) {
+    const letter = key.toLowerCase();
+    for (let step = 1; step <= labels.length; step++) {
+      const index = (current + step) % labels.length;
+      if (labels[index].toLowerCase().startsWith(letter)) return index;
+    }
+  }
+  return null;
+}
+
+/**
+ * Drop down that looks the same on every platform. Focus stays on the button and the highlighted
+ * option is announced through aria-activedescendant, so it works inside dialogs that trap focus.
+ */
+export function Select<T extends string>({
+  id,
+  value,
+  options,
+  onChange,
+  label,
+  disabled = false,
+  className = '',
+  buttonClassName,
+}: {
+  id?: string;
+  value: T;
+  options: SelectOption<T>[];
+  onChange: (value: T) => void;
+  /** Accessible name when no visible label points at the id. */
+  label?: string;
+  disabled?: boolean;
+  className?: string;
+  buttonClassName?: string;
+}) {
+  const generated = useId();
+  const listId = `${id ?? generated}-list`;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const [upward, setUpward] = useState(false);
+  const selectedIndex = Math.max(
+    0,
+    options.findIndex((option) => option.value === value)
+  );
+  const selected = options[selectedIndex];
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    return () => document.removeEventListener('mousedown', onPointer);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    document.getElementById(`${listId}-${active}`)?.scrollIntoView({ block: 'nearest' });
+  }, [open, active, listId]);
+
+  const show = (button: HTMLElement) => {
+    const room = window.innerHeight - button.getBoundingClientRect().bottom;
+    setUpward(room < Math.min(options.length * 32 + 8, 264) + 8);
+    setActive(selectedIndex);
+    setOpen(true);
+  };
+  const choose = (index: number) => {
+    setOpen(false);
+    const option = options[index];
+    if (option && option.value !== value) onChange(option.value);
+  };
+
+  const onKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!open) {
+      if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) {
+        event.preventDefault();
+        show(event.currentTarget);
+      }
+      return;
+    }
+    if (event.key === 'Escape') {
+      // Marked as handled, so a surrounding dialog stays open.
+      event.preventDefault();
+      setOpen(false);
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      choose(active);
+      return;
+    }
+    if (event.key === 'Tab') {
+      setOpen(false);
+      return;
+    }
+    const next = moveOption(
+      options.map((option) => option.label),
+      active,
+      event.key
+    );
+    if (next !== null) {
+      event.preventDefault();
+      setActive(next);
+    }
+  };
+
+  return (
+    <div ref={rootRef} className={`relative ${className}`}>
+      <button
+        id={id}
+        type="button"
+        role="combobox"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-activedescendant={open ? `${listId}-${active}` : undefined}
+        aria-label={label}
+        disabled={disabled}
+        onClick={(event) => (open ? setOpen(false) : show(event.currentTarget))}
+        onKeyDown={onKeyDown}
+        className={
+          buttonClassName ??
+          `${INPUT} flex w-full items-center gap-2 text-left disabled:cursor-not-allowed disabled:opacity-50`
+        }
+      >
+        <span className="min-w-0 flex-1 truncate">{selected?.label}</span>
+        <ChevronDown size={14} aria-hidden className="text-muted shrink-0" />
+      </button>
+      {open && (
+        <ul
+          id={listId}
+          role="listbox"
+          aria-label={label}
+          className={`border-line-strong bg-panel2 absolute z-50 max-h-64 w-max min-w-full overflow-auto rounded-md border py-1 shadow-xl ${upward ? 'bottom-full mb-1' : 'top-full mt-1'}`}
+        >
+          {options.map((option, index) => (
+            <li
+              key={option.value}
+              id={`${listId}-${index}`}
+              role="option"
+              aria-selected={option.value === value}
+              onMouseDown={(event) => event.preventDefault()}
+              onMouseEnter={() => setActive(index)}
+              onClick={() => choose(index)}
+              className={`flex h-8 cursor-pointer items-center gap-2 px-3 text-[13px] whitespace-nowrap ${index === active ? 'bg-line text-fg' : 'text-fg2'}`}
+            >
+              <span className="flex-1">{option.label}</span>
+              {option.value === value && <Check size={14} aria-hidden className="text-s1-text" />}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }

@@ -33,6 +33,8 @@ function useDialog(container: React.RefObject<HTMLDivElement | null>, onClose: (
 
     const onKey = (event: KeyboardEvent) => {
       if (stack[stack.length - 1] !== me) return;
+      // A control inside the dialog, such as an open drop down, already handled this key.
+      if (event.defaultPrevented) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         closeRef.current();

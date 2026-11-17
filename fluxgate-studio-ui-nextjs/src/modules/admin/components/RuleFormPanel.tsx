@@ -7,7 +7,14 @@ import { Copy, Plus, Trash2 } from 'lucide-react';
 import { type MessageKey } from '@/lib/i18n';
 import { keyStrategyLabel, policyLabel, scopeLabel } from '@/lib/labels';
 import { describeBand } from '@/lib/ruleMeaning';
-import { BUTTON, BUTTON_PRIMARY, Field, IconButton, INPUT } from '@/modules/console/controls';
+import {
+  BUTTON,
+  BUTTON_PRIMARY,
+  Field,
+  IconButton,
+  INPUT,
+  Select,
+} from '@/modules/console/controls';
 import { useI18n } from '@/modules/console/I18nProvider';
 import { Drawer } from '@/modules/console/overlay';
 import { Notice } from '@/modules/console/ui';
@@ -322,56 +329,42 @@ export const RuleFormPanel = ({
               />
             </Field>
             <Field id="rule-scope" label={t('field.scope')}>
-              <select
+              <Select
                 id="rule-scope"
-                name="scope"
                 value={formData.scope}
-                onChange={(event) =>
-                  updateForm({ ...formData, scope: event.target.value as Rule['scope'] })
-                }
-                className={`${INPUT} w-full`}
-              >
-                {SCOPES.map((scope) => (
-                  <option key={scope} value={scope}>
-                    {scopeLabel(scope, locale)}
-                  </option>
-                ))}
-              </select>
+                options={SCOPES.map((scope) => ({
+                  value: scope,
+                  label: scopeLabel(scope, locale),
+                }))}
+                onChange={(scope) => updateForm({ ...formData, scope: scope as Rule['scope'] })}
+              />
             </Field>
             <Field id="rule-key-strategy" label={t('field.keyStrategyId')}>
-              <select
+              <Select
                 id="rule-key-strategy"
-                name="keyStrategyId"
                 value={formData.keyStrategyId}
-                onChange={(event) => updateForm({ ...formData, keyStrategyId: event.target.value })}
-                className={`${INPUT} w-full`}
-              >
-                {KEY_STRATEGIES.map((strategy) => (
-                  <option key={strategy} value={strategy}>
-                    {keyStrategyLabel(strategy, locale)}
-                  </option>
-                ))}
-              </select>
+                options={KEY_STRATEGIES.map((strategy) => ({
+                  value: strategy,
+                  label: keyStrategyLabel(strategy, locale),
+                }))}
+                onChange={(strategy) => updateForm({ ...formData, keyStrategyId: strategy })}
+              />
             </Field>
             <Field id="rule-policy" label={t('field.onLimitExceedPolicy')}>
-              <select
+              <Select
                 id="rule-policy"
-                name="onLimitExceedPolicy"
                 value={formData.onLimitExceedPolicy}
-                onChange={(event) =>
+                options={POLICIES.map((policy) => ({
+                  value: policy,
+                  label: policyLabel(policy, locale),
+                }))}
+                onChange={(policy) =>
                   updateForm({
                     ...formData,
-                    onLimitExceedPolicy: event.target.value as Rule['onLimitExceedPolicy'],
+                    onLimitExceedPolicy: policy as Rule['onLimitExceedPolicy'],
                   })
                 }
-                className={`${INPUT} w-full`}
-              >
-                {POLICIES.map((policy) => (
-                  <option key={policy} value={policy}>
-                    {policyLabel(policy, locale)}
-                  </option>
-                ))}
-              </select>
+              />
             </Field>
             <div className="flex items-end pb-1.5">
               <label

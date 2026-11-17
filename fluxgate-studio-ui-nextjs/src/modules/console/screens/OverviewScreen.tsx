@@ -35,6 +35,7 @@ import {
   Sparkline,
   TimeSeries,
 } from '../charts';
+import { Select } from '../controls';
 import { useI18n } from '../I18nProvider';
 import { useKiosk } from '../kiosk';
 import { useMe } from '../MeProvider';
@@ -252,28 +253,25 @@ export function OverviewScreen() {
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <label
             htmlFor="variable-rule-set"
-            className="border-line-strong focus-within:border-s1 focus-within:ring-s1/40 flex h-8 items-center overflow-hidden rounded border focus-within:ring-2"
+            className="border-line-strong focus-within:border-s1 focus-within:ring-s1/40 flex h-8 items-center rounded border focus-within:ring-2"
           >
-            <span className="border-line-strong bg-panel2 text-fg2 flex h-full items-center border-r px-2.5 text-xs font-medium">
+            <span className="border-line-strong bg-panel2 text-fg2 flex h-full items-center rounded-l border-r px-2.5 text-xs font-medium">
               {t('var.ruleSet')}
             </span>
-            <select
+            <Select
               id="variable-rule-set"
-              name="ruleSet"
+              className="h-full"
+              buttonClassName="bg-panel text-fg flex h-full min-w-40 items-center gap-2 rounded-r px-2 text-left text-[13px] focus-visible:outline-none"
               value={state.ruleSet ?? ''}
-              onChange={(event) => update({ ruleSet: event.target.value || null })}
-              className="bg-panel text-fg h-full min-w-40 px-2 text-[13px] focus-visible:outline-none"
-            >
-              <option value="">{t('var.all')}</option>
-              {allSets.map((set) => (
-                <option key={set.ruleSetId} value={set.ruleSetId}>
-                  {set.ruleSetId}
-                </option>
-              ))}
-              {state.ruleSet && !allSets.some((set) => set.ruleSetId === state.ruleSet) && (
-                <option value={state.ruleSet}>{state.ruleSet}</option>
-              )}
-            </select>
+              options={[
+                { value: '', label: t('var.all') },
+                ...allSets.map((set) => ({ value: set.ruleSetId, label: set.ruleSetId })),
+                ...(state.ruleSet && !allSets.some((set) => set.ruleSetId === state.ruleSet)
+                  ? [{ value: state.ruleSet, label: state.ruleSet }]
+                  : []),
+              ]}
+              onChange={(ruleSet) => update({ ruleSet: ruleSet || null })}
+            />
           </label>
         </div>
       )}
@@ -381,7 +379,7 @@ export function OverviewScreen() {
       </Row>
 
       <Row id="trend" title={t('row.trend')}>
-        <div className="grid gap-3 xl:grid-cols-3">
+        <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
           <div className="flex min-w-0 flex-col gap-3 xl:col-span-2">
             <Panel
               title={`${t('overview.allowedSeries')} · ${formatBucket(bucketMillis, locale)}`}
@@ -453,10 +451,10 @@ export function OverviewScreen() {
               )}
             </Panel>
           </div>
-          <div className="min-w-0 xl:relative">
+          <div className="min-w-0 lg:relative">
             <Panel
-              className="xl:absolute xl:inset-0 xl:flex xl:flex-col"
-              bodyClassName="xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:[mask-image:linear-gradient(to_bottom,black_calc(100%-32px),transparent)]"
+              className="lg:absolute lg:inset-0 lg:flex lg:flex-col"
+              bodyClassName="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:[mask-image:linear-gradient(to_bottom,black_calc(100%-32px),transparent)]"
               title={t('overview.topRejected')}
               description={t('overview.topHelp')}
               state={{

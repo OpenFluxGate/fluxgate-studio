@@ -25,7 +25,7 @@ import { type Locale, type MessageKey } from '@/lib/i18n';
 import { fieldLabel, valueLabel } from '@/lib/labels';
 import { windowLabel } from '@/lib/timeRange';
 
-import { Badge, BUTTON, BUTTON_QUIET, Field, INPUT } from '../controls';
+import { Badge, BUTTON, BUTTON_QUIET, Field, INPUT, Select } from '../controls';
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
 import { RangeMenu } from '../TimeRangePicker';
@@ -289,20 +289,19 @@ export function AuditScreen() {
         onSubmit={(event) => event.preventDefault()}
       >
         <Field id="audit-action" label={t('audit.filterAction')}>
-          <select
+          <Select
             id="audit-action"
-            name="action"
+            className="w-44"
             value={action}
-            onChange={(event) => resetPage(setAction)(event.target.value)}
-            className={`${INPUT} w-44`}
-          >
-            <option value="">{t('audit.allActions')}</option>
-            {ACTIONS.map((option) => (
-              <option key={option} value={option}>
-                {t(`action.${option}` as MessageKey)}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: '', label: t('audit.allActions') },
+              ...ACTIONS.map((option) => ({
+                value: option as string,
+                label: t(`action.${option}` as MessageKey),
+              })),
+            ]}
+            onChange={resetPage(setAction)}
+          />
         </Field>
         <Field id="audit-user" label={t('audit.filterUser')}>
           <input

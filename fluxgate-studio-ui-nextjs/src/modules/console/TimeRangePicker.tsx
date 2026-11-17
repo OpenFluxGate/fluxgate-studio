@@ -13,7 +13,7 @@ import {
   zoomOut,
 } from '@/lib/timeRange';
 
-import { BUTTON, IconButton, INPUT, MenuItem, MenuList, usePopover } from './controls';
+import { BUTTON, IconButton, MenuItem, MenuList, Select, usePopover } from './controls';
 import { useI18n } from './I18nProvider';
 import { useKiosk } from './kiosk';
 
@@ -110,21 +110,17 @@ export function TimeRangePicker({
       <label className="sr-only" htmlFor="refresh-interval">
         {t('refresh.interval')}
       </label>
-      <select
+      <Select
         id="refresh-interval"
-        name="refresh"
-        title={t('refresh.interval')}
+        className="w-20"
         value={absolute ? 'off' : state.refresh}
         disabled={absolute}
-        onChange={(event) => onChange({ refresh: event.target.value as RefreshInterval })}
-        className={`${INPUT} w-[4.5rem] pr-1`}
-      >
-        {REFRESH_OPTIONS.map((option) => (
-          <option key={option} value={option}>
-            {option === 'off' ? t('refresh.off') : option}
-          </option>
-        ))}
-      </select>
+        options={REFRESH_OPTIONS.map((option) => ({
+          value: option,
+          label: option === 'off' ? t('refresh.off') : option,
+        }))}
+        onChange={(refresh) => onChange({ refresh: refresh as RefreshInterval })}
+      />
       <IconButton label={t('tv.enter')} icon={Monitor} onClick={() => setKiosk(true)} align="end" />
     </div>
   );

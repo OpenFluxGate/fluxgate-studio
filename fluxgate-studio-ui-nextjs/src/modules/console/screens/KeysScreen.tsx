@@ -12,7 +12,7 @@ import { type MessageKey } from '@/lib/i18n';
 import { windowLabel } from '@/lib/timeRange';
 
 import { type SeriesSpec, SeriesStats, TimeSeries } from '../charts';
-import { BUTTON, BUTTON_PRIMARY, Field, INPUT } from '../controls';
+import { BUTTON, BUTTON_PRIMARY, Field, INPUT, Select } from '../controls';
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
 import { RangeMenu } from '../TimeRangePicker';
@@ -160,19 +160,16 @@ export function KeysScreen() {
         }}
       >
         <Field id="key-transform" label={t('keys.format')}>
-          <select
+          <Select
             id="key-transform"
-            name="transform"
+            className="w-44"
             value={transform}
-            onChange={(event) => setTransform(event.target.value)}
-            className={`${INPUT} w-44`}
-          >
-            {(transforms.data ?? ['none']).map((option) => (
-              <option key={option} value={option}>
-                {t(`keys.transform.${option}` as MessageKey)}
-              </option>
-            ))}
-          </select>
+            options={(transforms.data ?? ['none']).map((option) => ({
+              value: option,
+              label: t(`keys.transform.${option}` as MessageKey),
+            }))}
+            onChange={setTransform}
+          />
         </Field>
         <Field id="key-value" label={t('keys.value')} className="min-w-64 flex-1">
           <input
