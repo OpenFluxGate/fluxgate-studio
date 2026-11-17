@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { Check, ChevronDown } from 'lucide-react';
 
@@ -17,20 +18,99 @@ export const INPUT =
 
 type Align = 'center' | 'end' | 'start';
 
-const TOOLTIP_ALIGN: Record<Align, string> = {
-  center: 'left-1/2 -translate-x-1/2',
-  end: 'right-0',
-  start: 'left-0',
-};
-
 export function Tooltip({ text, align = 'center' }: { text: string; align?: Align }) {
+  const marker = useRef<HTMLSpanElement>(null);
+  const bubble = useRef<HTMLSpanElement>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const anchor = marker.current?.parentElement;
+    if (!anchor) return;
+    let hovered = false;
+    let focused = false;
+    const enter = () => {
+      hovered = true;
+      setOpen(true);
+    };
+    const leave = () => {
+      hovered = false;
+      setOpen(focused);
+    };
+    const focus = () => {
+      focused = true;
+      setOpen(true);
+    };
+    const blur = () => {
+      focused = false;
+      setOpen(hovered);
+    };
+    anchor.addEventListener('mouseenter', enter);
+    anchor.addEventListener('mouseleave', leave);
+    anchor.addEventListener('focusin', focus);
+    anchor.addEventListener('focusout', blur);
+    return () => {
+      anchor.removeEventListener('mouseenter', enter);
+      anchor.removeEventListener('mouseleave', leave);
+      anchor.removeEventListener('focusin', focus);
+      anchor.removeEventListener('focusout', blur);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('keydown', escape);
+    const place = () => {
+      const anchor = marker.current?.parentElement;
+      const tip = bubble.current;
+      if (!anchor || !tip) return;
+      const rect = anchor.getBoundingClientRect();
+      const width = tip.offsetWidth;
+      const height = tip.offsetHeight;
+      const x =
+        align === 'start'
+          ? rect.left
+          : align === 'end'
+            ? rect.right - width
+            : rect.left + (rect.width - width) / 2;
+      tip.style.left = Math.max(8, Math.min(x, window.innerWidth - width - 8)) + 'px';
+      tip.style.top =
+        Math.max(
+          8,
+          rect.bottom + height + 6 <= window.innerHeight - 8
+            ? rect.bottom + 6
+            : rect.top - height - 6
+        ) + 'px';
+      tip.style.visibility = 'visible';
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      document.removeEventListener('keydown', escape);
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, align, text]);
+
   return (
-    <span
-      role="tooltip"
-      className={`border-line-strong bg-panel2 text-fg pointer-events-none absolute top-full z-50 mt-1.5 rounded border px-2 py-1 text-[11px] font-normal whitespace-nowrap opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 ${TOOLTIP_ALIGN[align]}`}
-    >
-      {text}
-    </span>
+    <>
+      <span ref={marker} hidden />
+      {open &&
+        createPortal(
+          <span
+            ref={bubble}
+            role="tooltip"
+            className="border-line-strong bg-panel2 text-fg pointer-events-none fixed z-[100] w-max max-w-[min(20rem,calc(100vw-16px))] rounded border px-2 py-1 text-[11px] font-normal break-words whitespace-normal shadow-lg"
+            style={{ visibility: 'hidden', left: 0, top: 0 }}
+          >
+            {text}
+          </span>,
+          document.body
+        )}
+    </>
   );
 }
 
