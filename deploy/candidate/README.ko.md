@@ -1,34 +1,20 @@
-# API 활성화 후보 (운영에 연결되지 않음)
+# Studio 0.5.0 배포 안전 경로
 
-이 스크립트는 검토용이며 현재 GitHub Actions에서 호출하지 않습니다. 원격 전송, 배포 및 systemd 변경을 하지 않았습니다.
+API/UI workflow에 연결된 활성화 스크립트입니다. **실제 운영 검증과 활성화 승인은 아직 완료되지 않았습니다.** 운영 변수 두 개가 모두 true가 아니면 업로드 전에 실패합니다: `STUDIO_SAFE_DEPLOY_ENABLED`, `STUDIO_AUDIT_RETENTION_REVIEWED`. 변수는 사용자 승인을 대체하지 않습니다.
 
-## 제안 흐름
+## 동작
 
-1. 검증된 PR 통합 SHA에서 API 0.5.0을 빌드하고 JAR manifest/버전, 테스트, SHA256을 확인합니다.
-2. 기존 서비스가 실행 중일 때 실행별 고유 staging 디렉터리에 JAR과 검토된 스크립트를 전송합니다. 전송 실패 시 기존 서비스는 중단되지 않습니다.
-3. `bash activate-api.sh /opt/fluxgate/admin-api STAGED_JAR EXPECTED_SHA256`로 활성화합니다. 예상 SHA256은 빌드한 runner에서 전달합니다.
-4. 현재 unit이 가리키는 `fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar`는 **호환용 배치 파일명**입니다. 내용은 검증된 0.5.0입니다. unit 변경 없이 기존 경로에 원자적 rename으로 배치합니다. 장기적으로 버전 독립 경로로 전환할지는 별도 검토합니다.
-5. 활성화 전 기존 health와 unit 경로/로드 상태/활성 상태, checksum, 로컬 잠금을 검사하고 이전 파일을 보존합니다. 파일 준비 이후에만 stop → rename → start 합니다.
-6. start 또는 health 실패 시 이전 파일을 복원하고 start/health를 확인하며 전체 작업은 실패로 종료합니다. 복구 자체 실패는 CRITICAL 메시지로 보고합니다. 백업은 자동 삭제하지 않습니다.
+- 서비스가 실행 중인 동안 실행별 staging에 JAR 또는 완성된 UI archive와 스크립트, SHA256 목록을 업로드합니다. checksum 검증 실패는 기존 서비스를 중단시키지 않습니다.
+- 서버 `systemd-run --wait` transient service로 활성화를 실행해 SSH 클라이언트와 작업 수명을 분리합니다. 서버의 기존 배포 사용자 UID로 실행하며 sudo 권한이 필요합니다.
+- API는 기존 unit이 가리키는 `fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar`를 호환용 배치명으로 유지합니다. 실제 내용은 0.5.0입니다. 사전 unit 경로/health/checksum/lock 검증 및 이전 파일 백업 후 stop→원자적 rename→start 합니다.
+- UI는 static/public을 standalone 안에 포함시켜 staging하고, 기존 `.next`를 보존한 다음 디렉터리를 전환합니다. 기존 standalone에 runtime `.env*`가 있으면 명시적 이전 검토 전 거부합니다.
+- start/health/전환 실패는 이전 artifact/tree로 복원하고 health를 확인합니다. 작업 전체는 실패로 종료합니다. 복구 실패는 CRITICAL로 표시하고 marker/백업을 남깁니다.
+- 성공 또는 확인된 복구에만 `.activation-pending`을 제거합니다. marker가 남아 있으면 다음 배포는 거부합니다. 백업은 자동 삭제하지 않습니다.
 
-## 검증 및 한계
+## 장애 대응과 제한
 
-- 6개 mock 테스트: 성공, checksum 불일치, unit 경로 불일치, start 실패, health 실패, stop 실패. 이전 workflow 계약 11개도 통과했습니다.
-- 테스트는 실제 SSH/systemd/DB에 접속하지 않습니다. Mac 테스트의 flock/GNU chmod는 mock이며 Ubuntu의 실제 잠금/권한/rename 검증은 남아 있습니다.
-- SIGKILL, 서버 재부팅, 디스크 손상, SSH 단절 상황의 완료·복구를 보장하지 않습니다. 배포를 내구성 있는 서버 작업으로 실행하고 상태를 조회하는 방식은 추가 설계가 필요합니다.
-- DB schema/데이터 변경은 되돌리지 않습니다. 새 버전과 구 버전의 데이터 호환성을 확인하기 전 실행하면 안 됩니다.
-- health는 기존 8081 actuator HTTP 성공만 검사합니다. 인증된 기능 smoke test, 실제 운영 설정의 완전한 적합성, 외부 UI/API 접근은 검증하지 않습니다.
-- UI 후보 activate-ui.sh는 준비된 .next 전체를 먼저 복사하고 기존 디렉터리를 보존한 뒤 전환합니다. 시작/health/전환 실패 시 이전 디렉터리를 복원합니다. runtime .env 파일 발견 시 자동 배포를 거부합니다. static/BUILD_ID는 검사하지만 public 자산·패키지 checksum 검증은 추가 필요합니다. 기존 workflow의 stop 후 삭제 로직을 운영 안전하다고 보지 않습니다.
-- 로컬 변경은 최신 #8 b0bcff1 위로 rebase했고 API artifact 검사는 0.5.0입니다. 후보 스크립트는 workflow에 연결하지 않았습니다.
-- API/UI에 미완료 marker를 추가했습니다. 성공 또는 확인된 복구 때만 제거하며 남아 있으면 다음 배포를 거부합니다. 이는 장애 후 덮어쓰기 방지이지 재부팅/SSH 단절 자동 복구 보장이 아닙니다. marker의 backup 경로와 실제 live 상태를 운영자가 확인한 후 복구해야 합니다.
-- 추가 UI mock 7개(성공, start/health/rename/stop 실패, pending marker, runtime env 차단)가 통과했습니다.
+SSH가 끊기면 GitHub는 결과를 모를 수 있습니다. **재시도 전** `systemctl status fluxgate-deploy-{api|ui}-RUN_ID-RUN_ATTEMPT`, pending marker와 기록된 backup/live 상태를 확인해야 합니다. 서버 재부팅/SIGKILL은 자동 복구되지 않습니다. marker는 덮어쓰기 방지 장치이지 내구 복구 보장이 아닙니다. 손상된 상태를 확인 없이 삭제/재시작하지 마세요.
 
-## Workflow 통합 및 운영 차단
+#8의 audit retention opt-in 수정(405c548)을 보존했습니다. 운영 환경이 TTL 생성을 명시적으로 켜는지, 기존 인덱스/데이터/보존정책은 여전히 확인해야 합니다. TTL 삭제 데이터는 JAR 롤백으로 복원되지 않습니다. 데이터 호환성/보존정책 검토 전 활성화하지 마세요.
 
-현재 로컬 workflow는 후보를 실제 호출하도록 통합했습니다. 이전 stop/delete→전송 경로를 제거했습니다. 먼저 SHA256 목록과 API JAR 또는 static/public을 포함한 UI archive를 staging으로 전송합니다. 서버 checksum 검증 후 transient systemd service에서 활성화하며 SSH 클라이언트와 수명을 분리합니다. `systemd-run --wait`는 완료 결과를 기다리지만 통신 단절 시 GitHub는 결과를 모를 수 있으므로 **재시도 전** `systemctl status fluxgate-deploy-{api|ui}-RUN_ID-RUN_ATTEMPT`와 pending marker/backup 경로를 확인해야 합니다. 재부팅·SIGKILL은 자동 복구되지 않습니다.
-
-두 repository variables `STUDIO_SAFE_DEPLOY_ENABLED=true`, `STUDIO_AUDIT_RETENTION_REVIEWED=true`가 없으면 staging 업로드 전에 명시적으로 실패합니다. 이 변수들은 사용자 승인을 대체하지 않습니다. 실제 서버 권한/systemd-run과 복구 절차, 데이터 호환성 확인 후에만 별도 승인하여 설정할 수 있습니다. 지금은 설정하지 않았습니다.
-
-특히 #8 MonitoringConfig의 studio_audit_log 기본 730일 TTL은 기존 데이터 삭제 가능성이 있습니다. 보존정책/실제 데이터와 코드 수정 검토 전 운영에 적용하면 안 됩니다. JAR/디렉터리 롤백은 TTL로 삭제된 데이터를 되돌리지 못합니다.
-
-통합 후 과거 workflow 형태 전용 테스트 11개는 새 통합 계약 테스트 3개로 교체했습니다. 현재 API6/UI8/통합3 = 17개 테스트입니다. UI8은 TERM 중단 복구도 포함합니다. 실제 sudo/systemd-run/SSH단절 및 SIGKILL 복구 검증은 아직 하지 않았습니다.
+실제 Ubuntu의 sudo/systemd-run/lock/권한, SSH 단절 시 실행 유지, 디스크 공간, runtime 설정, 외부 접근 및 인증된 기능 검증은 남아 있습니다. 테스트는 실제 서비스를 실행하거나 DB를 변경하지 않습니다. API6/UI8/통합 workflow3 = 17개 mock 테스트가 통과했습니다. UI는 TERM 중단 복구를 포함합니다. 파일·디렉터리 전환 사이의 짧은 서비스 중단은 있습니다. API/UI 두 컴포넌트의 원자적 동시 배포는 보장하지 않습니다.
