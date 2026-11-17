@@ -12,12 +12,13 @@ concurrency:
   cancel-in-progress: true
 jobs:
   synthetic-browser:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
       run:
         working-directory: fluxgate-studio-ui-nextjs
     env:
+      NEXT_TELEMETRY_DISABLED: '1'
       NEXTAUTH_URL: http://127.0.0.1:3173
       NEXTAUTH_SECRET: build-only-synthetic-not-a-real-secret
       ADMIN_API_URL: http://127.0.0.1:9
