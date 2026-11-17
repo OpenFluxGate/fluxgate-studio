@@ -11,15 +11,16 @@ export function useLive<T>(
   fetcher: () => Promise<T>,
   refreshMs: number = REFRESH_MS
 ) {
-  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [lastSuccess, setLastSuccess] = useState<{ key: string | null; at: number } | null>(null);
   const result = useSWR<T>(key, fetcher, {
     refreshInterval: refreshMs,
     refreshWhenHidden: false,
     revalidateOnFocus: true,
-    keepPreviousData: true,
-    onSuccess: () => setUpdatedAt(Date.now()),
+    // Retain SWR's same-key data on refresh errors, never another range/filter's values.
+    keepPreviousData: false,
+    onSuccess: () => setLastSuccess({ key, at: Date.now() }),
   });
-  return { ...result, updatedAt };
+  return { ...result, updatedAt: lastSuccess?.key === key ? lastSuccess.at : null };
 }
 
 function subscribeToClock(listener: () => void) {

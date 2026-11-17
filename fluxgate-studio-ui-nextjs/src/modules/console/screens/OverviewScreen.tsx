@@ -17,6 +17,7 @@ import {
 } from '@/lib/api';
 import { formatAgo, formatBucket, formatCount, formatPercent, formatTimestamp } from '@/lib/format';
 import { type MessageKey } from '@/lib/i18n';
+import { relativeChange } from '@/lib/relativeChange';
 import { BAD_RATE, bucketRates, rateSeverity, summarize, WARN_RATE } from '@/lib/stats';
 import {
   apiRangeParams,
@@ -76,11 +77,9 @@ function Delta({
 }) {
   const { t } = useI18n();
   if (previous === null) return <span>{t('overview.noPrevious')}</span>;
-  const change = points
-    ? (current - previous) * 100
-    : previous
-      ? (current - previous) / previous
-      : 0;
+  const relative = relativeChange(current, previous);
+  if (!points && relative === null) return <span>{t('overview.zeroBaseline')}</span>;
+  const change = points ? (current - previous) * 100 : relative!;
   const up = change > 0;
   const flat = Math.abs(change) < (points ? 0.05 : 0.005);
   const text = flat
@@ -217,6 +216,7 @@ export function OverviewScreen() {
   const seriesState = {
     loading: !series.data && !series.error,
     error: !series.data && !invalidRange ? series.error : undefined,
+    staleError: series.data ? series.error : undefined,
     empty: !!series.data && summary.total === 0,
     onRetry: () => void series.mutate(),
   };
@@ -276,6 +276,8 @@ export function OverviewScreen() {
         </div>
       )}
 
+      <p className="text-muted mb-4 text-xs">{t('overview.scopeHelp')}</p>
+
       {invalidRange && (
         <Notice tone="warn">
           {t('overview.rangeInvalid')}{' '}
@@ -295,7 +297,7 @@ export function OverviewScreen() {
         )}
 
       <Row id="summary" title={t('row.summary')}>
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatPanel
             title={t('overview.decisions')}
             value={series.data ? formatCount(summary.total) : '–'}
@@ -352,7 +354,9 @@ export function OverviewScreen() {
               ) : (
                 <Delta
                   current={summary.rate}
-                  previous={previousSummary ? previousSummary.rate : null}
+                  previous={
+                    previousSummary && previousSummary.total > 0 ? previousSummary.rate : null
+                  }
                   points
                   badWhenUp
                 />
@@ -361,6 +365,7 @@ export function OverviewScreen() {
           />
           <StatPanel
             title={t('overview.activeRules')}
+            description={t('overview.globalRules')}
             value={stats.data ? String(stats.data.activeRules) : '–'}
             unit={stats.data ? `/ ${stats.data.totalRules}` : undefined}
             delta={
@@ -372,6 +377,7 @@ export function OverviewScreen() {
             state={{
               loading: !stats.data && !stats.error,
               error: stats.data ? undefined : stats.error,
+              staleError: stats.data ? stats.error : undefined,
               onRetry: () => void stats.mutate(),
             }}
           />
@@ -460,6 +466,7 @@ export function OverviewScreen() {
               state={{
                 loading: !top.data && !top.error,
                 error: top.data ? undefined : top.error,
+                staleError: top.data ? top.error : undefined,
                 empty: !!top.data && topRows.length === 0,
                 onRetry: () => void top.mutate(),
               }}
@@ -537,6 +544,7 @@ export function OverviewScreen() {
           state={{
             loading: !overview.data && !overview.error,
             error: overview.data ? undefined : overview.error,
+            staleError: overview.data ? overview.error : undefined,
             empty: !!overview.data && sets.length === 0,
             onRetry: () => void overview.mutate(),
           }}

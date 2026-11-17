@@ -79,16 +79,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
       >
         {t('common.skip')}
       </a>
-      <div className="bg-bg text-fg flex h-screen overflow-hidden">
+      <div className="bg-bg text-fg flex h-dvh overflow-hidden">
         {!kiosk && (
           <aside
             aria-label="FluxGate"
-            className={`border-line bg-panel flex h-full shrink-0 flex-col border-r px-2 py-2 transition-[width] ${expanded ? 'w-52' : 'w-14'}`}
+            className={`border-line bg-panel flex h-full w-14 shrink-0 flex-col border-r px-2 py-2 transition-[width] ${expanded ? 'md:w-52' : 'md:w-14'}`}
           >
             <div className="mb-4 flex h-8 items-center gap-2 px-2">
               <BrandMark size={20} />
               {expanded && (
-                <span className="text-[15px] font-semibold tracking-tight">FluxGate Studio</span>
+                <span className="hidden text-[15px] font-semibold tracking-tight md:inline">
+                  FluxGate Studio
+                </span>
               )}
             </div>
             <nav className="flex flex-col gap-0.5" aria-label={t('nav.main')}>
@@ -100,9 +102,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    aria-label={expanded ? undefined : label}
+                    aria-label={label}
                     aria-current={active ? 'page' : undefined}
-                    className={`group relative flex h-9 items-center gap-2.5 rounded px-2.5 text-[13px] transition-colors ${active ? 'bg-panel2 text-fg font-medium' : 'text-fg2 hover:bg-panel2 hover:text-fg'}`}
+                    className={`group relative flex h-11 items-center gap-2.5 rounded px-2.5 text-[13px] transition-colors md:h-9 ${active ? 'bg-panel2 text-fg font-medium' : 'text-fg2 hover:bg-panel2 hover:text-fg'}`}
                   >
                     {active && (
                       <span
@@ -112,7 +114,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     )}
                     <Icon size={17} aria-hidden className="shrink-0" />
                     {expanded ? (
-                      <span className="truncate">{label}</span>
+                      <span className="hidden truncate md:inline">{label}</span>
                     ) : (
                       <Tooltip text={label} align="start" />
                     )}
@@ -124,7 +126,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               type="button"
               aria-label={t(expanded ? 'nav.collapse' : 'nav.expand')}
               onClick={() => setExpanded(!expanded)}
-              className="group text-muted hover:bg-panel2 hover:text-fg relative mt-auto flex h-9 items-center gap-2.5 rounded px-2.5 text-[13px] transition-colors"
+              className="group text-muted hover:bg-panel2 hover:text-fg relative mt-auto hidden h-9 items-center gap-2.5 rounded px-2.5 text-[13px] transition-colors md:flex"
             >
               {expanded ? (
                 <PanelLeftClose size={17} aria-hidden className="shrink-0" />

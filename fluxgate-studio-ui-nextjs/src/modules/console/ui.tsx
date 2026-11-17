@@ -54,6 +54,8 @@ export interface TableData {
 export interface PanelState {
   loading?: boolean;
   error?: unknown;
+  /** Refresh failed after a successful response; keep values but label them stale. */
+  staleError?: unknown;
   empty?: boolean;
   onRetry?: () => void;
 }
@@ -82,7 +84,7 @@ export function PageHeader({
   if (kiosk) return null;
   const environment = process.env.NEXT_PUBLIC_ENV_LABEL;
   return (
-    <div className="border-line bg-panel sticky top-0 z-30 -mx-4 mb-4 flex h-12 items-center gap-3 border-b px-4">
+    <div className="border-line bg-panel sticky top-0 z-30 -mx-4 mb-4 flex min-h-12 flex-wrap items-center gap-3 border-b px-4 py-2 md:flex-nowrap md:py-0">
       <nav aria-label="breadcrumb" className="flex shrink-0 items-center gap-1.5 text-[13px]">
         <span className="text-muted">FluxGate</span>
         <span aria-hidden className="text-faint">
@@ -104,7 +106,9 @@ export function PageHeader({
           {envLabel(environment, t)}
         </span>
       )}
-      <div className="ml-auto flex items-center gap-2">{children}</div>
+      <div className="order-last flex w-full min-w-0 flex-wrap items-center gap-2 md:order-none md:ml-auto md:w-auto">
+        {children}
+      </div>
       <UserMenu />
     </div>
   );
@@ -297,6 +301,24 @@ export function Panel({
             )}
           </div>
         </header>
+      )}
+      {state?.staleError && (
+        <div
+          role="status"
+          className="border-warn-line bg-warn-soft text-warn mx-3 mb-2 flex flex-wrap items-center gap-2 rounded border px-2 py-1.5 text-xs"
+        >
+          <AlertTriangle size={13} aria-hidden />
+          <span>{t('common.staleData')}</span>
+          {state.onRetry && (
+            <button
+              type="button"
+              className="rounded underline underline-offset-2"
+              onClick={state.onRetry}
+            >
+              {t('common.retry')}
+            </button>
+          )}
+        </div>
       )}
       <div className={bodyClassName}>
         <StateBody state={state}>{body(false)}</StateBody>

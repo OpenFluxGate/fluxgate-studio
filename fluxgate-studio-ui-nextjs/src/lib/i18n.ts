@@ -34,7 +34,13 @@ export const en = {
   'overview.decisions': 'Decisions',
   'overview.rejected': 'Rejected',
   'overview.rejectRate': 'Reject rate',
-  'overview.activeRules': 'Active rules',
+  'overview.activeRules': 'Active rules · all',
+  'overview.globalRules':
+    'Current configuration across all rule sets. Not filtered by time or rule set.',
+  'overview.scopeHelp':
+    'Decision panels follow the selected time and rule set. Active rules show the current global configuration.',
+  'overview.zeroBaseline': 'No percentage comparison (previous count was zero)',
+  'common.staleData': 'Refresh failed. Displayed values are from the last successful response.',
   'overview.ruleSets': 'Rule sets',
   'overview.trend': 'Allowed and rejected',
   'overview.topRejected': 'Most rejected keys',
@@ -402,7 +408,13 @@ export const ko: Record<MessageKey, string> = {
   'overview.decisions': '판정',
   'overview.rejected': '차단',
   'overview.rejectRate': '차단율',
-  'overview.activeRules': '활성 규칙',
+  'overview.activeRules': '활성 규칙 · 전체',
+  'overview.globalRules':
+    '모든 규칙 묶음의 현재 설정입니다. 시간·규칙 묶음 필터가 적용되지 않습니다.',
+  'overview.scopeHelp':
+    '판정 패널은 선택한 시간과 규칙 묶음 기준입니다. 활성 규칙은 현재 전체 설정을 표시합니다.',
+  'overview.zeroBaseline': '이전 횟수가 0이라 증감률을 비교할 수 없습니다',
+  'common.staleData': '갱신에 실패했습니다. 마지막으로 성공한 조회의 값을 표시합니다.',
   'overview.ruleSets': '규칙 묶음',
   'overview.trend': '허용·차단 추이',
   'overview.topRejected': '많이 차단된 키',
