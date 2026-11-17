@@ -103,6 +103,10 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
           assert.ok(!page.url().includes('/login'),'Unexpected login redirect');
           await page.screenshot({path: output+'/'+name+'-'+screen+'-before-check.png',fullPage:true});
           await page.locator('#main h1').first().waitFor();await delay(250);
+          if(screen==='overview'){
+            await page.locator('.uplot canvas').first().waitFor();
+            assert.equal(await page.locator('[data-chart-load-error]').count(),0,'Normal locale chart failure');
+          }
           await capture(page,name+'-'+screen);
         }
         assert.deepEqual(errors,[],'Browser exceptions');assert.deepEqual(fixtureContext.unexpected,[],'Requests escaped fixture');
@@ -122,6 +126,48 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
       assert.deepEqual(f.unexpected,[]);
     }finally{await f.context.close();}
   });
+  await scenario('tooltip-viewport-and-focus',async()=>{
+    for(const width of [360,1280]){
+      const f=await contextFor(width,'en','dark');
+      try{
+        const page=await f.context.newPage();
+        await page.goto(origin+'/overview?refresh=off',{waitUntil:'networkidle'});
+        const anchors=page.locator('#main header span[tabindex="0"]');
+        assert.ok(await anchors.count()>0,'No tooltip anchors tested');
+        for(let i=0;i<await anchors.count();i++){
+          await anchors.nth(i).scrollIntoViewIfNeeded();
+          await anchors.nth(i).focus();
+          const tip=page.getByRole('tooltip');
+          await tip.waitFor();
+          const rect=await tip.boundingBox();
+          assert.ok(rect && rect.x>=0 && rect.x+rect.width<=width,'Tooltip outside viewport');
+          await page.keyboard.press('Escape');
+          await tip.waitFor({state:'hidden'});
+          await anchors.nth(i).evaluate(el=>el.blur());
+        }
+        await anchors.first().hover();
+        await page.getByRole('tooltip').waitFor();
+        await page.keyboard.press('Escape');
+        await page.getByRole('tooltip').waitFor({state:'hidden'});
+        await capture(page,'tooltip-focus-'+width);
+        assert.deepEqual(f.unexpected,[]);
+      }finally{await f.context.close();}
+    }
+  });
+  await scenario('invalid-browser-locale-isolated',async()=>{
+    const f=await contextFor(1280,'en','dark');
+    try{
+      await f.context.addInitScript(()=>Object.defineProperty(navigator,'language',{configurable:true,get:()=> 'en-US@posix'}));
+      const page=await f.context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+      await page.goto(origin+'/overview?refresh=off',{waitUntil:'networkidle'});
+      await page.locator('#main h1').first().waitFor();
+      await page.locator('[data-chart-load-error]').first().waitFor();
+      assert.equal(await page.locator('#main').count(),1);
+      assert.deepEqual(errors,[],'Locale failure escaped chart');
+      assert.deepEqual(f.unexpected,[]);
+      await capture(page,'invalid-browser-locale');
+    }finally{await f.context.close();}
+  });
   await scenario('viewer-navigation',async()=>{
     const f=await contextFor(390,'en','dark',false);
     try{const page=await f.context.newPage();await page.goto(origin+'/overview?refresh=off',{waitUntil:'networkidle'});assert.equal(await page.locator('nav a[href="/keys"]').count(),0);assert.equal(await page.locator('nav a[href="/audit"]').count(),0);await capture(page,'viewer-mobile');assert.deepEqual(f.unexpected,[]);}finally{await f.context.close();}
@@ -131,3 +177,4 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
   await writeFile(output+'/report.json',JSON.stringify({synthetic:true,playwright:'1.56.1',results,failures,browserDiagnostics,limitations:['No real backend, auth provider or production data','No manual visual judgement or WCAG certification','No mutation-flow end-to-end assertions']},null,2));
   console.log('Captured',results.length,'views; failures:',failures.length);process.exitCode=failures.length?1:0;
 });
+
