@@ -2,12 +2,17 @@
 set -euo pipefail
 PIN=39a1789acfc481e416e7363dc6e9dd3817b147b5
 HERE=$(cd "$(dirname "$0")" && pwd)
+. "$HERE/../local-docker.sh"
+require_local_docker
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/fluxgate-redis-probe.XXXXXX")
 NAME="fluxgate-redis-probe-$(date +%s)-$$"
 TOKEN=$(python3 -c 'import uuid;print(uuid.uuid4())')
 CREATED=false
-cleanup() { if $CREATED; then docker rm -f "$NAME" >/dev/null; fi; }
+cleanup() { if $CREATED; then docker rm -fv "$NAME" >/dev/null; fi; }
 trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 # Only a fresh container is allowed; do not reuse an existing URI or data volume.
 docker run -d --name "$NAME" --label fluxgate.probe=disposable -p 127.0.0.1::6379 redis:7 redis-server --save '' --appendonly no >/dev/null
 CREATED=true

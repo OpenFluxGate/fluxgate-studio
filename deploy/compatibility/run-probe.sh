@@ -6,13 +6,18 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 : "${FLUXGATE_M2_DIR:?Set FLUXGATE_M2_DIR to the isolated Maven repository containing the documented paired core 0.5.0 build}"
 command -v docker >/dev/null
 command -v curl >/dev/null
+. "$HERE/local-docker.sh"
+require_local_docker
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/studio-compat.XXXXXX")
 CONTAINER=""
 cleanup() {
   if [ -n "$CONTAINER" ]; then docker rm -fv "$CONTAINER" >/dev/null; fi
   printf 'Probe artifacts retained at %s\n' "$WORK"
 }
-trap cleanup EXIT HUP INT TERM
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 mkdir -p "$WORK/lib" "$WORK/classes-new" "$WORK/classes-old"
 fetch() { curl --fail --silent --show-error --location "https://repo.maven.apache.org/maven2/$1" --output "$WORK/lib/$2"; }
 for module in fluxgate-core fluxgate-mongo-adapter; do

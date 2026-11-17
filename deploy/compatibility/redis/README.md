@@ -1,6 +1,6 @@
 # Disposable Redis rule-reapplication regression probe
 
-Run `JAVA_HOME=/path/to/jdk21 bash run-redis-probe.sh` from this directory. Requires Docker, Git, Python 3, network access to the official GitHub/Maven repositories, and JDK 21. The runner clones core source pinned to `39a1789acfc481e416e7363dc6e9dd3817b147b5` (0.5.0) into a new temporary directory and uses a separate Maven cache. It never edits an existing checkout.
+Run `FLUXGATE_LOCAL_DOCKER_CONFIRMED=true JAVA_HOME=/path/to/jdk21 bash run-redis-probe.sh` from this directory. Requires Docker, Git, Python 3, network access to the official GitHub/Maven repositories, and JDK 21. The runner clones core source pinned to `39a1789acfc481e416e7363dc6e9dd3817b147b5` (0.5.0) into a new temporary directory and uses a separate Maven cache. It never edits an existing checkout.
 
 The runner creates a fresh official `redis:7` container with persistence disabled, no host data volume and a random port bound only to 127.0.0.1. It inserts a random UUID fixture token. The test rejects non-loopback URI strings, missing explicit disposable opt-in, or a mismatched fixture token before performing bucket writes/resets. It deliberately tests a full bucket reset, so never manually point it at an existing Redis. EXIT cleanup removes only the container created by that invocation. Source/build logs remain in the temporary workspace printed on completion.
 
@@ -17,3 +17,7 @@ Mac ARM64, Zulu JDK 21.0.8; Redis image resolved to 7.4.11, image ID sha256:4fa2
 The initial isolated proof plus existing RedisRateLimiterIntegrationTest (6), RedisRateLimiterCrossRuleIntegrationTest (12), and RedisTokenBucketStoreIntegrationTest (8) passed 27 tests with zero failures/errors/skips. The standalone runner executes just the new regression probe. The independent fresh-clone run passed one test with zero failures, errors, or skips; rerun the script to generate a new result.log.
 
 No production data, AWS resource, operating service, existing container, or remote branch was modified. This is a synthetic local compatibility test, not evidence that production datasets or configurations are upgrade-safe.
+
+Both the selected Docker context and any DOCKER_HOST override must resolve to local Unix socket endpoints. SSH/TCP endpoints are refused before creating a fixture, and the validated endpoint is pinned for the run. Signal handlers exit immediately; the EXIT trap removes only the runner-owned container and anonymous volumes.
+
+**Operator check required:** before setting `FLUXGATE_LOCAL_DOCKER_CONFIRMED=true`, inspect your Docker setup and verify the Unix socket connects to the intended local machine, not an SSH/proxy/socket-forwarded remote daemon. Endpoint syntax checks cannot establish where the daemon physically runs. The acknowledgement is a prerequisite, not an automated proof of locality. If this cannot be verified, do not run the probe.

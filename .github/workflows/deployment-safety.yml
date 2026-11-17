@@ -8,6 +8,7 @@ on:
       - '.github/workflows/deployment-safety.yml'
       - 'tests/deployment/**'
       - 'deploy/candidate/**'
+      - 'deploy/compatibility/**'
 
 permissions:
   contents: read
