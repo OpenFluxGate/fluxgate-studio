@@ -248,6 +248,26 @@ export function Panel({
     setMode(next);
   };
 
+  const staleNotice =
+    state && Boolean(state.staleError) ? (
+      <div
+        role="status"
+        className="border-warn-line bg-warn-soft text-warn mx-3 mb-2 flex flex-wrap items-center gap-2 rounded border px-2 py-1.5 text-xs"
+      >
+        <AlertTriangle size={13} aria-hidden />
+        <span>{t('common.staleData')}</span>
+        {state.onRetry && (
+          <button
+            type="button"
+            className="rounded underline underline-offset-2"
+            onClick={state.onRetry}
+          >
+            {t('common.retry')}
+          </button>
+        )}
+      </div>
+    ) : null;
+
   return (
     <section className={`border-line bg-panel relative min-w-0 rounded-md border ${className}`}>
       {title && (
@@ -302,24 +322,7 @@ export function Panel({
           </div>
         </header>
       )}
-      {Boolean(state?.staleError) && (
-        <div
-          role="status"
-          className="border-warn-line bg-warn-soft text-warn mx-3 mb-2 flex flex-wrap items-center gap-2 rounded border px-2 py-1.5 text-xs"
-        >
-          <AlertTriangle size={13} aria-hidden />
-          <span>{t('common.staleData')}</span>
-          {state.onRetry && (
-            <button
-              type="button"
-              className="rounded underline underline-offset-2"
-              onClick={state.onRetry}
-            >
-              {t('common.retry')}
-            </button>
-          )}
-        </div>
-      )}
+      {staleNotice}
       <div className={bodyClassName}>
         <StateBody state={state}>{body(false)}</StateBody>
       </div>
@@ -330,6 +333,7 @@ export function Panel({
           size="full"
           onClose={() => setMode('normal')}
         >
+          {staleNotice}
           {mode === 'view' ? (
             <StateBody state={state}>{body(true)}</StateBody>
           ) : (

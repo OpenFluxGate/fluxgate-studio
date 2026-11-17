@@ -44,18 +44,18 @@ export function RangeMenu<T extends string>({
     triggerRef,
   } = usePopover();
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative max-w-full min-w-0">
       <button
         ref={triggerRef}
         type="button"
-        className={BUTTON}
+        className={`${BUTTON} max-w-full`}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         aria-label={`${label}: ${display ?? (value ? format(value) : '')}`}
         onClick={() => setMenuOpen(!menuOpen)}
       >
         <Clock size={14} aria-hidden />
-        <span className="num">{display ?? (value ? format(value) : '')}</span>
+        <span className="num min-w-0 truncate">{display ?? (value ? format(value) : '')}</span>
         <ChevronDown size={13} aria-hidden />
       </button>
       {menuOpen && (
@@ -92,7 +92,7 @@ export function TimeRangePicker({
   const absolute = state.range.kind === 'absolute';
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       <IconButton
         label={t('range.zoomOut')}
         icon={ZoomOut}
