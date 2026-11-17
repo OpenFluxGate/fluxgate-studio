@@ -12,6 +12,7 @@ const output = process.env.VISUAL_OUTPUT || 'visual-results';
 const secret = randomBytes(32).toString('hex');
 const results = [];
 const failures = [];
+const browserDiagnostics = [];
 let server;
 let browser;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -37,6 +38,13 @@ function fixture(path, params, mode, admin) {
 }
 async function contextFor(width, locale, theme, admin = true) {
   const context = await browser.newContext({viewport: {width, height: 900}, reducedMotion: 'reduce', serviceWorkers: 'block'});
+  context.setDefaultTimeout(10000);
+  context.setDefaultNavigationTimeout(15000);
+  context.on('page', page => {
+    page.on('pageerror', error => browserDiagnostics.push({kind:'exception',message:error.stack || error.message}));
+    page.on('console', message => { if(message.type()==='error') browserDiagnostics.push({kind:'console',message:message.text()}); });
+    page.on('response', response => { if(response.status()>=400) browserDiagnostics.push({kind:'http',status:response.status(),url:response.url()}); });
+  });
   const token = await encode({secret, token: {sub: 'synthetic-qa', name: 'SYNTHETIC QA', expiresAt: Math.floor(Date.now()/1000)+3600}, maxAge: 3600});
   await context.addCookies([{name: 'next-auth.session-token', value: token, url: origin, httpOnly: true, sameSite: 'Lax'}, {name: 'studio_locale', value: locale, url: origin}]);
   await context.addInitScript(mode => localStorage.setItem('studio-color-mode', mode), theme);
@@ -74,7 +82,7 @@ async function capture(page, name) {
   assert.ok(dimensions.mainScroll <= dimensions.mainClient + 1, name+' main horizontal overflow '+JSON.stringify(dimensions));
   results.push({name,dimensions});
 }
-async function scenario(name, run) {try {await run();} catch(error) {failures.push({name,error:error.stack});console.error(name,error.message);}}
+async function scenario(name, run) {console.log('Scenario:',name);try {await run();} catch(error) {failures.push({name,error:error.stack});console.error(name,error.message);}}
 (async()=>{
   await mkdir(output,{recursive:true});
   server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-H','127.0.0.1','-p','3173'],{env:{...process.env,NEXTAUTH_URL:origin,NEXTAUTH_SECRET:secret,ADMIN_API_URL:'http://127.0.0.1:9',NEXT_PUBLIC_API_URL:'http://127.0.0.1:9',KEYCLOAK_ISSUER:'http://127.0.0.1:9/qa',KEYCLOAK_CLIENT_ID:'qa-only',KEYCLOAK_CLIENT_SECRET:'qa-only'},stdio:['ignore','inherit','inherit']});
@@ -90,6 +98,7 @@ async function scenario(name, run) {try {await run();} catch(error) {failures.pu
         for(const screen of ['overview','rules','keys','audit']){
           await page.goto(origin+'/'+screen+'?refresh=off',{waitUntil:'networkidle'});
           assert.ok(!page.url().includes('/login'),'Unexpected login redirect');
+          await page.screenshot({path: output+'/'+name+'-'+screen+'-before-check.png',fullPage:true});
           await page.locator('#main h1').first().waitFor();await delay(250);
           await capture(page,name+'-'+screen);
         }
@@ -116,6 +125,6 @@ async function scenario(name, run) {try {await run();} catch(error) {failures.pu
   });
 })().catch(e=>failures.push({name:'harness',error:e.stack})).finally(async()=>{
   if(browser)await browser.close();if(server)server.kill('SIGTERM');
-  await writeFile(output+'/report.json',JSON.stringify({synthetic:true,playwright:'1.56.1',results,failures,limitations:['No real backend, auth provider or production data','No manual visual judgement or WCAG certification','No mutation-flow end-to-end assertions']},null,2));
+  await writeFile(output+'/report.json',JSON.stringify({synthetic:true,playwright:'1.56.1',results,failures,browserDiagnostics,limitations:['No real backend, auth provider or production data','No manual visual judgement or WCAG certification','No mutation-flow end-to-end assertions']},null,2));
   console.log('Captured',results.length,'views; failures:',failures.length);process.exitCode=failures.length?1:0;
 });
