@@ -49,7 +49,8 @@ start)
 if [[ $(cat "$ROOT/pid") == 0 ]]; then
   cp "$LIVE" "$ROOT/running"
   if [[ $(cat "$LIVE") == new ]]; then echo 20 > "$ROOT/pid"; else echo 30 > "$ROOT/pid"; fi
-fi;;
+fi
+if [[ $MODE == kill && $(cat "$ROOT/running") == new ]]; then kill -KILL "$PPID"; fi;;
 esac
 ''',
               'curl':'''#!/bin/bash
@@ -59,6 +60,10 @@ esac
                 f=bin/name;f.write_text(text);f.chmod(0o755)
             env=dict(os.environ,PATH=str(bin)+':'+os.environ['PATH'],ROOT=str(root),LIVE=str(live),TARGET=target,MODE=mode)
             p=subprocess.run(['bash',str(ROOT/f'deploy/candidate/activate-{component}.sh'),str(root),str(stage),hashlib.sha256(b'new').hexdigest()],env=env,text=True,capture_output=True)
+            if mode=='kill':
+                retry=subprocess.run(['bash',str(ROOT/f'deploy/candidate/activate-{component}.sh'),str(root),str(stage),hashlib.sha256(b'new').hexdigest()],env=env,text=True,capture_output=True)
+                self.assertNotEqual(retry.returncode,0)
+                self.assertIn('Unfinished activation',retry.stderr)
             return p.returncode,live.read_text(),(root/'running').read_text().strip(),(root/'pid').read_text().strip(),(root/'.activation-pending').exists(),p.stderr
     def test_stop_error_never_restores_over_running_new_process(self):
         for component in ['api','ui']:
@@ -70,6 +75,11 @@ esac
             with self.subTest(component=component):
                 code,disk,running,pid,pending,err=self.run_case(component,'still_active')
                 self.assertNotEqual(code,0);self.assertEqual((disk,running,pid,pending),('new','new','20',True));self.assertIn('process still active',err)
+    def test_sigkill_retains_marker_and_blocks_retry(self):
+        for component in ['api','ui']:
+            with self.subTest(component=component):
+                code,disk,running,pid,pending,_=self.run_case(component,'kill')
+                self.assertNotEqual(code,0);self.assertEqual((disk,running,pid,pending),('new','new','20',True))
     def test_restored_old_process_has_new_pid(self):
         for component in ['api','ui']:
             with self.subTest(component=component):

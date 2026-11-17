@@ -1,3 +1,5 @@
 # Offline deployment tests
 
 Run `python -m unittest discover -s tests/deployment -p 'test_*.py' -v` with PyYAML installed. Seventeen mock tests cover API activation/rollback, UI directory switching/TERM rollback, fail-closed marker/runtime-env checks, and workflow ordering/guards/assets/version contracts. They never connect to SSH or production. macOS mocks replace flock and GNU chmod; real server permissions and durability remain unverified. See deploy/candidate/README.en.md.
+
+Additional local validation: 22 Python tests pass including SIGKILL and blocked retry. Four real-Linux-filesystem success/health-failure cases passed using the existing official Maven image with no network, all capabilities dropped, read-only host mount/root and bounded tmpfs. Run `linux-filesystem-smoke.sh` inside that isolated environment. systemd/HTTP remain mocked. Container restart is not a server/VM reboot test. Real SSH disconnect, transient service lifetime, reboot recovery and mixed API/UI compatibility remain unverified; production hard hold stays enabled.
