@@ -51,11 +51,11 @@ class MonitoringRangeTest {
   }
 
   @Test
-  void roundsTheCacheKeyOfAnAbsoluteRangeToItsBuckets() {
+  void keepsDistinctAbsoluteRangesApartInTheCache() {
     MonitoringRange a = MonitoringRange.of(null, NOW - HOUR + 1_000, NOW - 1_000, NOW);
     MonitoringRange b = MonitoringRange.of(null, NOW - HOUR + 2_000, NOW - 2_000, NOW);
 
-    assertThat(a.cacheKey()).isEqualTo(b.cacheKey());
+    assertThat(a.cacheKey()).isNotEqualTo(b.cacheKey());
   }
 
   @Test
@@ -74,5 +74,18 @@ class MonitoringRangeTest {
   @Test
   void toleratesSmallClockSkew() {
     assertThat(MonitoringRange.of(null, NOW - HOUR, NOW + 30_000, NOW).label()).isEqualTo("custom");
+  }
+
+  @Test
+  void rejectsOverflowingAbsoluteSpan() {
+    assertThatThrownBy(() -> MonitoringRange.of(null, -9_223_371_000_000_000_000L, NOW, NOW))
+        .isInstanceOf(InvalidRuleException.class);
+    assertThatThrownBy(() -> MonitoringRange.of(null, Long.MIN_VALUE, NOW, NOW))
+        .isInstanceOf(InvalidRuleException.class);
+  }
+
+  @Test
+  void choosesLargerBucketJustBeyondThePointLimit() {
+    assertThat(MonitoringRange.bucketFor(1_200_001L)).isEqualTo(30_000L);
   }
 }

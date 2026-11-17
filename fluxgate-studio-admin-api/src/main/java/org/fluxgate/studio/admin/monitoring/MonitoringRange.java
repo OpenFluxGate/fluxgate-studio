@@ -38,16 +38,12 @@ public record MonitoringRange(String label, long from, long to, long bucketMilli
     if (!CUSTOM.equals(label)) {
       return label;
     }
-    return Math.floorDiv(from, bucketMillis)
-        + ":"
-        + Math.floorDiv(to, bucketMillis)
-        + ":"
-        + bucketMillis;
+    return from + ":" + to + ":" + bucketMillis;
   }
 
   static long bucketFor(long span) {
     for (long bucket : BUCKETS) {
-      if (span / bucket <= MAX_BUCKETS) {
+      if (span <= bucket * MAX_BUCKETS) {
         return bucket;
       }
     }
@@ -61,13 +57,19 @@ public record MonitoringRange(String label, long from, long to, long bucketMilli
     if (from >= to) {
       throw new InvalidRuleException("from", "must be before to");
     }
-    if (to - from > MAX_SPAN_MILLIS) {
+    long span;
+    try {
+      span = Math.subtractExact(to, from);
+    } catch (ArithmeticException e) {
+      throw new InvalidRuleException("from", "must be within 24 hours of to");
+    }
+    if (span > MAX_SPAN_MILLIS) {
       throw new InvalidRuleException("from", "must be within 24 hours of to");
     }
     if (to > now + FUTURE_SLACK_MILLIS) {
       throw new InvalidRuleException("to", "must not be in the future");
     }
-    return new MonitoringRange(CUSTOM, from, to, bucketFor(to - from));
+    return new MonitoringRange(CUSTOM, from, to, bucketFor(span));
   }
 
   private static Map<String, Long> windows() {

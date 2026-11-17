@@ -78,13 +78,32 @@ public class MonitoringService {
   }
 
   public static List<Bucket> fill(List<Bucket> sparse, long from, long to, long bucketMillis) {
+    long start;
+    long count;
+    try {
+      if (bucketMillis <= 0 || from >= to) {
+        throw new ArithmeticException();
+      }
+      start = Math.subtractExact(from, Math.floorMod(from, bucketMillis));
+      long span = Math.subtractExact(to, start);
+      count = 1 + (span - 1) / bucketMillis;
+      // One extra bucket is possible when the range begins between boundaries.
+      if (count > MonitoringRange.MAX_BUCKETS + 1) {
+        throw new ArithmeticException();
+      }
+    } catch (ArithmeticException e) {
+      throw new InvalidRuleException("from", "invalid or excessive bucket range");
+    }
     Map<Long, Bucket> byStart = new HashMap<>();
     for (Bucket bucket : sparse) {
       byStart.put(bucket.start(), bucket);
     }
     List<Bucket> filled = new ArrayList<>();
-    for (long start = from - Math.floorMod(from, bucketMillis); start < to; start += bucketMillis) {
+    for (long index = 0; index < count; index++) {
       filled.add(byStart.getOrDefault(start, new Bucket(start, 0, 0)));
+      if (index + 1 < count) {
+        start += bucketMillis;
+      }
     }
     return filled;
   }

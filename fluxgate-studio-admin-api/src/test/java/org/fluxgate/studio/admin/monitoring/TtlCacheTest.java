@@ -48,4 +48,49 @@ class TtlCacheTest {
     cache.get("fresh", () -> "v");
     assertThat(cache.size()).isEqualTo(1);
   }
+
+  @Test
+  void evictsLeastRecentlyUsedLiveEntryAtCapacity() {
+    TtlCache cache = new TtlCache(Duration.ofSeconds(10), clock);
+    for (int i = 0; i < TtlCache.MAX_ENTRIES; i++) {
+      cache.get("k" + i, () -> "original");
+    }
+    cache.get("k0", () -> "unexpected");
+    cache.get("new", () -> "new");
+    assertThat(cache.size()).isEqualTo(TtlCache.MAX_ENTRIES);
+    assertThat(cache.get("k0", () -> "unexpected")).isEqualTo("original");
+    assertThat(cache.get("k1", () -> "reloaded")).isEqualTo("reloaded");
+    assertThat(cache.size()).isEqualTo(TtlCache.MAX_ENTRIES);
+  }
+
+  @Test
+  void concurrentInsertionsNeverExceedCapacity() {
+    TtlCache cache = new TtlCache(Duration.ofSeconds(10), clock);
+    java.util.stream.IntStream.range(0, 1024)
+        .parallel()
+        .forEach(i -> cache.get("key" + i, () -> i));
+    assertThat(cache.size()).isEqualTo(TtlCache.MAX_ENTRIES);
+  }
+
+  @Test
+  void ttlStartsWhenTheValueFinishesLoading() {
+    TtlCache cache = new TtlCache(Duration.ofSeconds(10), clock);
+    cache.get(
+        "slow",
+        () -> {
+          clock.advance(Duration.ofSeconds(20));
+          return "loaded";
+        });
+    assertThat(cache.get("slow", () -> "unexpected")).isEqualTo("loaded");
+  }
+
+  @Test
+  void concurrentRequestsForOneKeyShareOneLoad() {
+    TtlCache cache = new TtlCache(Duration.ofSeconds(10), clock);
+    AtomicInteger loads = new AtomicInteger();
+    java.util.stream.IntStream.range(0, 1024)
+        .parallel()
+        .forEach(i -> assertThat(cache.get("same", loads::incrementAndGet)).isEqualTo(1));
+    assertThat(loads).hasValue(1);
+  }
 }

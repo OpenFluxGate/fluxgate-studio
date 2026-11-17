@@ -166,4 +166,35 @@ class MonitoringServiceTest {
         .extracting(Bucket::start)
         .containsExactly(60_000L, 120_000L, 180_000L);
   }
+
+  @Test
+  void distinctRangesWithinTheSameBucketsLoadTheirOwnResults() {
+    MonitoringRange first = MonitoringRange.of(null, 1000L, 21000L, NOW);
+    MonitoringRange second = MonitoringRange.of(null, 9000L, 29000L, NOW);
+    when(store.buckets(1000L, 21000L, 10000L, null, null)).thenReturn(List.of(new Bucket(0, 1, 0)));
+    when(store.buckets(9000L, 29000L, 10000L, null, null)).thenReturn(List.of());
+    assertThat(service.timeseries(first, null).buckets().get(0).allowed()).isEqualTo(1);
+    TimeseriesResponse response = service.timeseries(second, null);
+    assertThat(response.from()).isEqualTo(9000L);
+    assertThat(response.to()).isEqualTo(29000L);
+    assertThat(response.buckets()).allMatch(bucket -> bucket.allowed() == 0);
+    verify(store).buckets(9000L, 29000L, 10000L, null, null);
+  }
+
+  @Test
+  void fillRejectsInvalidAndUnboundedInputsBeforeAllocating() {
+    assertThatThrownBy(
+            () -> MonitoringService.fill(List.of(), -9_223_371_000_000_000_000L, NOW, 10000))
+        .isInstanceOf(InvalidRuleException.class);
+    assertThatThrownBy(
+            () -> MonitoringService.fill(List.of(), Long.MIN_VALUE, Long.MIN_VALUE + 10, 10000))
+        .isInstanceOf(InvalidRuleException.class);
+    assertThatThrownBy(() -> MonitoringService.fill(List.of(), 0, 10, 0))
+        .isInstanceOf(InvalidRuleException.class);
+    assertThatThrownBy(() -> MonitoringService.fill(List.of(), 10, 0, 1))
+        .isInstanceOf(InvalidRuleException.class);
+    assertThatThrownBy(() -> MonitoringService.fill(List.of(), 0, 1220, 10))
+        .isInstanceOf(InvalidRuleException.class);
+    assertThat(MonitoringService.fill(List.of(), 1, 1201, 10)).hasSize(121);
+  }
 }
