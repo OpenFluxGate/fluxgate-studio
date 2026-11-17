@@ -6,11 +6,13 @@ staged=${2:?staged 0.5.0 jar required}
 expected=${3:?expected SHA256 required}
 [[ $expected =~ ^[a-f0-9]{64}$ ]] || exit 2
 unit=fluxgate-admin-api
+marker="$root/.activation-pending"
 live="$root/fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar"
 [[ -d $root && -w $root && -f $live && ! -L $live && -s $staged && ! -L $staged ]] || exit 2
 for cmd in flock sha256sum curl systemctl sudo mktemp cp mv; do command -v "$cmd" >/dev/null; done
 exec 9>"$root/.deploy.lock"
 flock -n 9 || { echo 'Another deployment holds the lock' >&2; exit 3; }
+[[ ! -e $marker ]] || { echo 'Unfinished activation requires manual recovery review' >&2; exit 2; }
 [[ $(sha256sum "$staged" | cut -d' ' -f1) == "$expected" ]] || { echo 'Checksum mismatch' >&2; exit 2; }
 [[ $(sudo -n systemctl show "$unit" --property=LoadState --value) == loaded ]] || exit 2
 execstart=$(sudo -n systemctl show "$unit" --property=ExecStart --value)
@@ -41,16 +43,19 @@ rollback() {
     exit 1
   fi
   if sudo -n systemctl start "$unit" && health; then
+    rm -f "$marker"
     echo 'Previous artifact restored and healthy' >&2
   else
     echo 'CRITICAL: rollback health failed; manual recovery required' >&2
   fi
   exit 1
 }
+printf '%s\n' "$backup" > "$marker"
 trap rollback ERR INT TERM
 sudo -n systemctl stop "$unit"
 mv -f "$backup/next.jar" "$live"
 sudo -n systemctl start "$unit"
 health
 trap - ERR INT TERM
+rm -f "$marker"
 echo "Activated verified artifact; retained rollback copy at $backup"

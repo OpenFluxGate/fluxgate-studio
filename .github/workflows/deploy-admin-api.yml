@@ -62,7 +62,7 @@ jobs:
         run: ./mvnw -B -ntp -Dmaven.repo.local="$RUNNER_TEMP/fluxgate-m2" clean verify
 
       - name: Verify deployment artifact
-        run: test -s fluxgate-studio-admin-api/target/fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar
+        run: test -s fluxgate-studio-admin-api/target/fluxgate-studio-admin-api-0.5.0.jar
 
       - name: Check remote deployment prerequisites
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

@@ -18,5 +18,7 @@
 - SIGKILL, 서버 재부팅, 디스크 손상, SSH 단절 상황의 완료·복구를 보장하지 않습니다. 배포를 내구성 있는 서버 작업으로 실행하고 상태를 조회하는 방식은 추가 설계가 필요합니다.
 - DB schema/데이터 변경은 되돌리지 않습니다. 새 버전과 구 버전의 데이터 호환성을 확인하기 전 실행하면 안 됩니다.
 - health는 기존 8081 actuator HTTP 성공만 검사합니다. 인증된 기능 smoke test, 실제 운영 설정의 완전한 적합성, 외부 UI/API 접근은 검증하지 않습니다.
-- UI는 별도 staged standalone 디렉터리 + static/public 구성 확인 + 이전 디렉터리 보존/rename/rollback 설계가 필요합니다. 기존 UI stop 후 삭제 로직을 운영 안전하다고 보지 않습니다.
-- 현재 로컬 workflow 패치는 이전 main 기준입니다. 최신 #8의 0.5.0 정렬과 병합·통합 검증 전 게시/머지하지 않습니다.
+- UI 후보 activate-ui.sh는 준비된 .next 전체를 먼저 복사하고 기존 디렉터리를 보존한 뒤 전환합니다. 시작/health/전환 실패 시 이전 디렉터리를 복원합니다. runtime .env 파일 발견 시 자동 배포를 거부합니다. static/BUILD_ID는 검사하지만 public 자산·패키지 checksum 검증은 추가 필요합니다. 기존 workflow의 stop 후 삭제 로직을 운영 안전하다고 보지 않습니다.
+- 로컬 변경은 최신 #8 b0bcff1 위로 rebase했고 API artifact 검사는 0.5.0입니다. 후보 스크립트는 workflow에 연결하지 않았습니다.
+- API/UI에 미완료 marker를 추가했습니다. 성공 또는 확인된 복구 때만 제거하며 남아 있으면 다음 배포를 거부합니다. 이는 장애 후 덮어쓰기 방지이지 재부팅/SSH 단절 자동 복구 보장이 아닙니다. marker의 backup 경로와 실제 live 상태를 운영자가 확인한 후 복구해야 합니다.
+- 추가 UI mock 7개(성공, start/health/rename/stop 실패, pending marker, runtime env 차단)가 통과했습니다.
