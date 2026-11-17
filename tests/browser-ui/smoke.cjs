@@ -37,7 +37,7 @@ function fixture(path, params, mode, admin) {
   throw new Error('Unmocked API path: ' + path);
 }
 async function contextFor(width, locale, theme, admin = true) {
-  const context = await browser.newContext({viewport: {width, height: 900}, reducedMotion: 'reduce', serviceWorkers: 'block'});
+  const context = await browser.newContext({viewport: {width, height: 900}, locale: locale === 'ko' ? 'ko-KR' : 'en-US', reducedMotion: 'reduce', serviceWorkers: 'block'});
   context.setDefaultTimeout(10000);
   context.setDefaultNavigationTimeout(15000);
   context.on('page', page => {
@@ -47,7 +47,10 @@ async function contextFor(width, locale, theme, admin = true) {
   });
   const token = await encode({secret, token: {sub: 'synthetic-qa', name: 'SYNTHETIC QA', expiresAt: Math.floor(Date.now()/1000)+3600}, maxAge: 3600});
   await context.addCookies([{name: 'next-auth.session-token', value: token, url: origin, httpOnly: true, sameSite: 'Lax'}, {name: 'studio_locale', value: locale, url: origin}]);
-  await context.addInitScript(mode => localStorage.setItem('studio-color-mode', mode), theme);
+  await context.addInitScript(({mode, allowedOrigin}) => {
+    // Init scripts also run in opaque about:blank documents; only seed our fixture.
+    if (location.origin === allowedOrigin) localStorage.setItem('studio-color-mode', mode);
+  }, {mode: theme, allowedOrigin: origin});
   let mode = 'normal';
   const unexpected = [];
   await context.route('**/*', async route => {
