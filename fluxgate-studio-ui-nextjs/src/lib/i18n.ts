@@ -3,8 +3,11 @@ export type Locale = 'en' | 'ko';
 export const en = {
   'nav.events': 'Decision events',
   'events.title': 'Decision events',
-  'events.intro':
-    'Read-only records from the configured MongoDB event collection, not synthetic traffic. Only recorded events appear; missing records do not mean no requests. Raw identities and attributes are not displayed.',
+  'events.history': 'Event history',
+  'events.inspect': 'Decision details',
+  'events.unknownRule': 'Unspecified rule',
+  'events.choose': 'Select a decision to inspect its rule and limits.',
+  'events.intro': 'Inspect recorded rate-limit decisions and the rules that produced them.',
   'events.from': 'From (local time)',
   'events.to': 'To (local time)',
   'events.outcome': 'Result',
@@ -408,8 +411,11 @@ export type MessageKey = keyof typeof en;
 export const ko: Record<MessageKey, string> = {
   'nav.events': '판정 이벤트',
   'events.title': '판정 이벤트',
-  'events.intro':
-    '설정된 MongoDB 이벤트 컬렉션의 실제 기록을 읽기 전용으로 조회합니다. 합성 트래픽이 아니며 기록된 이벤트만 표시됩니다. 기록이 없다고 요청이 없었던 것은 아닙니다. 원본 식별자와 속성은 표시하지 않습니다.',
+  'events.history': '이벤트 기록',
+  'events.inspect': '판정 상세',
+  'events.unknownRule': '규칙 미지정',
+  'events.choose': '판정을 선택하면 규칙과 한도를 확인할 수 있습니다.',
+  'events.intro': '기록된 유량제어 판정과 적용된 규칙을 확인합니다.',
   'events.from': '시작 (현지 시간)',
   'events.to': '종료 (현지 시간)',
   'events.outcome': '결과',

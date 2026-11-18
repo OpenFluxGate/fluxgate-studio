@@ -75,8 +75,14 @@ describe('decision event screen access and data states', () => {
     const html = render();
     expect(html.match(/events.precisionUnavailable/g)).toHaveLength(2);
     expect(html).not.toContain(String(outside));
-    expect(html).toContain(String(Number.MAX_SAFE_INTEGER));
-    expect(html).toContain('>–</td>');
+    state.result = {
+      data: {
+        receivedAt: 1000,
+        items: [{ ...base, remainingTokens: Number.MAX_SAFE_INTEGER, retryAfterMillis: null }],
+      },
+    };
+    expect(render()).toContain(String(Number.MAX_SAFE_INTEGER));
+    expect(render()).toContain('>–</dd>');
   });
 
   it('renders only the restricted projection and escapes recorded labels', () => {

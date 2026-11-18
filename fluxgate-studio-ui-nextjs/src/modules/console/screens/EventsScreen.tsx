@@ -2,6 +2,18 @@
 
 import React, { useState } from 'react';
 
+import {
+  Activity,
+  AlertCircle,
+  Check,
+  ChevronRight,
+  CircleSlash,
+  Clock3,
+  Inbox,
+  ListFilter,
+  PanelRight,
+  RefreshCw,
+} from 'lucide-react';
 import useSWR from 'swr';
 
 import { fetchDecisionEvents } from '@/lib/api';
@@ -13,15 +25,18 @@ import {
   lastHour,
   localDateTime,
 } from '@/lib/decisionEvents';
-import { formatTimestamp } from '@/lib/format';
+import { formatClock } from '@/lib/format';
 
 import { BUTTON, Field, INPUT } from '../controls';
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
-import { Forbidden, PageIntro, TD, TH } from '../ui';
+import { Forbidden, PageIntro } from '../ui';
+
+import styles from './EventsScreen.module.css';
 
 export function EventsScreen() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const [selectedId, setSelectedId] = useState<string | null>();
   const { isAdmin, loading } = useMe();
   const [query, setQuery] = useState<DecisionEventQuery>(lastHour);
   const [from, setFrom] = useState(() => localDateTime(query.from));
@@ -46,16 +61,17 @@ export function EventsScreen() {
     return Number.isSafeInteger(value) ? value : t('events.precisionUnavailable');
   };
   const reset = (next: DecisionEventQuery) => {
+    setSelectedId(undefined);
     setQuery(next);
     setCursors([undefined]);
     setPage(0);
     setInvalid(false);
   };
   return (
-    <div>
+    <div className={styles.screen}>
       <PageIntro title={t('events.title')}>{t('events.intro')}</PageIntro>
       <form
-        className="border-line bg-panel mb-4 flex flex-wrap items-end gap-3 rounded-md border p-3"
+        className={styles.toolbar}
         onSubmit={(event) => {
           event.preventDefault();
           const next: DecisionEventQuery = {
@@ -106,7 +122,8 @@ export function EventsScreen() {
             <option value="REJECT">{t('events.reject')}</option>
           </select>
         </Field>
-        <button type="submit" className={BUTTON}>
+        <button type="submit" className={styles.apply}>
+          <ListFilter size={15} aria-hidden="true" />
           {t('events.apply')}
         </button>
         <button
@@ -121,20 +138,33 @@ export function EventsScreen() {
             setRefresh((value) => value + 1);
           }}
         >
+          <RefreshCw size={14} aria-hidden="true" />
           {t('events.refresh')}
         </button>
       </form>
       {invalid && <p role="alert">{t('events.invalid')}</p>}
-      <dl className="text-fg2 mb-2 flex flex-wrap gap-x-6 gap-y-2 text-sm">
-        <div>
-          <dt className="text-muted text-xs">{t('events.interval')}</dt>
-          <dd>
+      <section className={styles.history} aria-label={t('events.history')}>
+        <header className={styles.historyHead}>
+          <h2>
+            <Activity size={19} aria-hidden="true" />
+            {t('events.history')}
+          </h2>
+          {result.data && !result.error && (
+            <span>
+              <Clock3 size={13} aria-hidden="true" />
+              {t('events.received')}{' '}
+              <time dateTime={new Date(result.data.receivedAt).toISOString()}>
+                {formatClock(result.data.receivedAt)}
+              </time>
+            </span>
+          )}
+        </header>
+        <div className={styles.interval}>
+          <strong>{t('events.interval')}</strong>
+          <span>
             {eventRangeLabel(query.from)} – {eventRangeLabel(query.to)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-muted text-xs">{t('events.outcome')}</dt>
-          <dd>
+          </span>
+          <span>
             {t(
               query.outcome === 'ALLOW'
                 ? 'events.allow'
@@ -142,76 +172,115 @@ export function EventsScreen() {
                   ? 'events.reject'
                   : 'events.all'
             )}
-          </dd>
+          </span>
         </div>
-        {result.data && !result.error && (
-          <div>
-            <dt className="text-muted text-xs">{t('events.received')}</dt>
-            <dd>
-              <time dateTime={new Date(result.data.receivedAt).toISOString()}>
-                {formatTimestamp(result.data.receivedAt)}
-              </time>
-            </dd>
+        {result.error ? (
+          <div role="alert" className={styles.notice}>
+            <AlertCircle aria-hidden="true" />
+            <p>{t('events.failed')}</p>
+            <button className={BUTTON} onClick={() => void result.mutate()}>
+              {t('events.retry')}
+            </button>
+          </div>
+        ) : !result.data || !entries.length ? (
+          <div role="status" className={styles.notice}>
+            {!result.data ? <Clock3 aria-hidden="true" /> : <Inbox aria-hidden="true" />}
+            <p>{t(!result.data ? 'common.loading' : 'events.empty')}</p>
+          </div>
+        ) : (
+          <div className={styles.workspace} aria-busy={result.isValidating}>
+            {entries.map((entry, index) => {
+              const selected = entry.id === (selectedId === undefined ? entries[0].id : selectedId);
+              const dateLabel = (time: number) =>
+                new Date(time).toLocaleDateString(locale, {
+                  weekday: 'short',
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                });
+              const date = dateLabel(entry.occurredAt);
+              const status = (
+                <span className={entry.allowed ? styles.allowed : styles.rejected}>
+                  {entry.allowed ? (
+                    <Check size={13} aria-hidden="true" />
+                  ) : (
+                    <CircleSlash size={13} aria-hidden="true" />
+                  )}
+                  {t(entry.allowed ? 'events.allow' : 'events.reject')}
+                </span>
+              );
+              return (
+                <React.Fragment key={entry.id}>
+                  {(index === 0 || date !== dateLabel(entries[index - 1].occurredAt)) && (
+                    <h3 className={styles.day}>{date}</h3>
+                  )}
+                  <button
+                    type="button"
+                    className={styles.row}
+                    aria-expanded={selected}
+                    aria-controls={selected ? 'event-inspector' : undefined}
+                    onClick={() => setSelectedId(selected ? null : entry.id)}
+                  >
+                    <time dateTime={new Date(entry.occurredAt).toISOString()}>
+                      {formatClock(entry.occurredAt)}
+                    </time>
+                    {status}
+                    <span className={styles.rule}>{entry.ruleId ?? t('events.unknownRule')}</span>
+                    <ChevronRight size={15} aria-hidden="true" />
+                  </button>
+                  {selected && (
+                    <section
+                      id="event-inspector"
+                      className={styles.inspector}
+                      aria-label={t('events.inspect')}
+                      tabIndex={0}
+                    >
+                      <h3>
+                        <PanelRight size={16} aria-hidden="true" />
+                        {t('events.inspect')}
+                      </h3>
+                      <div className={styles.detailStatus}>{status}</div>
+                      <time dateTime={new Date(entry.occurredAt).toISOString()}>
+                        {eventRangeLabel(entry.occurredAt)}
+                      </time>
+                      <dl className={styles.metrics}>
+                        <div>
+                          <dt>{t('events.remaining')}</dt>
+                          <dd>{displayCount(entry.remainingTokens)}</dd>
+                        </div>
+                        <div>
+                          <dt>{t('events.retryAfter')}</dt>
+                          <dd>{displayCount(entry.retryAfterMillis)}</dd>
+                        </div>
+                      </dl>
+                      <dl className={styles.identifiers}>
+                        <div>
+                          <dt>{t('events.ruleSet')}</dt>
+                          <dd>{entry.ruleSetId ?? '–'}</dd>
+                        </div>
+                        <div>
+                          <dt>{t('events.rule')}</dt>
+                          <dd>{entry.ruleId ?? '–'}</dd>
+                        </div>
+                      </dl>
+                    </section>
+                  )}
+                </React.Fragment>
+              );
+            })}
+            {selectedId === null && <p className={styles.placeholder}>{t('events.choose')}</p>}
           </div>
         )}
-      </dl>
-      <p className="text-muted mb-3 text-sm">{t('events.snapshot')}</p>
-      {result.error ? (
-        <div role="alert">
-          <p>{t('events.failed')}</p>
-          <button className={BUTTON} onClick={() => void result.mutate()}>
-            {t('events.retry')}
-          </button>
-        </div>
-      ) : !result.data ? (
-        <p role="status">{t('common.loading')}</p>
-      ) : entries.length === 0 ? (
-        <p role="status">{t('events.empty')}</p>
-      ) : (
-        <div
-          className="overflow-x-auto"
-          role="region"
-          aria-label={t('events.title')}
-          tabIndex={0}
-          aria-busy={result.isValidating}
-        >
-          <table className="w-full min-w-[52rem] text-sm">
-            <thead>
-              <tr>
-                {[
-                  t('col.time'),
-                  t('events.outcome'),
-                  t('events.ruleSet'),
-                  t('events.rule'),
-                  t('events.remaining'),
-                  t('events.retryAfter'),
-                ].map((label) => (
-                  <th scope="col" className={TH} key={label}>
-                    {label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry) => (
-                <tr key={entry.id}>
-                  <td className={`${TD} whitespace-nowrap`}>{formatTimestamp(entry.occurredAt)}</td>
-                  <td className={TD}>{t(entry.allowed ? 'events.allow' : 'events.reject')}</td>
-                  <td className={`${TD} max-w-64 break-all`}>{entry.ruleSetId ?? '–'}</td>
-                  <td className={`${TD} max-w-64 break-all`}>{entry.ruleId ?? '–'}</td>
-                  <td className={TD}>{displayCount(entry.remainingTokens)}</td>
-                  <td className={TD}>{displayCount(entry.retryAfterMillis)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        <p className={styles.caption}>{t('events.snapshot')}</p>
+      </section>
       <nav aria-label={t('events.title')} className="mt-4 flex flex-wrap items-center gap-3">
         <button
           className={BUTTON}
           disabled={page === 0 || result.isValidating}
-          onClick={() => setPage(page - 1)}
+          onClick={() => {
+            setSelectedId(undefined);
+            setPage(page - 1);
+          }}
         >
           {t('common.previous')}
         </button>
@@ -225,6 +294,7 @@ export function EventsScreen() {
             const next = result.data?.nextCursor;
             if (next) {
               setCursors([...cursors.slice(0, page + 1), next]);
+              setSelectedId(undefined);
               setPage(page + 1);
             }
           }}
