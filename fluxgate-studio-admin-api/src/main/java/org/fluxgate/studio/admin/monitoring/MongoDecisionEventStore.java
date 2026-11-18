@@ -74,21 +74,24 @@ public class MongoDecisionEventStore {
     if (query.outcome() != null)
       filters.add(Filters.eq("allowed", query.outcome().equals("ALLOW")));
     DecisionEventQuery.Position position = query.position();
-    if (position != null)
+    if (position != null) {
+      // Give the index scan a timestamp bound even when Mongo evaluates the tie-break OR at FETCH.
+      filters.add(Filters.lte("timestamp", position.timestamp()));
       filters.add(
           Filters.or(
               Filters.lt("timestamp", position.timestamp()),
               Filters.and(
                   Filters.eq("timestamp", position.timestamp()),
                   Filters.lt("_id", position.id()))));
+    }
     Document projection =
         new Document("_id", 1)
             .append("timestamp", 1)
             .append("allowed", 1)
             .append("ruleSetId", boundedString("ruleSetId"))
             .append("ruleId", boundedString("ruleId"))
-            .append("remainingTokens", numeric("remainingTokens"))
-            .append("retryAfterMs", numeric("retryAfterMs"));
+            .append("remainingTokens", integerOrNull("remainingTokens"))
+            .append("retryAfterMs", integerOrNull("retryAfterMs"));
     return List.of(
         Aggregates.match(Filters.and(filters)),
         Aggregates.sort(Sorts.descending("timestamp", "_id")),
@@ -105,11 +108,14 @@ public class MongoDecisionEventStore {
             new Document("$literal", null)));
   }
 
-  private static Document numeric(String field) {
+  private static Document integerOrNull(String field) {
     return new Document(
         "$cond",
         List.of(
-            new Document("$isNumber", "$" + field), "$" + field, new Document("$literal", null)));
+            new Document(
+                "$in", List.of(new Document("$type", "$" + field), List.of("int", "long"))),
+            "$" + field,
+            new Document("$literal", null)));
   }
 
   private static Long number(Document document, String field) {

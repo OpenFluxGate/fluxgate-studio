@@ -1,5 +1,7 @@
 # Decision event explorer (0.5.0 candidate)
 
+[한국어](decision-event-explorer.ko.md)
+
 The ADMIN-only `/api/events` endpoint reads the configured MongoDB decision-event
 collection. It is not the Studio audit log, synthetic demo traffic, or a live
 request counter. The writer is the engine's `MongoRateLimitMetricsRecorder`: epoch-ms
@@ -14,12 +16,12 @@ with inclusive from / exclusive to and a maximum 24-hour interval. Outcome is
 optional (`ALLOW` or `REJECT`). Limit is 1–100. The response contains `items` and
 an opaque `nextCursor`; use it with exactly the same time/result filters. Changing
 filters must discard the cursor. Results sort by timestamp and ObjectId descending,
-with no offset or full collection count. Limits read at most limit+1 rows. Cursor
+with no offset or full collection count. The aggregation returns up to limit+1 rows to the API. MongoDB can examine many more. Cursor
 contents are bounded, validated seek positions, not authentication credentials.
 
 Only integer timestamps, boolean decisions and ObjectId identifiers are supported.
 Malformed/imported records of other types are excluded, never reported as rejected
-decisions. Optional numeric fields remain null when absent, not invented zeroes.
+decisions. The optional writer counters accept BSON int32 and int64. Other types or missing values appear as null.
 Rule identifiers are display-only, truncated server-side to 256 codepoints. The
 response deliberately omits IP/user/API keys, endpoint/query strings, headers and
 arbitrary attributes. ADMIN authorization is enforced in both Spring security and
@@ -47,6 +49,28 @@ the controller, not merely by hiding a UI link.
   accounting claim is made. No production database was accessed for this change.
 - Keep UI/API revisions paired; old APIs do not have this endpoint. The candidate
   remains based on Studio #8, not the separately deployed legacy demo UI.
+
+## Provisioning the explorer indexes
+
+Confirm that Studio points to the same database and collection as the service
+writer configured with `fluxgate.mongo.event-collection`. Inspect existing
+indexes and arrange the following index builds through the database owner.
+Example for mongosh after selecting the writer database and default collection:
+
+```javascript
+const events = db.getCollection("rate_limit_events");
+events.getIndexes();
+events.createIndex({timestamp: -1, _id: -1});
+events.createIndex({allowed: 1, timestamp: -1, _id: -1});
+```
+
+Allow for the storage and write cost of both indexes. Check executionStats for
+first and continuation pages with and without an outcome filter. Inspect the
+winning index, any blocking SORT, keys and documents examined per returned row,
+and elapsed time. An IXSCAN on timestamp alone may still read the entire window.
+The cursor's explicit timestamp upper bound allows seeking directly to its
+millisecond. Many records at the same millisecond or malformed records can still
+increase work. Index provisioning is independent of Studio startup and rollout.
 
 ## Validation scope
 
