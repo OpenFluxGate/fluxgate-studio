@@ -215,7 +215,7 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
       const count=f.eventRequests.length;
       await page.getByLabel('To (local time)',{exact:true}).fill('2026-01-03T11:00');
       await page.getByRole('button',{name:'Apply filters',exact:true}).click();
-      await page.getByRole('alert').waitFor();await delay(200);assert.equal(f.eventRequests.length,count);
+      await page.getByText('Choose a valid interval of up to 24 hours.',{exact:true}).waitFor();await delay(200);assert.equal(f.eventRequests.length,count);
       f.setMode('error');await page.getByRole('button',{name:'Refresh latest hour',exact:true}).click();
       await page.getByText('Could not load recorded events. Try again.',{exact:true}).waitFor();
       await capture(page,'events-error');
