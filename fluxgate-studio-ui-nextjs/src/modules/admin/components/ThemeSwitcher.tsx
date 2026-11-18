@@ -24,6 +24,8 @@ export const ThemeSwitcher = () => {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
+        aria-label="Choose color theme"
+        aria-expanded={isOpen}
         className={`rounded-lg p-2 transition-colors ${theme.colors.textTertiary} ${theme.colors.bgCardHover}`}
       >
         <CurrentIcon size={18} />

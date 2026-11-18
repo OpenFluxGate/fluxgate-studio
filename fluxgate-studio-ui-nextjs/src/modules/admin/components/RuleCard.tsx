@@ -27,31 +27,27 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
   };
 
   return (
-    <div className="group relative">
+    <div className="studio-rule-card">
       <div
-        className={`absolute inset-0 bg-gradient-to-r ${theme.colors.gradientGlow} rounded-xl opacity-0 transition-opacity duration-300 group-hover:opacity-100`}
-      />
-      <div
-        className={`relative ${theme.colors.bgCard} overflow-hidden rounded-xl border backdrop-blur transition-all duration-300 ${
+        className={`relative ${theme.colors.bgCard} overflow-hidden rounded-md border transition-colors ${
           rule.enabled
             ? `${theme.colors.border} ${theme.colors.borderHover}`
-            : `${theme.colors.borderSubtle} opacity-60`
+            : `${theme.colors.borderSubtle}`
         }`}
       >
-        {rule.enabled && (
-          <div
-            className={`absolute top-0 right-0 left-0 h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent`}
-          />
-        )}
-
-        <div className="p-4">
-          <div className="flex items-start justify-between gap-3">
+        <div className="studio-rule-body p-4">
+          <div className="studio-rule-heading flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <h3 className={`font-semibold ${theme.colors.textPrimary} truncate`}>
                   {rule.name}
                 </h3>
-                <button onClick={() => onToggle(rule)} className="flex-shrink-0">
+                <button
+                  onClick={() => onToggle(rule)}
+                  className="studio-rule-toggle flex-shrink-0"
+                  aria-label={`${rule.enabled ? 'Disable' : 'Enable'} ${rule.name}`}
+                  aria-pressed={rule.enabled}
+                >
                   {rule.enabled ? (
                     <ToggleRight size={20} className={theme.colors.accent} />
                   ) : (
@@ -59,14 +55,16 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
                   )}
                 </button>
               </div>
-              <p className={`text-xs ${theme.colors.textMuted} mt-0.5 font-mono`}>{rule.id}</p>
+              <p className={`studio-rule-id text-xs ${theme.colors.textMuted} mt-0.5 font-mono`}>
+                {rule.id}
+              </p>
             </div>
             <Badge variant={policyColors[rule.onLimitExceedPolicy]}>
               {rule.onLimitExceedPolicy.replace('_', ' ')}
             </Badge>
           </div>
 
-          <div className="mt-3 flex items-center gap-3">
+          <div className="studio-rule-meta mt-3 flex flex-wrap items-center gap-3">
             <div className={`flex items-center gap-1.5 text-xs ${theme.colors.textTertiary}`}>
               <ScopeIcon scope={rule.scope} />
               <span>{rule.scope}</span>
@@ -78,7 +76,7 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
             </div>
           </div>
 
-          <div className="mt-4 space-y-2">
+          <div className="studio-rule-bands mt-4 space-y-2">
             <p className={`text-xs ${theme.colors.textMuted} font-medium tracking-wider uppercase`}>
               Rate Bands
             </p>
@@ -106,7 +104,7 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
           </div>
 
           {rule.tags.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
+            <div className="studio-rule-tags mt-3 flex flex-wrap gap-1.5">
               {rule.tags.map((tag) => (
                 <span
                   key={tag}
@@ -119,7 +117,7 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
           )}
 
           <div
-            className={`mt-4 flex items-center justify-between pt-3 ${theme.colors.borderSubtle} border-t`}
+            className={`studio-rule-footer mt-4 flex items-center justify-between pt-3 ${theme.colors.borderSubtle} border-t`}
           >
             <p className={`text-xs ${theme.colors.textMuted}`}>
               {rule.ruleSetId && (
@@ -133,6 +131,7 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
                 onClick={() => onSimulate(rule)}
                 className={`p-1.5 ${theme.colors.textMuted} ${theme.colors.accentBgLight} rounded-md transition-colors hover:opacity-80`}
                 title="Simulate"
+                aria-label={`Simulate ${rule.name}`}
               >
                 <Play size={14} />
               </button>
@@ -140,6 +139,7 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
                 onClick={() => onEdit(rule)}
                 className={`p-1.5 ${theme.colors.textMuted} ${theme.colors.accentBgLight} rounded-md transition-colors hover:opacity-80`}
                 title="Edit"
+                aria-label={`Edit ${rule.name}`}
               >
                 <Edit2 size={14} />
               </button>
@@ -147,6 +147,7 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
                 onClick={() => onDelete?.(rule)}
                 className={`p-1.5 ${theme.colors.textMuted} ${theme.colors.dangerBg} rounded-md transition-colors hover:opacity-80`}
                 title="Delete"
+                aria-label={`Delete ${rule.name}`}
               >
                 <Trash2 size={14} />
               </button>
