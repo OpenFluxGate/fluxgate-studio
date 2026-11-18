@@ -1,6 +1,30 @@
 export type Locale = 'en' | 'ko';
 
 export const en = {
+  'nav.events': 'Decision events',
+  'events.title': 'Decision events',
+  'events.intro':
+    'Read-only records from the configured MongoDB event collection, not synthetic traffic. Only recorded events appear; missing records do not mean no requests. Raw identities and attributes are not displayed.',
+  'events.from': 'From (local time)',
+  'events.to': 'To (local time)',
+  'events.outcome': 'Result',
+  'events.all': 'All results',
+  'events.allow': 'Allowed',
+  'events.reject': 'Rejected',
+  'events.apply': 'Apply filters',
+  'events.refresh': 'Refresh latest hour',
+  'events.invalid': 'Choose a valid interval of up to 24 hours.',
+  'events.empty': 'No recorded events in this interval.',
+  'events.failed': 'Could not load recorded events. Try again.',
+  'events.retry': 'Retry',
+  'events.remaining': 'Remaining tokens',
+  'events.retryAfter': 'Retry after (ms)',
+  'events.ruleSet': 'Rule set',
+  'events.rule': 'Rule',
+  'events.page': 'Page {page} · {count} records',
+  'events.snapshot':
+    'Fixed interval, newest first. Pagination does not provide a total request count.',
+
   'login.subtitle': 'Rate limit monitoring and rule management',
   'login.signIn': 'Sign in with Keycloak',
   'login.redirecting': 'Redirecting to Keycloak…',
@@ -376,6 +400,30 @@ export const en = {
 export type MessageKey = keyof typeof en;
 
 export const ko: Record<MessageKey, string> = {
+  'nav.events': '판정 이벤트',
+  'events.title': '판정 이벤트',
+  'events.intro':
+    '설정된 MongoDB 이벤트 컬렉션의 실제 기록을 읽기 전용으로 조회합니다. 합성 트래픽이 아니며 기록된 이벤트만 표시됩니다. 기록이 없다고 요청이 없었던 것은 아닙니다. 원본 식별자와 속성은 표시하지 않습니다.',
+  'events.from': '시작 (현지 시간)',
+  'events.to': '종료 (현지 시간)',
+  'events.outcome': '결과',
+  'events.all': '모든 결과',
+  'events.allow': '허용',
+  'events.reject': '차단',
+  'events.apply': '필터 적용',
+  'events.refresh': '최근 1시간 새로고침',
+  'events.invalid': '24시간 이내의 유효한 기간을 선택하세요.',
+  'events.empty': '이 기간에 기록된 이벤트가 없습니다.',
+  'events.failed': '판정 이벤트를 불러오지 못했습니다. 다시 시도해 주세요.',
+  'events.retry': '다시 시도',
+  'events.remaining': '남은 토큰',
+  'events.retryAfter': '재시도 대기 (ms)',
+  'events.ruleSet': '규칙 묶음',
+  'events.rule': '규칙',
+  'events.page': '{page}페이지 · 기록 {count}개',
+  'events.snapshot':
+    '고정된 기간의 최신순 기록입니다. 페이지 조회는 전체 요청 수를 제공하지 않습니다.',
+
   'login.subtitle': '유량제어 모니터링과 규칙 관리',
   'login.signIn': 'Keycloak으로 로그인',
   'login.redirecting': 'Keycloak으로 이동 중…',

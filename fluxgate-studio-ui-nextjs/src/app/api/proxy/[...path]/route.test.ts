@@ -178,3 +178,22 @@ describe('BFF proxy route', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe('read-only decision event surface', () => {
+  it('allows the exact events GET and forwards the bounded filter string', async () => {
+    const response = await GET(
+      requestFor('GET', '?from=1&to=1000&limit=50'),
+      contextFor(['api', 'events'])
+    );
+    expect(response.status).toBe(200);
+    expect(fetchMock.mock.calls[0][0].search).toBe('?from=1&to=1000&limit=50');
+  });
+  it('denies event mutation before forwarding', async () => {
+    expect((await POST(requestFor('POST'), contextFor(['api', 'events']))).status).toBe(405);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it('does not open an arbitrary event subpath', async () => {
+    expect((await GET(requestFor('GET'), contextFor(['api', 'events', 'raw']))).status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

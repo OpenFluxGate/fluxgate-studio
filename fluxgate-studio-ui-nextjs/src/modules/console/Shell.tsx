@@ -30,6 +30,7 @@ const NAV: { href: string; label: MessageKey; icon: typeof Gauge; adminOnly: boo
   { href: '/overview', label: 'nav.overview', icon: Gauge, adminOnly: false },
   { href: '/rules', label: 'nav.rules', icon: ListChecks, adminOnly: false },
   { href: '/keys', label: 'nav.keys', icon: KeyRound, adminOnly: true },
+  { href: '/events', label: 'nav.events', icon: ListChecks, adminOnly: true },
   { href: '/audit', label: 'nav.audit', icon: History, adminOnly: true },
   { href: '/settings', label: 'nav.settings', icon: Settings, adminOnly: false },
 ];

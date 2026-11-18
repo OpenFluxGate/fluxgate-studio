@@ -138,7 +138,8 @@ public class SecurityConfig {
                     .hasRole(ROLE_ADMIN)
                     // Key lookup and the audit log expose member identifiers, so they are admin
                     // only
-                    .requestMatchers("/api/keys/**", "/api/audit/**")
+                    .requestMatchers(
+                        "/api/keys/**", "/api/audit/**", "/api/events", "/api/events/**")
                     .hasRole(ROLE_ADMIN)
                     // Read-only dry-run, deliberately available to the read-only role
                     .requestMatchers(HttpMethod.POST, "/api/rules/*/simulate")

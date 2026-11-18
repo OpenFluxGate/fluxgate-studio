@@ -66,6 +66,7 @@ const METHODS_WITH_BODY = ['POST', 'PUT', 'PATCH'];
 const MAX_BODY_BYTES = 1_000_000;
 
 function isAllowed(path: string): boolean {
+  if (path === 'api/events') return true;
   return ALLOWED_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
@@ -127,6 +128,9 @@ async function proxy(
   }
 
   const targetPath = segments.join('/');
+  if (targetPath === 'api/events' && !['GET', 'HEAD'].includes(request.method)) {
+    return withCookies(errorResponse(405, 'Decision events are read-only.'));
+  }
   if (!isAllowed(targetPath)) {
     return withCookies(errorResponse(404, `Unknown API path: /${targetPath}`));
   }

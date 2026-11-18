@@ -6,6 +6,7 @@
  * The token is therefore never exposed to client-side JavaScript.
  */
 import { type Branding } from './branding';
+import { decisionEventParams, type DecisionEventQuery } from './decisionEvents';
 
 const API_BASE_PATH = '/api/proxy';
 
@@ -501,3 +502,28 @@ export async function simulateRule(
 }
 
 export { ApiError };
+
+/** Restricted projection of persisted Mongo decision events. No raw key/IP/user/attributes. */
+export interface ApiDecisionEvent {
+  id: string;
+  occurredAt: number;
+  ruleSetId: string | null;
+  ruleId: string | null;
+  allowed: boolean;
+  remainingTokens: number | null;
+  retryAfterMillis: number | null;
+}
+
+export interface ApiDecisionEventPage {
+  items: ApiDecisionEvent[];
+  nextCursor: string | null;
+}
+
+export async function fetchDecisionEvents(
+  query: DecisionEventQuery
+): Promise<ApiDecisionEventPage> {
+  const params = decisionEventParams(query);
+  return handleResponse<ApiDecisionEventPage>(
+    await fetch(`${API_BASE_PATH}/api/events?${params}`, { cache: 'no-store' })
+  );
+}
