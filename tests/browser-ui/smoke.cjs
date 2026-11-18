@@ -27,7 +27,8 @@ function fixture(path, params, mode, admin) {
   const total = buckets.reduce((n, b) => n + b.allowed + b.rejected, 0);
   const rejected = buckets.reduce((n, b) => n + b.rejected, 0);
   const set = {ruleSetId: 'qa-fixture', total, rejected, rejectRate: total ? rejected / total : 0, lastDecisionAt: mode === 'empty' ? null : to - 1000, trend: buckets.map(b => b.rejected)};
-  if (path === '/api/me') return { username: 'qa-fixture', name: 'SYNTHETIC QA', roles: [admin ? 'ADMIN' : 'VIEWER'], canWrite: admin };
+  if (path === '/api/me') return { username: 'qa-fixture', name: 'SYNTHETIC QA', roles: [admin ? 'ADMIN' : 'USER'], canWrite: admin };
+  if (path === '/api/settings/menus' && admin) return {version: 0, admin: ['overview', 'rules', 'keys', 'events', 'audit', 'settings'], user: ['overview', 'rules', 'settings']};
   if (path === '/api/monitoring/timeseries') return {window: '5m', from, to, bucketMillis: 60000, buckets};
   if (path === '/api/monitoring/overview') return {window: '5m', from, to, total, rejected, rejectRate: total ? rejected / total : 0, ruleSets: [set]};
   if (path === '/api/monitoring/top-rejected') return mode === 'empty' ? [] : [{ruleSetId: 'qa-fixture', key: admin ? 'synthetic-key-not-a-real-user' : 'synthetic***', masked: !admin, rejected: 2, lastRejectedAt: to - 1000}];

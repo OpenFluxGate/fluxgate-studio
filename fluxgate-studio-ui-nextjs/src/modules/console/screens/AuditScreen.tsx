@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
   ImageUp,
+  ListChecks,
   Pencil,
   Plus,
   Power,
@@ -42,6 +43,7 @@ const ACTIONS = [
   'POLICY_ROLLBACK',
   'KEY_LOOKUP',
   'BRANDING_UPDATE',
+  'MENU_POLICY_UPDATE',
 ] as const;
 const PERIODS = ['24h', '7d', '30d', 'all'] as const;
 type Period = (typeof PERIODS)[number];
@@ -66,6 +68,7 @@ const ACTION_STYLE: Record<string, { tone: BadgeTone; icon: typeof Plus }> = {
   POLICY_ROLLBACK: { tone: 'warn', icon: Undo2 },
   KEY_LOOKUP: { tone: 'neutral', icon: Search },
   BRANDING_UPDATE: { tone: 'neutral', icon: ImageUp },
+  MENU_POLICY_UPDATE: { tone: 'neutral', icon: ListChecks },
 };
 
 type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string;
@@ -118,6 +121,7 @@ function summary(entry: ApiAuditEntry, t: Translate, locale: Locale): string {
 
 function target(entry: ApiAuditEntry, t: Translate): string {
   if (!entry.target) return '–';
+  if (entry.target.setting === 'menus') return t('menus.title');
   if (entry.target.setting) return t('settings.branding');
   return [entry.target.ruleSetId, entry.target.ruleId].filter(Boolean).join(' / ') || '–';
 }
@@ -202,16 +206,23 @@ function Detail({ entry }: { entry: ApiAuditEntry }) {
   );
 }
 
+function AuditEntryDetail({ entry, canLookup }: { entry: ApiAuditEntry; canLookup: boolean }) {
+  const detailKey =
+    entry.action !== 'KEY_LOOKUP' || canLookup ? ['audit-entry', canLookup, entry.id] : null;
+  const { data } = useSWR(detailKey, () => fetchAuditEntry(entry.id));
+  return <Detail entry={data && (canLookup || data.action !== 'KEY_LOOKUP') ? data : entry} />;
+}
+
 export function AuditScreen() {
   const { t, locale } = useI18n();
-  const { isAdmin, loading } = useMe();
+  const { isAdmin, loading, menus } = useMe();
+  const canLookup = menus.includes('keys');
   const [action, setAction] = useState('');
   const [actor, setActor] = useState('');
   const [q, setQ] = useState('');
   const [period, setPeriod] = useState<Period>('7d');
   const [page, setPage] = useState(0);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [details, setDetails] = useState<Record<string, ApiAuditEntry>>({});
 
   const debouncedActor = useDebounced(actor.trim());
   const debouncedQ = useDebounced(q.trim());
@@ -239,20 +250,8 @@ export function AuditScreen() {
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const filtered = Boolean(action || actor || q || period !== '7d');
 
-  const toggle = async (entry: ApiAuditEntry) => {
-    if (openId === entry.id) {
-      setOpenId(null);
-      return;
-    }
-    setOpenId(entry.id);
-    if (!details[entry.id]) {
-      try {
-        const full = await fetchAuditEntry(entry.id);
-        setDetails((previous) => ({ ...previous, [entry.id]: full }));
-      } catch {
-        // The masked list entry stays visible when the full entry cannot be read.
-      }
-    }
+  const toggle = (entry: ApiAuditEntry) => {
+    setOpenId(openId === entry.id ? null : entry.id);
   };
 
   const resetPage =
@@ -472,7 +471,7 @@ export function AuditScreen() {
                         <tr id={`audit-detail-${entry.id}`}>
                           <td className="border-line/70 bg-panel2 border-b" />
                           <td colSpan={5} className="border-line/70 bg-panel2 border-b px-3 py-2">
-                            <Detail entry={details[entry.id] ?? entry} />
+                            <AuditEntryDetail entry={entry} canLookup={canLookup} />
                           </td>
                         </tr>
                       )}

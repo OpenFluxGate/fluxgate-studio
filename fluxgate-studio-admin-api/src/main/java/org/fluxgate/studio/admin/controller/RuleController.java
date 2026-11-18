@@ -21,6 +21,7 @@ import org.fluxgate.studio.admin.dto.response.RuleResponse;
 import org.fluxgate.studio.admin.dto.response.SimulationResponse;
 import org.fluxgate.studio.admin.exception.InvalidRuleException;
 import org.fluxgate.studio.admin.service.RuleService;
+import org.fluxgate.studio.admin.settings.MenuPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -51,6 +52,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/rules")
 @Tag(name = "Rules", description = "Rate limit rule management APIs")
+@MenuAccess(MenuPolicy.RULES)
 public class RuleController {
 
   private static final Logger log = LoggerFactory.getLogger(RuleController.class);

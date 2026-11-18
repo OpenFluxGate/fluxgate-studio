@@ -90,7 +90,7 @@ public class AuditService {
     return store.findById(id);
   }
 
-  static AuditEntry masked(AuditEntry entry) {
+  public static AuditEntry masked(AuditEntry entry) {
     if (entry.action() != AuditAction.KEY_LOOKUP
         || entry.detail() == null
         || !(entry.detail().get("value") instanceof String value)

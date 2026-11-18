@@ -7,6 +7,7 @@ import java.util.List;
 import org.fluxgate.studio.admin.monitoring.KeyLookupRequest;
 import org.fluxgate.studio.admin.monitoring.KeyLookupResponse;
 import org.fluxgate.studio.admin.monitoring.KeyLookupService;
+import org.fluxgate.studio.admin.settings.MenuPolicy;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/keys")
 @Tag(name = "Key lookup", description = "Decision history of one key, admin only and audited")
+@MenuAccess(MenuPolicy.KEYS)
 public class KeyLookupController {
 
   private final KeyLookupService keyLookupService;

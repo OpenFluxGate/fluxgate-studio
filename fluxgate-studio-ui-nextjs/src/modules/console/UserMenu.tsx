@@ -27,7 +27,7 @@ function initials(name: string): string {
 export function UserMenu() {
   const { t, locale, setLocale } = useI18n();
   const { mode, setMode } = useTheme();
-  const { me } = useMe();
+  const { me, menus } = useMe();
   const router = useRouter();
   const { open: menuOpen, setOpen: setMenuOpen, rootRef, triggerRef } = usePopover();
   const name = me ? me.name || me.username : '…';
@@ -81,16 +81,20 @@ export function UserMenu() {
               {t(`mode.${option}` as MessageKey)}
             </MenuItem>
           ))}
-          <MenuDivider />
-          <MenuItem
-            icon={Settings}
-            onSelect={() => {
-              setMenuOpen(false);
-              router.push('/settings');
-            }}
-          >
-            {t('nav.settings')}
-          </MenuItem>
+          {menus.includes('settings') && (
+            <>
+              <MenuDivider />
+              <MenuItem
+                icon={Settings}
+                onSelect={() => {
+                  setMenuOpen(false);
+                  router.push('/settings');
+                }}
+              >
+                {t('nav.settings')}
+              </MenuItem>
+            </>
+          )}
           <MenuDivider />
           <MenuItem icon={LogOut} onSelect={() => signOut({ callbackUrl: '/login' })}>
             {t('common.signOut')}

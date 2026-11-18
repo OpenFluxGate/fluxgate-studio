@@ -24,6 +24,8 @@ import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
 import { Notice, PageHeader, PageIntro, Panel } from '../ui';
 
+import { RoleMenusPanel } from './RoleMenusPanel';
+
 interface Option<T extends string> {
   value: T;
   label: string;
@@ -221,7 +223,8 @@ function ImageSetting({
 export function SettingsScreen() {
   const { t, locale, setLocale } = useI18n();
   const { mode, setMode } = useTheme();
-  const { isAdmin } = useMe();
+  const { isAdmin, me } = useMe();
+  const canEditBranding = isAdmin && !me?.menuPolicyUnavailable;
   const branding = useBranding();
   const { mutate } = useSWRConfig();
 
@@ -305,7 +308,9 @@ export function SettingsScreen() {
   return (
     <div>
       <PageHeader heading={false} title={t('settings.title')} />
-      <PageIntro title={t('settings.title')}>{t('settings.intro')}</PageIntro>
+      <PageIntro title={t('settings.title')}>
+        {t(isAdmin ? 'settings.adminIntro' : 'settings.intro')}
+      </PageIntro>
       <div className="max-w-5xl">
         <Panel
           title={t('settings.preferences')}
@@ -334,16 +339,16 @@ export function SettingsScreen() {
           </SettingRow>
         </Panel>
 
+        {isAdmin && <RoleMenusPanel />}
+
         <Panel
           title={t('settings.branding')}
           menu={false}
           description={t('settings.brandingHelp')}
           actions={
-            isAdmin ? (
-              dirty && <Badge tone="warn">{t('settings.unsaved')}</Badge>
-            ) : (
-              <Badge icon={Lock}>{t('settings.adminOnly')}</Badge>
-            )
+            canEditBranding
+              ? dirty && <Badge tone="warn">{t('settings.unsaved')}</Badge>
+              : !isAdmin && <Badge icon={Lock}>{t('settings.adminOnly')}</Badge>
           }
           state={{
             loading: !branding.data && !branding.error,
@@ -361,7 +366,7 @@ export function SettingsScreen() {
           <ImageSetting
             kind="logo"
             value={current.logo}
-            editable={isAdmin}
+            editable={canEditBranding}
             error={errors.logo}
             onPick={(file) => void pick('logo', file)}
             onReset={() => update('logo', null)}
@@ -369,7 +374,7 @@ export function SettingsScreen() {
           <ImageSetting
             kind="favicon"
             value={current.favicon}
-            editable={isAdmin}
+            editable={canEditBranding}
             error={errors.favicon}
             onPick={(file) => void pick('favicon', file)}
             onReset={() => update('favicon', null)}
@@ -380,7 +385,7 @@ export function SettingsScreen() {
                 ? t('settings.lastChanged', { user: updatedBy, time: formatTimestamp(updatedAt) })
                 : null}
             </span>
-            {isAdmin && (
+            {canEditBranding && (
               <span className="flex items-center gap-2">
                 <button
                   type="button"

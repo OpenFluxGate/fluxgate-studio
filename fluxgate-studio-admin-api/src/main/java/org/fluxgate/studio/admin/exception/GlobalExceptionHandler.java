@@ -28,6 +28,19 @@ public class GlobalExceptionHandler {
   /** Upper bound on an echoed detail, so that a long message cannot be used as an oracle. */
   private static final int MAX_DETAIL_LENGTH = 200;
 
+  @ExceptionHandler(MenuPolicyException.class)
+  public ResponseEntity<ErrorResponse> handleMenuPolicy(
+      MenuPolicyException ex, HttpServletRequest request) {
+    HttpStatus status = ex.status();
+    return ResponseEntity.status(status)
+        .body(
+            new ErrorResponse(
+                status.value(),
+                status.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()));
+  }
+
   @ExceptionHandler(RuleNotFoundException.class)
   public ResponseEntity<ErrorResponse> handleRuleNotFound(
       RuleNotFoundException ex, HttpServletRequest request) {

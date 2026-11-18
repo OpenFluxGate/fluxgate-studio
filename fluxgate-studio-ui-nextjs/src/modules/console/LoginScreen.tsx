@@ -22,7 +22,7 @@ export function LoginScreen({ error }: { error?: string }) {
 
   const handleLogin = async () => {
     setIsLoading(true);
-    await signIn('keycloak', { callbackUrl: '/overview' });
+    await signIn('keycloak', { callbackUrl: '/' });
   };
 
   return (
