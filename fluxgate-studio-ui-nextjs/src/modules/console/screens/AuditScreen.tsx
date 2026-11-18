@@ -378,6 +378,9 @@ export function AuditScreen() {
           </div>
         ) : (
           <div
+            role="region"
+            aria-label={t('audit.listTitle')}
+            tabIndex={0}
             className={`overflow-x-auto transition-opacity ${result.isValidating ? 'opacity-70' : ''}`}
             aria-busy={result.isValidating}
           >

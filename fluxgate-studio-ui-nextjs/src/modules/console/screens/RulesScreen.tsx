@@ -264,7 +264,7 @@ export function RulesScreen() {
         className="border-line bg-panel mb-4 flex flex-wrap items-end gap-3 rounded-md border p-3"
         onSubmit={(event) => event.preventDefault()}
       >
-        <Field id="rule-search" label={t('rules.searchLabel')} className="min-w-64 flex-1">
+        <Field id="rule-search" label={t('rules.searchLabel')} className="min-w-0 flex-1 basis-56">
           <input
             id="rule-search"
             name="q"
@@ -332,7 +332,12 @@ export function RulesScreen() {
         }}
         csvName="rules.csv"
       >
-        <div className="overflow-x-auto">
+        <div
+          role="region"
+          aria-label={t('rules.listTitle')}
+          tabIndex={0}
+          className="overflow-x-auto"
+        >
           <table className="w-full text-[13px]">
             <thead>
               <tr>

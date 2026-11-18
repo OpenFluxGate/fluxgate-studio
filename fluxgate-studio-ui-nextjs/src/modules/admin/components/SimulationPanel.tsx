@@ -166,52 +166,54 @@ export const SimulationPanel = ({ rule, onClose }: SimulationPanelProps) => {
                   })}
             </div>
             {result.estimated && <Notice tone="warn">{t('sim.estimated')}</Notice>}
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr>
-                  <th scope="col" className={TH}>
-                    {t('sim.band')}
-                  </th>
-                  <th scope="col" className={`${TH} text-right`}>
-                    {t('sim.available')}
-                  </th>
-                  <th scope="col" className={`${TH} text-right`}>
-                    {t('sim.consumed')}
-                  </th>
-                  <th scope="col" className={`${TH} text-right`}>
-                    {t('sim.remainingCol')}
-                  </th>
-                  <th scope="col" className={TH}>
-                    {t('sim.verdict')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.bands.map((band, index) => (
-                  <tr key={`${band.label}-${index}`}>
-                    <td className={TD}>
-                      {band.windowSeconds
-                        ? formatLimit(
-                            { windowSeconds: band.windowSeconds, capacity: band.capacity },
-                            locale
-                          )
-                        : band.label}
-                    </td>
-                    <td className={`${TD} num text-right`}>{formatCount(band.available)}</td>
-                    <td className={`${TD} num text-right`}>{formatCount(band.consumed)}</td>
-                    <td className={`${TD} num text-right`}>{formatCount(band.remaining)}</td>
-                    <td className={TD}>
-                      <Badge
-                        tone={band.exceeded ? 'bad' : 'ok'}
-                        icon={band.exceeded ? XOctagon : CheckCircle2}
-                      >
-                        {band.exceeded ? t('sim.exceeded') : t('sim.within')}
-                      </Badge>
-                    </td>
+            <div role="region" aria-label={t('sim.title')} tabIndex={0} className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr>
+                    <th scope="col" className={TH}>
+                      {t('sim.band')}
+                    </th>
+                    <th scope="col" className={`${TH} text-right`}>
+                      {t('sim.available')}
+                    </th>
+                    <th scope="col" className={`${TH} text-right`}>
+                      {t('sim.consumed')}
+                    </th>
+                    <th scope="col" className={`${TH} text-right`}>
+                      {t('sim.remainingCol')}
+                    </th>
+                    <th scope="col" className={TH}>
+                      {t('sim.verdict')}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {result.bands.map((band, index) => (
+                    <tr key={`${band.label}-${index}`}>
+                      <td className={TD}>
+                        {band.windowSeconds
+                          ? formatLimit(
+                              { windowSeconds: band.windowSeconds, capacity: band.capacity },
+                              locale
+                            )
+                          : band.label}
+                      </td>
+                      <td className={`${TD} num text-right`}>{formatCount(band.available)}</td>
+                      <td className={`${TD} num text-right`}>{formatCount(band.consumed)}</td>
+                      <td className={`${TD} num text-right`}>{formatCount(band.remaining)}</td>
+                      <td className={TD}>
+                        <Badge
+                          tone={band.exceeded ? 'bad' : 'ok'}
+                          icon={band.exceeded ? XOctagon : CheckCircle2}
+                        >
+                          {band.exceeded ? t('sim.exceeded') : t('sim.within')}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </div>

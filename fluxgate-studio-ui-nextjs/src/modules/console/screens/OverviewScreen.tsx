@@ -338,14 +338,6 @@ export function OverviewScreen() {
                 ? severityMark(rateSeverity(summary.rate))
                 : '--c-warning'
             }
-            actions={
-              <span className="num text-muted text-[11px] whitespace-nowrap">
-                {t('overview.thresholdsShort', {
-                  warn: formatPercent(WARN_RATE),
-                  bad: formatPercent(BAD_RATE),
-                })}
-              </span>
-            }
             state={{ ...seriesState, empty: false }}
             delta={
               series.data &&
@@ -382,6 +374,13 @@ export function OverviewScreen() {
             }}
           />
         </div>
+        <p className="text-muted num mt-2 text-xs">
+          {t('overview.rejectRate')} ·{' '}
+          {t('overview.thresholdsShort', {
+            warn: formatPercent(WARN_RATE),
+            bad: formatPercent(BAD_RATE),
+          })}
+        </p>
       </Row>
 
       <Row id="trend" title={t('row.trend')}>
