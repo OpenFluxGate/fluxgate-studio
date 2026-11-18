@@ -11,7 +11,7 @@ const API_BASE = 'http://admin-api.test:8090';
 process.env.ADMIN_API_URL = API_BASE;
 process.env.NEXTAUTH_SECRET = 'test-secret';
 
-const { DELETE, GET, POST } = await import('./route');
+const { DELETE, GET, POST, PUT } = await import('./route');
 
 const fetchMock = vi.fn();
 
@@ -52,12 +52,37 @@ describe('BFF proxy route', () => {
     [['api', 'keys', 'decisions'], '/api/keys/decisions'],
     [['api', 'audit'], '/api/audit'],
     [['api', 'me'], '/api/me'],
+    [['api', 'settings', 'menus'], '/api/settings/menus'],
   ])('forwards the console path %j', async (segments, expected) => {
     const response = await GET(requestFor('GET'), contextFor(segments));
 
     expect(response.status).toBe(200);
     const [target] = fetchMock.mock.calls[0] as [URL, RequestInit];
     expect(target.pathname).toBe(expected);
+  });
+
+  it('forwards the versioned menu policy update and preserves conflicts', async () => {
+    const path = ['api', 'settings', 'menus'];
+    const body = '{"version":1,"admin":["settings"],"user":["rules"]}';
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 409 }));
+
+    const response = await PUT(
+      requestFor('PUT', '', { 'content-type': 'application/json' }, body),
+      contextFor(path)
+    );
+
+    expect(response.status).toBe(409);
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL(`${API_BASE}/api/settings/menus`),
+      expect.objectContaining({ method: 'PUT', body, cache: 'no-store' })
+    );
+  });
+
+  it('restricts menu policy forwarding to its exact path and methods', async () => {
+    const segments = ['api', 'settings', 'menus'];
+    expect((await GET(requestFor('GET'), contextFor([...segments, 'details']))).status).toBe(404);
+    expect((await POST(requestFor('POST'), contextFor(segments))).status).toBe(405);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('still refuses paths outside the console API', async () => {

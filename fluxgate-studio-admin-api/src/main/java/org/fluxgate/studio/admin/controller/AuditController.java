@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.fluxgate.studio.admin.audit.AuditAction;
 import org.fluxgate.studio.admin.audit.AuditEntry;
@@ -11,10 +12,12 @@ import org.fluxgate.studio.admin.audit.AuditQuery;
 import org.fluxgate.studio.admin.audit.AuditService;
 import org.fluxgate.studio.admin.dto.response.PageResponse;
 import org.fluxgate.studio.admin.exception.InvalidRuleException;
+import org.fluxgate.studio.admin.settings.MenuPolicy;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/audit")
 @Tag(name = "Audit", description = "Who changed or looked up what, admin only")
+@MenuAccess(MenuPolicy.AUDIT)
 public class AuditController {
 
   static final int MAX_PAGE_SIZE = 200;
@@ -62,9 +66,16 @@ public class AuditController {
 
   @GetMapping("/{id}")
   @PreAuthorize(Roles.WRITER)
-  @Operation(summary = "One audit entry", description = "Shows the lookup value unmasked")
-  public ResponseEntity<AuditEntry> get(@PathVariable String id) {
-    return ResponseEntity.of(auditService.find(id));
+  @Operation(
+      summary = "One audit entry",
+      description = "Lookup values are masked unless Key lookup is enabled")
+  public ResponseEntity<AuditEntry> get(
+      @PathVariable String id,
+      @RequestAttribute(name = MenuAccessInterceptor.RAW_KEYS_ATTRIBUTE, required = false)
+          Boolean rawKeysAllowed) {
+    Optional<AuditEntry> entry = auditService.find(id);
+    return ResponseEntity.of(
+        Boolean.TRUE.equals(rawKeysAllowed) ? entry : entry.map(AuditService::masked));
   }
 
   private static AuditAction parseAction(String action) {

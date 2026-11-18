@@ -3,6 +3,7 @@ package org.fluxgate.studio.admin.controller;
 import org.fluxgate.studio.admin.monitoring.DecisionEventPage;
 import org.fluxgate.studio.admin.monitoring.DecisionEventQuery;
 import org.fluxgate.studio.admin.monitoring.MongoDecisionEventStore;
+import org.fluxgate.studio.admin.settings.MenuPolicy;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/events")
+@MenuAccess(MenuPolicy.EVENTS)
 public class DecisionEventController {
   private final MongoDecisionEventStore store;
 

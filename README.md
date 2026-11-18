@@ -228,6 +228,16 @@ The included `docker/fluxgate-realm.json` creates:
 
 Access Keycloak Admin Console at `http://keycloak:8080/admin` (admin/admin)
 
+### Role menus in Studio
+
+In **Settings → Role menus**, an administrator selects a role, chooses its screens, previews the landing page, and saves the change. The default administrator sees all six screens. The default viewer sees Overview, Rules and Settings. To give viewers a monitoring-only console, select the viewer, keep Overview selected and save. The next request to a disabled feature is denied, including requests from tabs opened before the change.
+
+Keycloak assigns the existing `admin` and `user` realm roles. Studio stores the menu policy in MongoDB and records changes in the activity log. An account with both roles uses the administrator policy. Key lookup, Decision events and Activity log require the administrator role. Settings always stays available to administrators so they can restore access.
+
+When rolling out the editor, upgrade every Admin API replica before enabling it in the UI. Verify that each replica returns `menus` on an authenticated `GET /api/me`. Earlier builds enforce the original role defaults. Keep a menu-aware API in service while custom restrictions are in use, including during UI rollback.
+
+Menu changes use a companion audit collection, `<STUDIO_AUDIT_COLLECTION>_menu_policy` (default `studio_audit_log_menu_policy`). Activity log includes records from both collections. Earlier API versions can still read their original audit history. If MongoDB access is granted per collection, allow the Studio account to find, insert and update companion records. Use the same retention as the original collection and grant index creation if Studio manages these indexes.
+
 ## API Endpoints
 
 Reads require `ROLE_USER` or `ROLE_ADMIN`; every mutating endpoint requires `ROLE_ADMIN`.
@@ -246,7 +256,9 @@ Reads require `ROLE_USER` or `ROLE_ADMIN`; every mutating endpoint requires `ROL
 | PATCH | `/api/rules/{id}/toggle` | admin | Toggle enabled/disabled (compare-and-set, `409` on a concurrent edit) |
 | DELETE | `/api/rules/{id}` | admin | Delete a rule |
 | DELETE | `/api/rules?ruleSetId=` | admin | Delete every rule of a rule set |
-| GET | `/api/me` | user, admin | Name and roles of the caller |
+| GET | `/api/me` | user, admin | Caller, roles, write capability and effective menu IDs |
+| GET | `/api/settings/menus` | admin | Current policy with its version and the two menu lists, `admin` and `user` |
+| PUT | `/api/settings/menus` | admin | Save both lists using the version returned by GET. A stale version returns HTTP 409. |
 | GET | `/api/monitoring/overview?window=5m\|15m\|1h\|6h\|24h` or `?from=&to=` | user, admin | Totals and per rule set activity. `from` and `to` are epoch ms, at most 24 hours apart |
 | GET | `/api/monitoring/timeseries?window=&ruleSetId=` | user, admin | Allowed and rejected decisions per bucket |
 | GET | `/api/monitoring/top-rejected?window=&ruleSetId=&limit=` | user, admin | Most rejected keys, masked for `ROLE_USER` |

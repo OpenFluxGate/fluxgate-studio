@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   hydrated: false,
   hydrationSequence: [] as boolean[],
-  data: undefined as undefined | { canWrite: boolean; username: string },
+  data: undefined as undefined | { canWrite: boolean; username: string; roles: string[] },
   error: undefined as Error | undefined,
   loading: false,
 }));
@@ -31,11 +31,11 @@ vi.mock('react', async (importOriginal) => {
 import { MeProvider, useMe } from './MeProvider';
 
 function Snapshot() {
-  const { me, isAdmin, loading, error } = useMe();
+  const { me, isAdmin, loading, error, menus } = useMe();
   return React.createElement(
     'output',
     null,
-    JSON.stringify({ me, isAdmin, loading, error: error?.message })
+    JSON.stringify({ me, isAdmin, loading, menus, error: error?.message })
   );
 }
 const render = () =>
@@ -51,8 +51,7 @@ beforeEach(() => {
 
 describe('permission hydration snapshot', () => {
   it('keeps a late consumer stable even when its sibling already sees warm admin context', () => {
-    state.data = { canWrite: true, username: 'warm-admin' };
-    state.error = Error('warm-error');
+    state.data = { canWrite: true, username: 'warm-admin', roles: ['ADMIN'] };
     state.hydrationSequence = [true, false];
     const html = renderToStaticMarkup(
       React.createElement(
@@ -73,7 +72,7 @@ describe('permission hydration snapshot', () => {
 
   it('keeps the server/initial hydration snapshot identical with cold or warm admin cache', () => {
     const cold = render();
-    state.data = { canWrite: true, username: 'cached-admin' };
+    state.data = { canWrite: true, username: 'cached-admin', roles: ['ADMIN'] };
     state.error = Error('cached-error');
     expect(render()).toBe(cold);
     expect(cold).toContain('&quot;isAdmin&quot;:false');
@@ -82,13 +81,23 @@ describe('permission hydration snapshot', () => {
   });
   it('uses current cached permissions after hydration, including viewer downgrade', () => {
     state.hydrated = true;
-    state.data = { canWrite: true, username: 'admin' };
+    state.data = { canWrite: true, username: 'admin', roles: ['ADMIN'] };
     expect(render()).toContain('&quot;isAdmin&quot;:true');
     expect(render()).toContain('&quot;loading&quot;:false');
-    state.data = { canWrite: false, username: 'viewer' };
+    state.data = { canWrite: false, username: 'viewer', roles: ['USER'] };
     expect(render()).toContain('&quot;isAdmin&quot;:false');
     expect(render()).toContain('viewer');
   });
+  it('removes all permissions when a warm session can no longer be verified', () => {
+    state.hydrated = true;
+    state.data = { canWrite: true, username: 'old-admin', roles: ['ADMIN'] };
+    state.error = Error('policy unavailable');
+    const snapshot = render();
+    expect(snapshot).toContain('&quot;menus&quot;:[]');
+    expect(snapshot).toContain('&quot;isAdmin&quot;:false');
+    expect(snapshot).not.toContain('old-admin');
+  });
+
   it('exposes loading and non-authentication errors only after hydration', () => {
     state.error = Error('request-failed');
     expect(render()).not.toContain('request-failed');

@@ -134,7 +134,7 @@ public class SecurityConfig {
                     // anyone signs in. Changing them is admin only.
                     .requestMatchers(HttpMethod.GET, BRANDING_PATH)
                     .permitAll()
-                    .requestMatchers(BRANDING_PATH)
+                    .requestMatchers(BRANDING_PATH, "/api/settings/menus")
                     .hasRole(ROLE_ADMIN)
                     // Key lookup and the audit log expose member identifiers, so they are admin
                     // only

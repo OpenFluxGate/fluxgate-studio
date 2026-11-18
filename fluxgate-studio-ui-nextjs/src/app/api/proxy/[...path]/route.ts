@@ -66,7 +66,7 @@ const METHODS_WITH_BODY = ['POST', 'PUT', 'PATCH'];
 const MAX_BODY_BYTES = 1_000_000;
 
 function isAllowed(path: string): boolean {
-  if (path === 'api/events') return true;
+  if (path === 'api/events' || path === 'api/settings/menus') return true;
   return ALLOWED_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
@@ -114,6 +114,7 @@ async function proxy(
 
   const { accessToken, cookies } = await backendSession(request);
   const withCookies = (response: NextResponse) => {
+    response.headers.set('Cache-Control', 'private, no-store');
     for (const cookie of cookies) response.headers.append('Set-Cookie', cookie);
     return response;
   };
@@ -130,6 +131,9 @@ async function proxy(
   const targetPath = segments.join('/');
   if (targetPath === 'api/events' && !['GET', 'HEAD'].includes(request.method)) {
     return withCookies(errorResponse(405, 'Decision events are read-only.'));
+  }
+  if (targetPath === 'api/settings/menus' && !['GET', 'HEAD', 'PUT'].includes(request.method)) {
+    return withCookies(errorResponse(405, 'Menu policy supports GET and PUT.'));
   }
   if (!isAllowed(targetPath)) {
     return withCookies(errorResponse(404, `Unknown API path: /${targetPath}`));

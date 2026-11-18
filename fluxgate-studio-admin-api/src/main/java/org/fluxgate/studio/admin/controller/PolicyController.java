@@ -11,6 +11,7 @@ import org.fluxgate.studio.admin.audit.RuleDiff;
 import org.fluxgate.studio.admin.dto.request.PublishPolicyRequest;
 import org.fluxgate.studio.admin.dto.request.RollbackPolicyRequest;
 import org.fluxgate.studio.admin.service.PolicyPublicationService;
+import org.fluxgate.studio.admin.settings.MenuPolicy;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/rule-sets/{id}")
+@MenuAccess(MenuPolicy.RULES)
 public class PolicyController {
   private final PolicyPublicationService service;
   private final AuditService auditService;

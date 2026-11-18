@@ -16,8 +16,8 @@ import {
   Settings,
 } from 'lucide-react';
 
-import { AUDIT_FAILED_EVENT } from '@/lib/api';
-import { type MessageKey } from '@/lib/i18n';
+import { ApiError, AUDIT_FAILED_EVENT } from '@/lib/api';
+import { MENU_IDS, type MenuId } from '@/lib/menuPolicy';
 
 import { BrandMark } from './branding';
 import { BUTTON, Tooltip } from './controls';
@@ -25,23 +25,29 @@ import { useI18n } from './I18nProvider';
 import { KioskContext } from './kiosk';
 import { useMe } from './MeProvider';
 import { usePersistentFlag } from './persistentFlag';
-import { Notice } from './ui';
+import { errorText, Forbidden, Notice, PageHeader } from './ui';
 
-const NAV: { href: string; label: MessageKey; icon: typeof Gauge; adminOnly: boolean }[] = [
-  { href: '/overview', label: 'nav.overview', icon: Gauge, adminOnly: false },
-  { href: '/rules', label: 'nav.rules', icon: ListChecks, adminOnly: false },
-  { href: '/keys', label: 'nav.keys', icon: KeyRound, adminOnly: true },
-  { href: '/events', label: 'nav.events', icon: Activity, adminOnly: true },
-  { href: '/audit', label: 'nav.audit', icon: History, adminOnly: true },
-  { href: '/settings', label: 'nav.settings', icon: Settings, adminOnly: false },
-];
+const NAV_ICONS: Record<MenuId, typeof Gauge> = {
+  overview: Gauge,
+  rules: ListChecks,
+  keys: KeyRound,
+  events: Activity,
+  audit: History,
+  settings: Settings,
+};
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const params = useSearchParams();
   const router = useRouter();
   const { t } = useI18n();
-  const { isAdmin, error: meError, retry } = useMe();
+  const { me, menus, loading, error, retry } = useMe();
+  const currentMenu = MENU_IDS.find((menu) => pathname === `/${menu}`);
+  const forbidden = error instanceof ApiError && error.status === 403;
+  const policyUnavailable =
+    me?.menuPolicyUnavailable || (error instanceof ApiError && error.status === 503);
+  const home = pathname === '/';
+  const destination = home && menus[0] ? `/${menus[0]}` : null;
   const [expanded, setExpanded] = usePersistentFlag('studio-sidebar-expanded', true);
   const [auditFailed, setAuditFailed] = useState(false);
 
@@ -57,6 +63,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
     [params, pathname, router]
   );
   const kioskValue = useMemo(() => ({ kiosk, setKiosk }), [kiosk, setKiosk]);
+
+  useEffect(() => {
+    if (destination) router.replace(destination);
+  }, [destination, router]);
 
   useEffect(() => {
     const onFailure = () => setAuditFailed(true);
@@ -99,14 +109,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
               className="flex items-stretch gap-0.5 md:flex-col md:gap-1"
               aria-label={t('nav.main')}
             >
-              {NAV.filter((item) => !item.adminOnly || isAdmin).map((item) => {
-                const active = pathname.startsWith(item.href);
-                const Icon = item.icon;
-                const label = t(item.label);
+              {menus.map((menu) => {
+                const active = currentMenu === menu;
+                const Icon = NAV_ICONS[menu];
+                const label = t(`nav.${menu}`);
+                const href = `/${menu}`;
                 return (
                   <Link
-                    key={item.href}
-                    href={item.href}
+                    key={menu}
+                    href={href}
                     aria-label={label}
                     aria-current={active ? 'page' : undefined}
                     className={`group relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-md px-0.5 text-center text-[10px] leading-tight transition-colors md:min-h-10 md:flex-none md:flex-row md:justify-start md:gap-2.5 md:px-2.5 md:text-left md:text-[13px] ${active ? 'bg-select text-s1-text font-semibold' : 'text-fg2 hover:bg-panel2 hover:text-fg'}`}
@@ -159,9 +170,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </button>
           )}
           <div className={kiosk ? 'pt-11' : ''}>
-            {meError && (
+            {(policyUnavailable || (error && !forbidden)) && (
               <Notice tone="bad">
-                {t('common.loadFailed')} {meError.message}{' '}
+                {policyUnavailable
+                  ? t('menus.unavailable')
+                  : `${t('common.loadFailed')} ${errorText(error, t)}`}{' '}
                 <button type="button" className={`${BUTTON} ml-2 h-7`} onClick={retry}>
                   {t('common.retry')}
                 </button>
@@ -172,7 +185,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 {t('common.auditFailed')}
               </Notice>
             )}
-            {children}
+            {error && !forbidden ? null : loading || destination ? (
+              <p role="status" className="text-muted py-4 text-sm">
+                {t('common.loading')}
+              </p>
+            ) : currentMenu && menus.includes(currentMenu) ? (
+              children
+            ) : (
+              <>
+                <PageHeader title={currentMenu ? t(`nav.${currentMenu}`) : 'FluxGate Studio'} />
+                <Forbidden />
+              </>
+            )}
           </div>
         </main>
       </div>

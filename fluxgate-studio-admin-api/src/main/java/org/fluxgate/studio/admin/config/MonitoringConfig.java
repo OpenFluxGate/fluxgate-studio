@@ -61,7 +61,9 @@ public class MonitoringConfig {
       @Value("${fluxgate.mongo.database:fluxgate}") String database,
       AuditProperties properties) {
     return new MongoAuditStore(
-        collection(clients, database, properties.collection()), properties.retention());
+        collection(clients, database, properties.collection()),
+        collection(clients, database, properties.collection() + "_menu_policy"),
+        properties.retention());
   }
 
   @Bean
