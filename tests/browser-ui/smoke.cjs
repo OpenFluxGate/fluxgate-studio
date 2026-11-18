@@ -7,6 +7,7 @@ const { createRequire } = require('node:module');
 const appRequire = createRequire(process.cwd() + '/package.json');
 const { encode } = appRequire('next-auth/jwt');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE);
+const playwrightVersion = require(process.env.PLAYWRIGHT_MODULE + '/package.json').version;
 const origin = 'http://127.0.0.1:3173';
 const output = process.env.VISUAL_OUTPUT || 'visual-results';
 const secret = randomBytes(32).toString('hex');
@@ -74,7 +75,7 @@ async function contextFor(width, locale, theme, admin = true) {
       const path = url.pathname.slice('/api/proxy'.length);
       if (path === '/api/events') eventRequests.push(Object.fromEntries(url.searchParams));
       if (route.request().method() !== 'GET') { unexpected.push('Unexpected write: '+path);await route.fulfill({status: 405,json:{message:'No writes in visual QA'}});return; }
-      if (mode === 'error' && path !== '/api/me') {await route.fulfill({status:path === '/api/events' ? 500 : 503,json:{message:'Synthetic QA failure'}});return;}
+      if ((mode === 'error' && path !== '/api/me') || (mode === 'counts-error' && path === '/api/monitoring/overview')) {await route.fulfill({status:path === '/api/events' ? 500 : 503,json:{message:'Synthetic QA failure'}});return;}
       try {await route.fulfill({json:fixture(path,url.searchParams,mode,admin)});} catch(error) {unexpected.push(error.message);await route.fulfill({status:500,json:{message:error.message}});}
       return;
     }
@@ -120,6 +121,17 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
           if(screen==='overview'){
             await page.locator('.uplot canvas').first().waitFor();
             assert.equal(await page.locator('[data-chart-load-error]').count(),0,'Normal locale chart failure');
+          }
+          if (screen === 'events' && width < 768) {
+            const grid = page.locator('table').first();
+            assert.ok((await grid.locator('tbody tr').first().boundingBox()).height < 220, 'Identifiers should fit a readable row');
+            const scroll = page.getByRole('region', { name: locale === 'en' ? 'Decision events' : '판정 이벤트' });
+            assert.ok(await scroll.evaluate(el => el.scrollWidth > el.clientWidth));
+            await scroll.focus();
+            await page.keyboard.press('End');
+            await grid.locator('th').last().scrollIntoViewIfNeeded();
+            assert.ok(await scroll.evaluate(el => el.scrollLeft > 0));
+            await scroll.evaluate(el => el.scrollLeft = 0);
           }
           await capture(page,name+'-'+screen);
           assert.deepEqual(errors,[],name+' / '+screen+' browser exceptions');
@@ -183,6 +195,91 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
       await capture(page,'invalid-browser-locale');
     }finally{await f.context.close();}
   });
+  await scenario('rules-search-review-keyboard',async()=>{
+    for (const width of [390, 1280]) {
+      const f = await contextFor(width, 'en', width === 390 ? 'light' : 'dark');
+      try {
+        const page = await f.context.newPage();
+        f.setMode('counts-error');
+        await page.goto(origin + '/rules', {waitUntil:'networkidle'});
+        await page.getByText('Rule-set rejection counts could not be loaded.').waitFor();
+        await page.getByText('– rejected in 24 hours').waitFor();
+        f.setMode('normal');
+        await page.getByRole('button', {name:'Retry', exact:true}).click();
+        await page.getByText('2 rejected in 24 hours').waitFor();
+        const search = page.getByRole('searchbox', {name:'Search rules'});
+        await search.fill('no match');
+        await page.getByText('Showing 0 of 1 rules').waitFor();
+        await page.getByRole('button', {name:'Clear search'}).click();
+        await page.getByText('Showing 1 of 1 rules').waitFor();
+        await page.getByRole('button', {name:'New rule'}).click();
+        await page.locator('#rule-id').fill('qa-new');
+        await page.locator('#rule-name').fill('QA new rule');
+        await page.getByRole('button', {name:'Review changes'}).click();
+        const review = page.getByRole('dialog', {name:'Review the change'});
+        await review.waitFor();
+        const cancel = review.getByRole('button', {name:'Cancel'});
+        assert.ok(await cancel.evaluate(el => el === document.activeElement));
+        await page.keyboard.press('Shift+Tab');
+        await page.keyboard.press('Shift+Tab');
+        assert.ok(await review.evaluate(el => el.contains(document.activeElement)));
+        await capture(page, 'rule-confirm-' + width);
+        await page.keyboard.press('Escape');
+        await review.waitFor({state:'hidden'});
+        assert.equal(await page.locator('#rule-id').inputValue(), 'qa-new');
+        assert.deepEqual(f.unexpected, []);
+      } finally { await f.context.close(); }
+    }
+  });
+  await scenario('rules-create-edit-confirmation', async () => {
+    const f = await contextFor(1280, 'en', 'dark');
+    const fixtureRules = [rule];
+    const writes = [];
+    try {
+      await f.context.route(origin + '/api/proxy/api/rules**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        const base = '/api/proxy/api/rules';
+        if (request.method() === 'GET' && url.pathname === base) {
+          return route.fulfill({json:fixtureRules});
+        }
+        if (request.method() === 'POST' && url.pathname === base) {
+          const created = {...request.postDataJSON(), version:0};
+          fixtureRules.push(created);
+          writes.push('create');
+          return route.fulfill({status:201, json:created});
+        }
+        if (request.method() === 'PUT' && url.pathname === base + '/new-fixture'
+            && url.searchParams.get('ruleSetId') === 'qa-fixture'
+            && request.headers()['if-match'] === '0') {
+          const updated = {...fixtureRules[1], ...request.postDataJSON(), version:1};
+          fixtureRules[1] = updated;
+          writes.push('update');
+          return route.fulfill({json:updated});
+        }
+        return route.fallback();
+      });
+      const page = await f.context.newPage();
+      await page.goto(origin + '/rules', {waitUntil:'networkidle'});
+      await page.getByRole('button', {name:'New rule'}).click();
+      await page.locator('#rule-id').fill('new-fixture');
+      await page.locator('#rule-name').fill('New fixture');
+      await page.locator('#rule-set').fill('qa-fixture');
+      await page.getByRole('button', {name:'Review changes'}).click();
+      assert.deepEqual(writes, []);
+      await page.getByRole('button', {name:'Reset counts and save'}).click();
+      const row = page.getByRole('row').filter({hasText:'new-fixture'});
+      await row.getByText('New fixture', {exact:true}).waitFor();
+      await row.getByRole('button', {name:'Edit', exact:true}).click();
+      await page.locator('#rule-name').fill('Updated fixture');
+      await page.getByRole('button', {name:'Review changes'}).click();
+      assert.deepEqual(writes, ['create']);
+      await page.getByRole('button', {name:'Reset counts and save'}).click();
+      await row.getByText('Updated fixture', {exact:true}).waitFor();
+      assert.deepEqual(writes, ['create', 'update']);
+      assert.deepEqual(f.unexpected, []);
+    } finally { await f.context.close(); }
+  });
   await scenario('events-filters-pagination-recovery',async()=>{
     const f=await contextFor(1280,'en','dark');
     const page=await f.context.newPage();const errors=[];
@@ -190,6 +287,7 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
     try{
       await page.goto(origin+'/events',{waitUntil:'networkidle'});
       await page.getByRole('cell',{name:'synthetic-first-page',exact:true}).waitFor();
+      await page.getByText('Page received', {exact:true}).waitFor();
       const first={...f.eventRequests.at(-1)};
       assert.equal(first.limit,'50');assert.ok(Number(first.to)-Number(first.from)<=86400000);
       assert.ok(!(await page.locator('body').innerText()).includes('DO-NOT-RENDER'));
@@ -212,10 +310,13 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
       assert.equal(Number(f.eventRequests.at(-1).to)-Number(f.eventRequests.at(-1).from),3600000);
       assert.equal(f.eventRequests.at(-1).cursor,undefined);
       assert.ok(await page.getByRole('button',{name:'Previous',exact:true}).isDisabled());
+      const applied = page.locator('dl').filter({hasText:'Applied interval'});
+      const appliedText = await applied.innerText();
       const count=f.eventRequests.length;
       await page.getByLabel('To (local time)',{exact:true}).fill('2026-01-03T11:00');
       await page.getByRole('button',{name:'Apply filters',exact:true}).click();
       await page.getByText('Choose a valid interval of up to 24 hours.',{exact:true}).waitFor();await delay(200);assert.equal(f.eventRequests.length,count);
+      assert.equal(await applied.innerText(), appliedText);
       f.setMode('error');await page.getByRole('button',{name:'Refresh latest hour',exact:true}).click();
       await page.getByText('Could not load recorded events. Try again.',{exact:true}).waitFor();
       await capture(page,'events-error');
@@ -247,7 +348,7 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
   });
 })().catch(e=>failures.push({name:'harness',error:e.stack})).finally(async()=>{
   if(browser)await browser.close();if(server)server.kill('SIGTERM');
-  await writeFile(output+'/report.json',JSON.stringify({synthetic:true,playwright:'1.56.1',results,failures,browserDiagnostics,limitations:['No real backend, auth provider or production data','No manual visual judgement or WCAG certification','No mutation-flow end-to-end assertions']},null,2));
+  await writeFile(output+'/report.json',JSON.stringify({synthetic:true,playwright:playwrightVersion,results,failures,browserDiagnostics,limitations:['No real backend, auth provider or production data','No manual visual judgement or WCAG certification','Rule create/edit writes use an in-memory browser fixture']},null,2));
   console.log('Captured',results.length,'views; failures:',failures.length);process.exitCode=failures.length?1:0;
 });
 

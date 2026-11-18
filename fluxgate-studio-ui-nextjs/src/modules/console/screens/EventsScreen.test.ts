@@ -39,14 +39,16 @@ const render = () => renderToStaticMarkup(React.createElement(EventsScreen));
 describe('decision event screen access and data states', () => {
   it('does not fetch or expose rows to viewers', () => {
     state.admin = false;
-    state.result = { data: { items: [{ ruleId: 'private-rule' }], nextCursor: null } };
+    state.result = {
+      data: { receivedAt: 1000, items: [{ ruleId: 'private-rule' }], nextCursor: null },
+    };
     expect(render()).toContain('forbidden');
     expect(state.key).toBeNull();
     expect(render()).not.toContain('private-rule');
   });
   it('distinguishes loading, empty and error rather than inventing records', () => {
     expect(render()).toContain('common.loading');
-    state.result = { data: { items: [], nextCursor: null } };
+    state.result = { data: { receivedAt: 1000, items: [], nextCursor: null } };
     expect(render()).toContain('events.empty');
     state.result = { error: Error('sensitive backend diagnostic') };
     const html = render();
@@ -56,6 +58,7 @@ describe('decision event screen access and data states', () => {
   it('renders only the restricted projection and escapes recorded labels', () => {
     state.result = {
       data: {
+        receivedAt: 1000,
         items: [
           {
             id: 'id',

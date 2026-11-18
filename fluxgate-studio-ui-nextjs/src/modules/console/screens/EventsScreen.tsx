@@ -32,7 +32,7 @@ export function EventsScreen() {
   const cursor = cursors[page];
   const result = useSWR(
     isAdmin ? ['decision-events', query, cursor, refresh] : null,
-    () => fetchDecisionEvents({ ...query, cursor }),
+    async () => ({ ...(await fetchDecisionEvents({ ...query, cursor })), receivedAt: Date.now() }),
     { keepPreviousData: false, revalidateOnFocus: false, shouldRetryOnError: false }
   );
 
@@ -117,6 +117,36 @@ export function EventsScreen() {
         </button>
       </form>
       {invalid && <p role="alert">{t('events.invalid')}</p>}
+      <dl className="text-fg2 mb-2 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+        <div>
+          <dt className="text-muted text-xs">{t('events.interval')}</dt>
+          <dd>
+            {formatTimestamp(query.from)} – {formatTimestamp(query.to)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted text-xs">{t('events.outcome')}</dt>
+          <dd>
+            {t(
+              query.outcome === 'ALLOW'
+                ? 'events.allow'
+                : query.outcome === 'REJECT'
+                  ? 'events.reject'
+                  : 'events.all'
+            )}
+          </dd>
+        </div>
+        {result.data && !result.error && (
+          <div>
+            <dt className="text-muted text-xs">{t('events.received')}</dt>
+            <dd>
+              <time dateTime={new Date(result.data.receivedAt).toISOString()}>
+                {formatTimestamp(result.data.receivedAt)}
+              </time>
+            </dd>
+          </div>
+        )}
+      </dl>
       <p className="text-muted mb-3 text-sm">{t('events.snapshot')}</p>
       {result.error ? (
         <div role="alert">
@@ -130,8 +160,14 @@ export function EventsScreen() {
       ) : entries.length === 0 ? (
         <p role="status">{t('events.empty')}</p>
       ) : (
-        <div className="overflow-x-auto" aria-busy={result.isValidating}>
-          <table className="w-full text-sm">
+        <div
+          className="overflow-x-auto"
+          role="region"
+          aria-label={t('events.title')}
+          tabIndex={0}
+          aria-busy={result.isValidating}
+        >
+          <table className="w-full min-w-[52rem] text-sm">
             <thead>
               <tr>
                 {[
@@ -171,9 +207,9 @@ export function EventsScreen() {
         >
           {t('common.previous')}
         </button>
-        <span role="status">
-          {t('events.page', { page: page + 1, count: result.error ? 0 : entries.length })}
-        </span>
+        {result.data && !result.error && (
+          <span role="status">{t('events.page', { page: page + 1, count: entries.length })}</span>
+        )}
         <button
           className={BUTTON}
           disabled={!result.data?.nextCursor || !!result.error || result.isValidating}
