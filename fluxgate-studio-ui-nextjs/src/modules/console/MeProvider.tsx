@@ -17,15 +17,14 @@ interface MeValue {
 
 const MeContext = createContext<MeValue>({ isAdmin: false, loading: true, retry: () => {} });
 
-// SWR can resolve while a streamed Suspense boundary is still hydrating. Keep
-// the whole permission snapshot identical to SSR until this consumer hydrates.
+// Each consumer can hydrate later than its provider (streamed Suspense).
+// Keep its permission snapshot identical to SSR until that consumer hydrates.
 const subscribeHydration = () => () => {};
 const clientSnapshot = () => true;
 const serverSnapshot = () => false;
 
 export function MeProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const hydrated = useSyncExternalStore(subscribeHydration, clientSnapshot, serverSnapshot);
   const { data, error, isLoading, mutate } = useSWR('me', fetchMe, { revalidateOnFocus: false });
   const unauthorized = error instanceof ApiError && error.status === 401;
 
@@ -36,10 +35,10 @@ export function MeProvider({ children }: { children: React.ReactNode }) {
   return (
     <MeContext.Provider
       value={{
-        me: hydrated ? data : undefined,
-        isAdmin: hydrated && !!data?.canWrite,
-        loading: !hydrated || isLoading,
-        error: hydrated && error && !unauthorized ? (error as Error) : undefined,
+        me: data,
+        isAdmin: !!data?.canWrite,
+        loading: isLoading,
+        error: error && !unauthorized ? (error as Error) : undefined,
         retry: () => {
           void mutate();
         },
@@ -50,4 +49,10 @@ export function MeProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export const useMe = () => useContext(MeContext);
+export function useMe(): MeValue {
+  const value = useContext(MeContext);
+  const hydrated = useSyncExternalStore(subscribeHydration, clientSnapshot, serverSnapshot);
+  return hydrated
+    ? value
+    : { me: undefined, isAdmin: false, loading: true, error: undefined, retry: value.retry };
+}

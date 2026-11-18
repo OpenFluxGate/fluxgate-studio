@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   hydrated: false,
+  hydrationSequence: [] as boolean[],
   data: undefined as undefined | { canWrite: boolean; username: string },
   error: undefined as Error | undefined,
   loading: false,
@@ -23,7 +24,7 @@ vi.mock('react', async (importOriginal) => {
   return {
     ...actual,
     useSyncExternalStore: (_subscribe: unknown, client: () => boolean, server: () => boolean) =>
-      state.hydrated ? client() : server(),
+      (state.hydrationSequence.shift() ?? state.hydrated) ? client() : server(),
   };
 });
 
@@ -42,12 +43,34 @@ const render = () =>
 
 beforeEach(() => {
   state.hydrated = false;
+  state.hydrationSequence = [];
   state.data = undefined;
   state.error = undefined;
   state.loading = false;
 });
 
 describe('permission hydration snapshot', () => {
+  it('keeps a late consumer stable even when its sibling already sees warm admin context', () => {
+    state.data = { canWrite: true, username: 'warm-admin' };
+    state.error = Error('warm-error');
+    state.hydrationSequence = [true, false];
+    const html = renderToStaticMarkup(
+      React.createElement(
+        MeProvider,
+        null,
+        React.createElement(Snapshot),
+        React.createElement(Snapshot)
+      )
+    );
+    const snapshots = html.match(/<output>.*?<\/output>/g)!;
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots[0]).toContain('&quot;isAdmin&quot;:true');
+    expect(snapshots[0]).toContain('warm-admin');
+    expect(snapshots[1]).toContain('&quot;isAdmin&quot;:false');
+    expect(snapshots[1]).toContain('&quot;loading&quot;:true');
+    expect(snapshots[1]).not.toContain('warm-');
+  });
+
   it('keeps the server/initial hydration snapshot identical with cold or warm admin cache', () => {
     const cold = render();
     state.data = { canWrite: true, username: 'cached-admin' };
