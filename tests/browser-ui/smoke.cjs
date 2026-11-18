@@ -49,8 +49,8 @@ function fixture(path, params, mode, admin) {
 
   throw new Error('Unmocked API path: ' + path);
 }
-async function contextFor(width, locale, theme, admin = true) {
-  const context = await browser.newContext({viewport: {width, height: 900}, locale: locale === 'ko' ? 'ko-KR' : 'en-US', reducedMotion: 'reduce', serviceWorkers: 'block'});
+async function contextFor(width, locale, theme, admin = true, timezoneId) {
+  const context = await browser.newContext({timezoneId, viewport: {width, height: 900}, locale: locale === 'ko' ? 'ko-KR' : 'en-US', reducedMotion: 'reduce', serviceWorkers: 'block'});
   context.setDefaultTimeout(10000);
   context.setDefaultNavigationTimeout(15000);
   context.on('page', page => {
@@ -340,6 +340,32 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
       await page.getByRole('cell',{name:'synthetic-first-page',exact:true}).waitFor();
       assert.deepEqual(f.unexpected,[]);assert.deepEqual(errors,[]);
     }finally{await f.context.close();}
+  });
+  await scenario('events-dst-fall-back', async () => {
+    const f = await contextFor(390, 'en', 'light', true, 'America/New_York');
+    try {
+      const page = await f.context.newPage();
+      await page.clock.setFixedTime(new Date('2026-11-01T06:30:00Z'));
+      await page.goto(origin + '/events', {waitUntil:'networkidle'});
+      await page.getByRole('cell', {name:'synthetic-first-page', exact:true}).waitFor();
+      const first = f.eventRequests.at(-1);
+      assert.equal(first.from, String(Date.parse('2026-11-01T05:30:00.001Z')));
+      assert.equal(first.to, String(Date.parse('2026-11-01T06:30:00.001Z')));
+      const applied = page.locator('dl').filter({hasText:'Applied interval'});
+      assert.ok((await applied.innerText()).includes('01:30:00.001 UTC-04:00'));
+      assert.ok((await applied.innerText()).includes('01:30:00.001 UTC-05:00'));
+      await page.getByLabel('Result', {exact:true}).selectOption('ALLOW');
+      await page.getByRole('button', {name:'Apply filters'}).click();
+      await page.getByRole('cell', {name:'Allowed', exact:true}).waitFor();
+      assert.deepEqual(f.eventRequests.at(-1), {...first, outcome:'ALLOW'});
+      const changed = page.waitForRequest(r => r.url().includes('/api/events?') &&
+        new URL(r.url()).searchParams.get('from') === String(Date.parse('2026-11-01T04:45:00Z')));
+      await page.locator('#events-from').fill('2026-11-01T00:45');
+      await page.getByRole('button', {name:'Apply filters'}).click();
+      const request = await changed;
+      assert.equal(new URL(request.url()).searchParams.get('to'), first.to);
+      assert.deepEqual(f.unexpected, []);
+    } finally { await f.context.close(); }
   });
   await scenario('events-viewer-denied',async()=>{
     const f=await contextFor(390,'en','dark',false);const page=await f.context.newPage();const errors=[];

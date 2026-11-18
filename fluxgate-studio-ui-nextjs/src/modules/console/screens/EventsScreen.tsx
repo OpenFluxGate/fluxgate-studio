@@ -8,6 +8,8 @@ import { fetchDecisionEvents } from '@/lib/api';
 import {
   decisionEventParams,
   type DecisionEventQuery,
+  eventEndpoint,
+  eventRangeLabel,
   lastHour,
   localDateTime,
 } from '@/lib/decisionEvents';
@@ -39,6 +41,10 @@ export function EventsScreen() {
   if (loading) return <p role="status">{t('common.loading')}</p>;
   if (!isAdmin) return <Forbidden />;
   const entries = result.data?.items ?? [];
+  const displayCount = (value: number | null) => {
+    if (value == null) return '–';
+    return Number.isSafeInteger(value) ? value : t('events.precisionUnavailable');
+  };
   const reset = (next: DecisionEventQuery) => {
     setQuery(next);
     setCursors([undefined]);
@@ -53,8 +59,8 @@ export function EventsScreen() {
         onSubmit={(event) => {
           event.preventDefault();
           const next: DecisionEventQuery = {
-            from: new Date(from).getTime(),
-            to: new Date(to).getTime(),
+            from: eventEndpoint(from, query.from),
+            to: eventEndpoint(to, query.to),
             outcome: outcome ? (outcome as 'ALLOW' | 'REJECT') : undefined,
             limit: 50,
           };
@@ -123,8 +129,7 @@ export function EventsScreen() {
         <div>
           <dt className="text-muted text-xs">{t('events.interval')}</dt>
           <dd>
-            {localDateTime(query.from).replace('T', ' ')} –{' '}
-            {localDateTime(query.to).replace('T', ' ')}
+            {eventRangeLabel(query.from)} – {eventRangeLabel(query.to)}
           </dd>
         </div>
         <div>
@@ -194,8 +199,8 @@ export function EventsScreen() {
                   <td className={TD}>{t(entry.allowed ? 'events.allow' : 'events.reject')}</td>
                   <td className={`${TD} max-w-64 break-all`}>{entry.ruleSetId ?? '–'}</td>
                   <td className={`${TD} max-w-64 break-all`}>{entry.ruleId ?? '–'}</td>
-                  <td className={TD}>{entry.remainingTokens ?? '–'}</td>
-                  <td className={TD}>{entry.retryAfterMillis ?? '–'}</td>
+                  <td className={TD}>{displayCount(entry.remainingTokens)}</td>
+                  <td className={TD}>{displayCount(entry.retryAfterMillis)}</td>
                 </tr>
               ))}
             </tbody>

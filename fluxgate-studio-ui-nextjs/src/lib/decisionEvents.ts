@@ -41,3 +41,16 @@ export function localDateTime(timestamp: number): string {
   const date = new Date(timestamp);
   return new Date(timestamp - date.getTimezoneOffset() * 60_000).toISOString().slice(0, -1);
 }
+
+/** Compare wall-clock fields without resolving an ambiguous local hour a second time. */
+export function eventEndpoint(input: string, previous: number): number {
+  if (Date.parse(input + 'Z') === Date.parse(localDateTime(previous) + 'Z')) return previous;
+  return new Date(input).getTime();
+}
+
+export function eventRangeLabel(timestamp: number): string {
+  const offset = -new Date(timestamp).getTimezoneOffset();
+  const hours = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0');
+  const minutes = String(Math.abs(offset) % 60).padStart(2, '0');
+  return `${localDateTime(timestamp).replace('T', ' ')} UTC${offset >= 0 ? '+' : '-'}${hours}:${minutes}`;
+}

@@ -55,6 +55,30 @@ describe('decision event screen access and data states', () => {
     expect(html).toContain('events.failed');
     expect(html).not.toContain('sensitive backend diagnostic');
   });
+  it('distinguishes unsafe int64 counters from missing and exactly representable counts', () => {
+    const outside = JSON.parse('9223372036854775807') as number;
+    const base = { id: 'row', occurredAt: 1000, allowed: true };
+    state.result = {
+      data: {
+        receivedAt: 1000,
+        items: [
+          { ...base, remainingTokens: outside, retryAfterMillis: outside },
+          {
+            ...base,
+            id: 'other',
+            remainingTokens: Number.MAX_SAFE_INTEGER,
+            retryAfterMillis: null,
+          },
+        ],
+      },
+    };
+    const html = render();
+    expect(html.match(/events.precisionUnavailable/g)).toHaveLength(2);
+    expect(html).not.toContain(String(outside));
+    expect(html).toContain(String(Number.MAX_SAFE_INTEGER));
+    expect(html).toContain('>–</td>');
+  });
+
   it('renders only the restricted projection and escapes recorded labels', () => {
     state.result = {
       data: {
