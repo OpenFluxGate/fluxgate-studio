@@ -154,10 +154,17 @@ class MongoDecisionEventStoreTest {
       port.bind(new java.net.InetSocketAddress(java.net.InetAddress.getByName("127.0.0.1"), 0));
       try (MongoClient client =
           MongoClients.create(
-              "mongodb://127.0.0.1:" + port.getLocalPort() + "/?serverSelectionTimeoutMS=200")) {
-        api(client.getDatabase("events").getCollection("events"))
-            .perform(get("/api/events?from=1&to=1000"))
-            .andExpect(status().isServiceUnavailable());
+              "mongodb://127.0.0.1:" + port.getLocalPort() + "/?serverSelectionTimeoutMS=4500")) {
+        var events = client.getDatabase("events").getCollection("events");
+        var mvc =
+            MockMvcBuilders.standaloneSetup(
+                    new DecisionEventController(
+                        new MongoDecisionEventStore(events, Duration.ofMillis(200))))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+        long start = System.nanoTime();
+        mvc.perform(get("/api/events?from=1&to=1000")).andExpect(status().isServiceUnavailable());
+        assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(2));
       }
     }
   }

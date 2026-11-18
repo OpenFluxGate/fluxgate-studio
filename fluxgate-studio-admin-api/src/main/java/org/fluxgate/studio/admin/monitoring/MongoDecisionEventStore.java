@@ -17,11 +17,16 @@ import org.fluxgate.studio.admin.exception.StorageConnectionException;
 /** Read-only recorder history. No counts, offset scans, index management or synthetic fallback. */
 public class MongoDecisionEventStore {
   private final MongoCollection<Document> collection;
-  private final long timeoutMillis;
 
   public MongoDecisionEventStore(MongoCollection<Document> collection, Duration timeout) {
-    this.collection = collection;
-    this.timeoutMillis = Math.max(1, Math.min(5000, timeout.toMillis()));
+    if (collection == null) {
+      this.collection = null;
+      return;
+    }
+    long budgetMillis = Math.max(1, Math.min(5000, timeout.toMillis()));
+    Long inherited = collection.getTimeout(TimeUnit.MILLISECONDS);
+    if (inherited != null && inherited > 0) budgetMillis = Math.min(inherited, budgetMillis);
+    this.collection = collection.withTimeout(budgetMillis, TimeUnit.MILLISECONDS);
   }
 
   public DecisionEventPage search(DecisionEventQuery query) {
@@ -34,7 +39,7 @@ public class MongoDecisionEventStore {
           collection
               .aggregate(pipeline)
               .allowDiskUse(false)
-              .maxTime(timeoutMillis, TimeUnit.MILLISECONDS)
+              .timeoutMode(com.mongodb.client.cursor.TimeoutMode.CURSOR_LIFETIME)
               .into(new ArrayList<>());
       boolean more = documents.size() > query.limit();
       List<DecisionEventPage.Item> items = new ArrayList<>();

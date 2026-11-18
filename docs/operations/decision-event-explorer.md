@@ -29,10 +29,11 @@ the controller, not merely by hiding a UI link.
 
 ## Operational boundaries
 
-- Mongo server execution has a maxTime budget no greater than 5 seconds and disallows disk spill.
-  Connection selection, network and pool waits are separately governed by the Mongo client
-  settings; this is not a five-second end-to-end request deadline.
-  Backend failure is an error, never a fabricated empty page.
+- The event aggregation uses a MongoDB driver operation budget of at most 5 seconds.
+  It covers server selection, connection checkout, command execution and cursor reads.
+  A shorter inherited operation timeout still applies. MongoDB cannot spill this query
+  to disk. A database failure returns HTTP 503. HTTP and application overhead can
+  add time outside the database operation.
 - This feature performs no writes, index creation, deletion or TTL changes. Existing
   monitoring startup index behavior is unchanged. Review and disable the existing
   create-indexes option if using a read-only DB principal.
