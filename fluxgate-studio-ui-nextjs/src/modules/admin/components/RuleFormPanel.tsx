@@ -164,10 +164,10 @@ export const RuleFormPanel = ({ rule, onClose, onSave, serverErrors }: RuleFormP
       className={`fixed inset-0 ${theme.colors.bgOverlay} z-50 flex items-center justify-center overflow-y-auto p-4 backdrop-blur-sm`}
     >
       <div
-        className={`${theme.colors.bgSecondary} ${theme.colors.border} w-full max-w-4xl overflow-hidden rounded-2xl border ${theme.colors.shadow} my-4`}
+        className={`${theme.colors.bgSecondary} ${theme.colors.border} flex max-h-[calc(100dvh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border ${theme.colors.shadow}`}
       >
         <div
-          className={`p-4 ${theme.colors.borderSubtle} border-b bg-gradient-to-r ${theme.colors.gradientGlow}`}
+          className={`shrink-0 p-4 ${theme.colors.borderSubtle} border-b bg-gradient-to-r ${theme.colors.gradientGlow}`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -190,9 +190,9 @@ export const RuleFormPanel = ({ rule, onClose, onSave, serverErrors }: RuleFormP
         </div>
 
         <div
-          className={`grid grid-cols-1 divide-y md:grid-cols-2 md:divide-x md:divide-y-0 ${theme.colors.border}`}
+          className={`grid min-h-0 grid-cols-1 divide-y overflow-y-auto md:grid-cols-2 md:divide-x md:divide-y-0 ${theme.colors.border}`}
         >
-          <div className="max-h-[70vh] space-y-4 overflow-y-auto p-4">
+          <div className="space-y-4 p-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label
