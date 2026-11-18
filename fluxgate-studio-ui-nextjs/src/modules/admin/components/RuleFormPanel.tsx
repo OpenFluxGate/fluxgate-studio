@@ -175,6 +175,41 @@ export const RuleFormPanel = ({ rule, onClose, onSave, serverErrors }: RuleFormP
       aria-labelledby="rule-editor-title"
       aria-modal="true"
       className="studio-dialog"
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key !== 'Tab') return;
+        const dialog = event.currentTarget;
+        const controls = Array.from(
+          dialog.querySelectorAll<HTMLElement>(
+            'button, input, select, textarea, a[href], [tabindex]'
+          )
+        ).filter(
+          (element) =>
+            element.tabIndex >= 0 &&
+            !element.matches(':disabled') &&
+            !element.closest('[hidden], [inert]') &&
+            element.getClientRects().length > 0 &&
+            getComputedStyle(element).visibility !== 'hidden'
+        );
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (!first) {
+          event.preventDefault();
+          dialog.focus();
+          return;
+        }
+        const active = document.activeElement;
+        if (event.shiftKey && (active === first || !controls.includes(active as HTMLElement))) {
+          event.preventDefault();
+          last.focus();
+        } else if (
+          !event.shiftKey &&
+          (active === last || !controls.includes(active as HTMLElement))
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      }}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
