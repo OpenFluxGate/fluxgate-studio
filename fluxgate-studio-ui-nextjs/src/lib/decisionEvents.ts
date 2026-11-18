@@ -31,7 +31,13 @@ export function decisionEventParams(query: DecisionEventQuery): URLSearchParams 
   return params;
 }
 
+/** The store excludes its upper bound; include decisions stamped in the current millisecond. */
+export function lastHour(now = Date.now()): DecisionEventQuery {
+  const to = now + 1;
+  return { from: to - 3_600_000, to, limit: 50 };
+}
+
 export function localDateTime(timestamp: number): string {
   const date = new Date(timestamp);
-  return new Date(timestamp - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+  return new Date(timestamp - date.getTimezoneOffset() * 60_000).toISOString().slice(0, -1);
 }

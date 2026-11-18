@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { decisionEventParams } from './decisionEvents';
+import { decisionEventParams, lastHour, localDateTime } from './decisionEvents';
 
 describe('bounded decision event queries', () => {
+  it('includes the sampled millisecond and preserves input precision', () => {
+    const now = new Date(2026, 10, 19, 12, 34, 56, 789).getTime();
+    const range = lastHour(now);
+    expect(range.to).toBe(now + 1);
+    expect(range.to - range.from).toBe(3_600_000);
+    expect(new Date(localDateTime(range.to)).getTime()).toBe(range.to);
+    expect(localDateTime(range.to)).toBe('2026-11-19T12:34:56.790');
+  });
+
   it('encodes opaque cursor without altering interval or injecting query parameters', () => {
     const params = decisionEventParams({
       from: 1000,

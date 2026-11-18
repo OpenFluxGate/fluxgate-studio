@@ -285,10 +285,16 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
     const page=await f.context.newPage();const errors=[];
     page.on('pageerror',e=>errors.push({url:page.url(),message:e.message}));
     try{
+      const now = new Date('2026-11-19T00:14:56.789Z');
+      await page.clock.setFixedTime(now);
       await page.goto(origin+'/events',{waitUntil:'networkidle'});
       await page.getByRole('cell',{name:'synthetic-first-page',exact:true}).waitFor();
       await page.getByText('Page received', {exact:true}).waitFor();
       const first={...f.eventRequests.at(-1)};
+      assert.equal(Number(first.to), now.getTime() + 1);
+      assert.equal(Number(first.to) - Number(first.from), 3_600_000);
+      assert.equal(await page.locator('#events-to').evaluate(el => new Date(el.value).getTime()), Number(first.to));
+      assert.ok((await page.locator('dl').innerText()).includes(':56.790'));
       assert.equal(first.limit,'50');assert.ok(Number(first.to)-Number(first.from)<=86400000);
       assert.ok(!(await page.locator('body').innerText()).includes('DO-NOT-RENDER'));
       await page.getByRole('button',{name:'Next',exact:true}).click();
@@ -300,6 +306,7 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
       await page.getByLabel('Result',{exact:true}).selectOption('ALLOW');
       await page.getByRole('button',{name:'Apply filters',exact:true}).click();
       await page.getByRole('cell',{name:'Allowed',exact:true}).waitFor();
+      assert.equal(f.eventRequests.at(-1).to, first.to);
       assert.equal(f.eventRequests.at(-1).outcome,'ALLOW');assert.equal(f.eventRequests.at(-1).cursor,undefined);
       await page.getByRole('button',{name:'Next',exact:true}).click();
       await page.getByRole('cell',{name:'synthetic-second-page',exact:true}).waitFor();
@@ -317,8 +324,11 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
       await page.getByRole('button',{name:'Apply filters',exact:true}).click();
       await page.getByText('Choose a valid interval of up to 24 hours.',{exact:true}).waitFor();await delay(200);assert.equal(f.eventRequests.length,count);
       assert.equal(await applied.innerText(), appliedText);
+      const refreshed = new Date(now.getTime() + 12_345);
+      await page.clock.setFixedTime(refreshed);
       f.setMode('error');await page.getByRole('button',{name:'Refresh latest hour',exact:true}).click();
       await page.getByText('Could not load recorded events. Try again.',{exact:true}).waitFor();
+      assert.equal(Number(f.eventRequests.at(-1).to), refreshed.getTime() + 1);
       await capture(page,'events-error');
       f.setMode('normal');await page.getByRole('button',{name:'Retry',exact:true}).click();
       await page.getByRole('cell',{name:'synthetic-first-page',exact:true}).waitFor();

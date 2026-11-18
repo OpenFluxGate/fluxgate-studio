@@ -5,18 +5,18 @@ import React, { useState } from 'react';
 import useSWR from 'swr';
 
 import { fetchDecisionEvents } from '@/lib/api';
-import { decisionEventParams, type DecisionEventQuery, localDateTime } from '@/lib/decisionEvents';
+import {
+  decisionEventParams,
+  type DecisionEventQuery,
+  lastHour,
+  localDateTime,
+} from '@/lib/decisionEvents';
 import { formatTimestamp } from '@/lib/format';
 
 import { BUTTON, Field, INPUT } from '../controls';
 import { useI18n } from '../I18nProvider';
 import { useMe } from '../MeProvider';
 import { Forbidden, PageIntro, TD, TH } from '../ui';
-
-function lastHour(): DecisionEventQuery {
-  const to = Math.floor(Date.now() / 60_000) * 60_000;
-  return { from: to - 3600_000, to, limit: 50 };
-}
 
 export function EventsScreen() {
   const { t } = useI18n();
@@ -70,6 +70,7 @@ export function EventsScreen() {
           <input
             id="events-from"
             type="datetime-local"
+            step="0.001"
             required
             value={from}
             onChange={(e) => setFrom(e.target.value)}
@@ -80,6 +81,7 @@ export function EventsScreen() {
           <input
             id="events-to"
             type="datetime-local"
+            step="0.001"
             required
             value={to}
             onChange={(e) => setTo(e.target.value)}
@@ -121,7 +123,8 @@ export function EventsScreen() {
         <div>
           <dt className="text-muted text-xs">{t('events.interval')}</dt>
           <dd>
-            {formatTimestamp(query.from)} – {formatTimestamp(query.to)}
+            {localDateTime(query.from).replace('T', ' ')} –{' '}
+            {localDateTime(query.to).replace('T', ' ')}
           </dd>
         </div>
         <div>
