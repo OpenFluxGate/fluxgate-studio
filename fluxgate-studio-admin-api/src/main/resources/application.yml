@@ -90,6 +90,8 @@ logging:
   level:
     org.fluxgate: DEBUG
     org.springframework.web: INFO
+    # These subclasses inherit MVC request logging, including request URLs at DEBUG.
+    org.fluxgate.studio.admin.config.mvc: ${logging.level.org.springframework.web:INFO}
 
 # OpenAPI / Swagger
 springdoc:

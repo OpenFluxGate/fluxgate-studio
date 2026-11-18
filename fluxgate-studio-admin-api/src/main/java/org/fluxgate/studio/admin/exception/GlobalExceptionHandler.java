@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -176,6 +177,11 @@ public class GlobalExceptionHandler {
                 "Invalid request",
                 request.getRequestURI(),
                 safeDetails(ex.getMessage())));
+  }
+
+  @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+  public ResponseEntity<Void> handleNotAcceptable() {
+    return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).build();
   }
 
   @ExceptionHandler(Exception.class)

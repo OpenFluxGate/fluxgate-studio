@@ -61,6 +61,12 @@
 - MongoDB (규칙 저장소)
 - Docker Compose
 
+## Admin API의 뷰와 스트리밍 정책
+
+Studio 화면은 Next.js가 렌더링하고, Admin API는 결정 이벤트를 페이지 단위의 JSON으로 반환합니다. Spring MVC 디스패처는 애플리케이션 뷰를 거부해 뷰 리졸버와 렌더러의 호출을 막습니다. 컨트롤러와 예외 처리기가 Spring emitter, 스트리밍 응답 또는 reactive publisher를 반환하면 MVC가 스트림을 시작하기 전에 HTTP 406을 반환합니다. `ResponseEntity`로 감싼 본문에도 적용됩니다. 이벤트 API에 `application/json`을 요청하면 정상 조회되며, SSE만 요청하면 HTTP 406을 받습니다. 프레임워크의 HTML 오류 경로는 상태 코드를 담은 고정 페이지를 반환합니다.
+
+0.5.0 후보에 포함된 Spring MVC 버전은 6.2.19입니다. 이 설정은 두 보안 권고에 해당하는 렌더링 기능을 Studio에서 차단합니다. 서블릿 코드, 렌더링 라이브러리 또는 오류 리졸버를 추가한 배포 환경은 적용 범위를 다시 검증하고, 해당 환경에서 사용할 수 있는 Spring 수정판으로 업그레이드하세요. [XSLT 뷰 권고](https://spring.io/security/cve-2026-47884/) · [SSE 뷰 조각 권고](https://spring.io/security/cve-2026-47890/)
+
 ## 빠른 시작
 
 ### 사전 요구사항

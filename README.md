@@ -62,6 +62,12 @@ This repository owns `fluxgate-studio-admin-api` and `fluxgate-studio-ui-nextjs`
 - MongoDB (Rule Storage)
 - Docker Compose
 
+## Admin API view and streaming policy
+
+Studio renders its interface in Next.js. The Admin API returns decision events as paginated JSON. Its Spring MVC dispatcher rejects application views before invoking a view resolver or a view's renderer. Controller and exception-handler responses that use Spring emitters, streaming bodies or reactive publishers return HTTP 406 before MVC starts an event stream. This also applies to bodies wrapped in `ResponseEntity`. Asking the events endpoint for `application/json` works normally. An SSE-only request receives HTTP 406. The framework's HTML error route returns a fixed page with the HTTP status.
+
+The 0.5.0 candidate packages Spring MVC 6.2.19. These controls disable the rendering features involved in the two Spring advisories for the shipped Admin API. Recheck deployments that add servlet code, rendering libraries or custom error resolvers. Upgrade to a patched Spring line when available for your deployment. [XSLT view advisory](https://spring.io/security/cve-2026-47884/) · [SSE view fragment advisory](https://spring.io/security/cve-2026-47890/)
+
 ## Quick Start
 
 ### Prerequisites
