@@ -24,7 +24,7 @@ export const themes: Record<string, Theme> = {
       textPrimary: 'text-slate-900',
       textSecondary: 'text-slate-600',
       textTertiary: 'text-slate-500',
-      textMuted: 'text-slate-400',
+      textMuted: 'text-slate-500',
       textInverse: 'text-white',
 
       // Accents
@@ -50,10 +50,10 @@ export const themes: Record<string, Theme> = {
       // Shadows
       shadow: 'shadow-lg shadow-slate-200/50',
       shadowCard: 'shadow-sm shadow-slate-100',
-      shadowAccent: 'shadow-lg shadow-cyan-500/20',
+      shadowAccent: 'shadow-none',
 
       // Gradients
-      gradientPrimary: 'from-cyan-500 to-teal-500',
+      gradientPrimary: 'from-blue-700 to-blue-700',
       gradientCard: 'from-slate-50 to-white',
       gradientGlow: 'from-cyan-500/5 to-teal-500/5',
     },
@@ -62,26 +62,26 @@ export const themes: Record<string, Theme> = {
     name: 'Dark',
     colors: {
       // Backgrounds
-      bg: 'bg-slate-950',
-      bgSecondary: 'bg-slate-900',
-      bgTertiary: 'bg-slate-800',
-      bgCard: 'bg-slate-900/60',
+      bg: 'bg-[#111217]',
+      bgSecondary: 'bg-[#181b1f]',
+      bgTertiary: 'bg-[#22262c]',
+      bgCard: 'bg-[#181b1f]',
       bgCardHover: 'hover:bg-slate-800/50',
-      bgInput: 'bg-slate-800',
+      bgInput: 'bg-[#111217]',
       bgOverlay: 'bg-black/80',
       bgGlow: 'bg-cyan-500/20',
 
       // Borders
-      border: 'border-slate-800',
+      border: 'border-[#343a43]',
       borderHover: 'hover:border-cyan-700/50',
       borderFocus: 'focus:border-cyan-600',
-      borderSubtle: 'border-slate-800/50',
+      borderSubtle: 'border-[#2b3038]',
 
       // Text
       textPrimary: 'text-white',
       textSecondary: 'text-slate-300',
       textTertiary: 'text-slate-400',
-      textMuted: 'text-slate-500',
+      textMuted: 'text-slate-400',
       textInverse: 'text-slate-900',
 
       // Accents
@@ -107,10 +107,10 @@ export const themes: Record<string, Theme> = {
       // Shadows
       shadow: 'shadow-2xl shadow-black/50',
       shadowCard: 'shadow-lg shadow-black/20',
-      shadowAccent: 'shadow-lg shadow-cyan-500/20',
+      shadowAccent: 'shadow-none',
 
       // Gradients
-      gradientPrimary: 'from-cyan-600 to-teal-600',
+      gradientPrimary: 'from-blue-700 to-blue-700',
       gradientCard: 'from-slate-900 to-slate-800',
       gradientGlow: 'from-cyan-500/10 to-teal-500/10',
     },
@@ -136,7 +136,7 @@ export const themes: Record<string, Theme> = {
       textPrimary: 'text-white',
       textSecondary: 'text-slate-300',
       textTertiary: 'text-slate-400',
-      textMuted: 'text-slate-500',
+      textMuted: 'text-slate-400',
       textInverse: 'text-slate-900',
 
       accent: 'text-violet-400',
@@ -159,9 +159,9 @@ export const themes: Record<string, Theme> = {
 
       shadow: 'shadow-2xl shadow-violet-950/50',
       shadowCard: 'shadow-lg shadow-violet-950/30',
-      shadowAccent: 'shadow-lg shadow-violet-500/20',
+      shadowAccent: 'shadow-none',
 
-      gradientPrimary: 'from-violet-600 to-fuchsia-600',
+      gradientPrimary: 'from-violet-700 to-violet-700',
       gradientCard: 'from-[#12121f] to-[#1a1a2e]',
       gradientGlow: 'from-violet-500/10 to-fuchsia-500/10',
     },

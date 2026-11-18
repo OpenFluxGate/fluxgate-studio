@@ -18,15 +18,12 @@ export const StatCard = ({ icon: Icon, label, value, subValue, trend }: StatCard
   const { theme } = useTheme();
 
   return (
-    <div className="group relative">
+    <div className="studio-stat">
       <div
-        className={`absolute inset-0 bg-gradient-to-r ${theme.colors.gradientGlow} rounded-xl opacity-0 blur-xl transition-opacity duration-500 group-hover:opacity-100`}
-      />
-      <div
-        className={`relative ${theme.colors.bgCard} backdrop-blur ${theme.colors.border} rounded-xl border p-4 ${theme.colors.borderHover} transition-all duration-300`}
+        className={`relative ${theme.colors.bgCard} ${theme.colors.border} rounded-lg border p-4 ${theme.colors.borderHover} transition-all duration-300`}
       >
-        <div className="flex items-start justify-between">
-          <div className={`bg-gradient-to-br p-2 ${theme.colors.gradientGlow} rounded-lg`}>
+        <div className="studio-stat-icon flex items-start justify-between">
+          <div className={`p-2 ${theme.colors.bgTertiary} rounded-lg`}>
             <Icon size={18} className={theme.colors.accent} />
           </div>
           {trend !== undefined && (
@@ -38,9 +35,13 @@ export const StatCard = ({ icon: Icon, label, value, subValue, trend }: StatCard
             </span>
           )}
         </div>
-        <div className="mt-3">
-          <p className={`text-2xl font-bold ${theme.colors.textPrimary} tracking-tight`}>{value}</p>
-          <p className={`text-xs ${theme.colors.textMuted} mt-0.5`}>{label}</p>
+        <div className="studio-stat-value mt-3">
+          <p
+            className={`text-3xl font-semibold tabular-nums ${theme.colors.textPrimary} tracking-tight`}
+          >
+            {value}
+          </p>
+          <p className={`text-xs ${theme.colors.textSecondary} mt-1`}>{label}</p>
         </div>
         {subValue && (
           <p

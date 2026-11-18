@@ -221,27 +221,41 @@ export const AdminDashboard = () => {
   };
 
   return (
-    <div className={`min-h-screen ${theme.colors.bg} transition-colors duration-300`}>
-      {/* Background effects */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div
-          className={`absolute top-0 left-1/4 h-96 w-96 ${theme.colors.bgGlow} rounded-full opacity-50 blur-3xl`}
-        />
-        <div
-          className={`absolute right-1/4 bottom-0 h-96 w-96 ${theme.colors.bgGlow} rounded-full opacity-50 blur-3xl`}
-        />
-      </div>
-
-      <div className="relative">
+    <div
+      className={`studio-shell min-h-screen ${theme.colors.bg}`}
+      data-studio-theme={theme.name.toLowerCase()}
+    >
+      <a className="studio-skip-link" href="#studio-main">
+        Skip to content
+      </a>
+      <aside className="studio-sidebar" aria-label="Workspace navigation">
+        <div className="studio-sidebar-heading">
+          <Shield size={18} /> FLUXGATE
+        </div>
+        <p className="studio-sidebar-label">Administration</p>
+        <nav>
+          <a href="#overview">
+            <Layers size={16} /> Overview
+          </a>
+          <a href="#rules">
+            <Shield size={16} /> Rate limit rules
+          </a>
+        </nav>
+        <div className="studio-sidebar-footer">
+          FluxGate Studio
+          <br />
+          <span>Rate limit management</span>
+        </div>
+      </aside>
+      <div className="studio-content">
         {/* Header */}
         <header
-          className={`${theme.colors.borderSubtle} border-b backdrop-blur-xl ${theme.colors.bg}/80 sticky top-0 z-40`}
+          className={`studio-header ${theme.colors.borderSubtle} border-b ${theme.colors.bgSecondary} sticky top-0 z-40`}
         >
-          <div className="mx-auto max-w-7xl px-6 py-4">
-            <div className="flex items-center justify-between">
+          <div className="studio-header-inner mx-auto px-6 py-4">
+            <div className="studio-toolbar flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className={`absolute inset-0 ${theme.colors.bgGlow} rounded-lg blur-lg`} />
                   <Image
                     src="/logo.svg"
                     alt="FluxGate"
@@ -252,20 +266,14 @@ export const AdminDashboard = () => {
                 </div>
                 <div>
                   <h1 className="text-lg font-bold tracking-tight">
-                    <span
-                      className={`bg-gradient-to-r bg-clip-text text-transparent ${theme.colors.gradientPrimary}`}
-                    >
-                      FluxGate
-                    </span>
+                    <span className={theme.colors.textPrimary}>FluxGate</span>
                     <span className={`${theme.colors.textTertiary} ml-2 font-normal`}>Admin</span>
                   </h1>
-                  <p className={`text-[10px] ${theme.colors.textMuted} tracking-wider uppercase`}>
-                    Rate Limit Management
-                  </p>
+                  <p className={`text-xs ${theme.colors.textMuted}`}>Rate Limit Management</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="studio-header-actions flex items-center gap-4">
                 <button
                   onClick={loadData}
                   disabled={loading}
@@ -285,7 +293,7 @@ export const AdminDashboard = () => {
                     >
                       <User size={16} className={theme.colors.textTertiary} />
                     </div>
-                    <span className={`text-sm ${theme.colors.textSecondary}`}>
+                    <span className={`studio-user-name text-sm ${theme.colors.textSecondary}`}>
                       {session?.user?.name || session?.user?.email || 'User'}
                     </span>
                   </div>
@@ -304,16 +312,30 @@ export const AdminDashboard = () => {
         </header>
 
         {/* Main Content */}
-        <main className="mx-auto max-w-7xl px-6 py-8">
+        <main id="studio-main" className="studio-main mx-auto px-6 py-8">
+          <section id="overview" className="studio-page-heading" aria-labelledby="overview-title">
+            <p className={`text-xs ${theme.colors.textTertiary}`}>Workspace / Rate limiting</p>
+            <h1
+              id="overview-title"
+              className={`text-2xl font-semibold ${theme.colors.textPrimary}`}
+            >
+              Rate limiting
+            </h1>
+            <p className={`text-sm ${theme.colors.textSecondary}`}>
+              Manage request limits, rule sets, and enforcement policies.
+            </p>
+          </section>
           {/* Error Banner */}
           {error && (
             <div
+              role="alert"
               className={`mb-6 p-4 ${theme.colors.dangerBg} ${theme.colors.dangerBorder} flex items-center gap-3 rounded-lg border`}
             >
               <AlertCircle size={20} className={theme.colors.danger} />
               <span className={theme.colors.danger}>{error}</span>
               <button
                 onClick={() => setError(null)}
+                aria-label="Dismiss error"
                 className={`ml-auto ${theme.colors.danger} hover:opacity-70`}
               >
                 ×
@@ -324,6 +346,7 @@ export const AdminDashboard = () => {
           {/* Notice Banner */}
           {notice && (
             <div
+              role="status"
               className={`mb-6 p-4 ${theme.colors.successBg} ${theme.colors.successBorder} flex items-center gap-3 rounded-lg border`}
             >
               <span className={theme.colors.success}>{notice}</span>
@@ -340,14 +363,15 @@ export const AdminDashboard = () => {
 
           {/* Loading State */}
           {loading && !stats && (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 size={32} className={`${theme.colors.accent} animate-spin`} />
+            <div className="flex items-center justify-center gap-3 py-20" role="status">
+              <Loader2 size={24} className={`${theme.colors.accent} animate-spin`} />
+              <span className={theme.colors.textSecondary}>Loading rules…</span>
             </div>
           )}
 
           {/* Stats */}
           {stats && (
-            <div className="mb-8 grid grid-cols-4 gap-4">
+            <div className="studio-stats mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
               <StatCard icon={Layers} label="Total Rules" value={stats.totalRules} />
               <StatCard
                 icon={Shield}
@@ -358,7 +382,7 @@ export const AdminDashboard = () => {
               <StatCard icon={Layers} label="Rule Sets" value={stats.totalRuleSets} />
               <StatCard
                 icon={RefreshCw}
-                label="Last Updated"
+                label="Data updated"
                 value={new Date(stats.lastUpdated).toLocaleTimeString()}
                 subValue={new Date(stats.lastUpdated).toLocaleDateString()}
               />
@@ -367,19 +391,20 @@ export const AdminDashboard = () => {
 
           {/* Rules Section */}
           <div
-            className={`${theme.colors.bgCard} backdrop-blur ${theme.colors.border} overflow-hidden rounded-2xl border`}
+            id="rules"
+            className={`studio-rules ${theme.colors.bgCard} ${theme.colors.border} overflow-hidden rounded-lg border`}
           >
             <div
               className={`p-4 ${theme.colors.borderSubtle} border-b ${theme.colors.bgSecondary}`}
             >
-              <div className="flex items-center justify-between">
+              <div className="studio-toolbar flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <h2 className={`font-semibold ${theme.colors.textPrimary}`}>Rate Limit Rules</h2>
                   <Badge variant="info">{filteredRules.length} rules</Badge>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="relative">
+                <div className="studio-rule-tools flex items-center gap-3">
+                  <div className="studio-search relative">
                     <Search
                       size={14}
                       className={`absolute top-1/2 left-3 -translate-y-1/2 ${theme.colors.textMuted}`}
@@ -388,7 +413,8 @@ export const AdminDashboard = () => {
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search rules..."
+                      placeholder="Search by name or ID"
+                      aria-label="Search rules"
                       className={`py-2 pr-4 pl-9 ${theme.colors.bgInput} ${theme.colors.borderSubtle} rounded-lg border text-sm ${theme.colors.textPrimary} placeholder-slate-500 focus:outline-none ${theme.colors.borderFocus} w-64`}
                     />
                   </div>
@@ -436,8 +462,13 @@ export const AdminDashboard = () => {
               </div>
             </div>
 
-            <div className="p-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="studio-inventory p-4">
+              <div className="studio-column-head" aria-hidden="true">
+                <span>Rule / scope</span>
+                <span>Rate bands</span>
+                <span>Management</span>
+              </div>
+              <div className="studio-rule-list grid grid-cols-1 gap-3">
                 {filteredRules.map((rule) => (
                   <RuleCard
                     key={ruleIdentity(rule)}
@@ -465,17 +496,27 @@ export const AdminDashboard = () => {
                   <p className={theme.colors.textTertiary}>
                     {searchQuery ? 'No rules match your search' : 'No rules found'}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedRule(null);
-                      setFormErrors({});
-                      setShowForm(true);
-                    }}
-                    className={`mt-4 text-sm ${theme.colors.accent}`}
-                  >
-                    Create your first rule →
-                  </button>
+                  {searchQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className={`mt-4 text-sm ${theme.colors.accent}`}
+                    >
+                      Clear search
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedRule(null);
+                        setFormErrors({});
+                        setShowForm(true);
+                      }}
+                      className={`mt-4 text-sm ${theme.colors.accent}`}
+                    >
+                      Create your first rule →
+                    </button>
+                  )}
                 </div>
               )}
             </div>
