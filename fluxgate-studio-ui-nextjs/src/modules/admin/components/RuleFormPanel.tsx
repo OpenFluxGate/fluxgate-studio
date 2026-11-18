@@ -189,9 +189,11 @@ export const RuleFormPanel = ({ rule, onClose, onSave, serverErrors }: RuleFormP
           </div>
         </div>
 
-        <div className={`grid grid-cols-2 divide-x ${theme.colors.border}`}>
+        <div
+          className={`grid grid-cols-1 divide-y md:grid-cols-2 md:divide-x md:divide-y-0 ${theme.colors.border}`}
+        >
           <div className="max-h-[70vh] space-y-4 overflow-y-auto p-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label
                   htmlFor="rule-id"
@@ -231,7 +233,7 @@ export const RuleFormPanel = ({ rule, onClose, onSave, serverErrors }: RuleFormP
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label
                   htmlFor="rule-scope"
