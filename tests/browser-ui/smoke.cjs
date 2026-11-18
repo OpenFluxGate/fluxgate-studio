@@ -34,6 +34,18 @@ function fixture(path, params, mode, admin) {
   if (path === '/api/rules') return params.has('page') ? {...emptyPage, content: [rule], totalElements: 1} : [rule];
   if (path === '/api/keys/transforms') return ['none', 'sha256'];
   if (path === '/api/audit') return emptyPage;
+  if (path === '/api/events') return {
+    items: mode === 'empty' ? [] : [{
+      id: params.has('cursor') ? 'synthetic-page-two' : 'synthetic-page-one',
+      occurredAt: to - 1000,
+      ruleSetId: 'synthetic-events-' + 'long-rule-set-'.repeat(8),
+      ruleId: params.has('cursor') ? 'synthetic-second-page' : 'synthetic-first-page',
+      allowed: params.get('outcome') === 'ALLOW', remainingTokens: 0, retryAfterMillis: 1000,
+      key: 'DO-NOT-RENDER-KEY', clientIp: 'DO-NOT-RENDER-IP', attributes: {secret:'DO-NOT-RENDER-SECRET'},
+    }],
+    nextCursor: mode === 'empty' || params.has('cursor') ? null : 'opaque+/=cursor',
+  };
+
   throw new Error('Unmocked API path: ' + path);
 }
 async function contextFor(width, locale, theme, admin = true) {
@@ -41,7 +53,7 @@ async function contextFor(width, locale, theme, admin = true) {
   context.setDefaultTimeout(10000);
   context.setDefaultNavigationTimeout(15000);
   context.on('page', page => {
-    page.on('pageerror', error => browserDiagnostics.push({kind:'exception',message:error.stack || error.message}));
+    page.on('pageerror', error => browserDiagnostics.push({kind:'exception',url:page.url(),message:error.stack || error.message}));
     page.on('console', message => { if(message.type()==='error') browserDiagnostics.push({kind:'console',message:message.text()}); });
     page.on('response', response => { if(response.status()>=400) browserDiagnostics.push({kind:'http',status:response.status(),url:response.url()}); });
   });
@@ -53,20 +65,22 @@ async function contextFor(width, locale, theme, admin = true) {
   }, {mode: theme, allowedOrigin: origin});
   let mode = 'normal';
   const unexpected = [];
+  const eventRequests = [];
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.origin !== origin) { unexpected.push('External request: '+url.origin); await route.abort(); return; }
     if (url.pathname === '/api/auth/session') {await route.fulfill({json: {user: {name: 'SYNTHETIC QA'}, expires: new Date(Date.now()+3600000).toISOString()}});return;}
     if (url.pathname.startsWith('/api/proxy/')) {
       const path = url.pathname.slice('/api/proxy'.length);
+      if (path === '/api/events') eventRequests.push(Object.fromEntries(url.searchParams));
       if (route.request().method() !== 'GET') { unexpected.push('Unexpected write: '+path);await route.fulfill({status: 405,json:{message:'No writes in visual QA'}});return; }
-      if (mode === 'error' && path !== '/api/me') {await route.fulfill({status:503,json:{message:'Synthetic QA failure'}});return;}
+      if (mode === 'error' && path !== '/api/me') {await route.fulfill({status:path === '/api/events' ? 500 : 503,json:{message:'Synthetic QA failure'}});return;}
       try {await route.fulfill({json:fixture(path,url.searchParams,mode,admin)});} catch(error) {unexpected.push(error.message);await route.fulfill({status:500,json:{message:error.message}});}
       return;
     }
     await route.continue();
   });
-  return {context, setMode: value => {mode=value;}, unexpected};
+  return {context, setMode: value => {mode=value;}, unexpected, eventRequests};
 }
 async function capture(page, name) {
   await page.evaluate(() => {
@@ -97,8 +111,8 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
     await scenario(name,async()=>{
       const fixtureContext=await contextFor(width,locale,theme);
       try{
-        const page=await fixtureContext.context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
-        for(const screen of ['overview','rules','keys','audit']){
+        const page=await fixtureContext.context.newPage();const errors=[];page.on('pageerror',e=>errors.push({url:page.url(),message:e.message}));
+        for(const screen of ['overview','rules','keys','audit','events']){
           await page.goto(origin+'/'+screen+'?refresh=off',{waitUntil:'networkidle'});
           assert.ok(!page.url().includes('/login'),'Unexpected login redirect');
           await page.screenshot({path: output+'/'+name+'-'+screen+'-before-check.png',fullPage:true});
@@ -108,6 +122,7 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
             assert.equal(await page.locator('[data-chart-load-error]').count(),0,'Normal locale chart failure');
           }
           await capture(page,name+'-'+screen);
+          assert.deepEqual(errors,[],name+' / '+screen+' browser exceptions');
         }
         assert.deepEqual(errors,[],'Browser exceptions');assert.deepEqual(fixtureContext.unexpected,[],'Requests escaped fixture');
       }finally{await fixtureContext.context.close();}
@@ -158,7 +173,7 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
     const f=await contextFor(1280,'en','dark');
     try{
       await f.context.addInitScript(()=>Object.defineProperty(navigator,'language',{configurable:true,get:()=> 'en-US@posix'}));
-      const page=await f.context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+      const page=await f.context.newPage();const errors=[];page.on('pageerror',e=>errors.push({url:page.url(),message:e.message}));
       await page.goto(origin+'/overview?refresh=off',{waitUntil:'networkidle'});
       await page.locator('#main h1').first().waitFor();
       await page.locator('[data-chart-load-error]').first().waitFor();
@@ -166,6 +181,64 @@ async function scenario(name, run) {console.log('Scenario:',name);try {await run
       assert.deepEqual(errors,[],'Locale failure escaped chart');
       assert.deepEqual(f.unexpected,[]);
       await capture(page,'invalid-browser-locale');
+    }finally{await f.context.close();}
+  });
+  await scenario('events-filters-pagination-recovery',async()=>{
+    const f=await contextFor(1280,'en','dark');
+    const page=await f.context.newPage();const errors=[];
+    page.on('pageerror',e=>errors.push({url:page.url(),message:e.message}));
+    try{
+      await page.goto(origin+'/events',{waitUntil:'networkidle'});
+      await page.getByRole('cell',{name:'synthetic-first-page',exact:true}).waitFor();
+      const first={...f.eventRequests.at(-1)};
+      assert.equal(first.limit,'50');assert.ok(Number(first.to)-Number(first.from)<=86400000);
+      assert.ok(!(await page.locator('body').innerText()).includes('DO-NOT-RENDER'));
+      await page.getByRole('button',{name:'Next',exact:true}).click();
+      await page.getByRole('cell',{name:'synthetic-second-page',exact:true}).waitFor();
+      const second=f.eventRequests.at(-1);assert.equal(second.cursor,'opaque+/=cursor');assert.equal(second.from,first.from);assert.equal(second.to,first.to);
+      assert.ok(await page.getByRole('button',{name:'Next',exact:true}).isDisabled());
+      await page.getByRole('button',{name:'Previous',exact:true}).click();
+      await page.getByRole('cell',{name:'synthetic-first-page',exact:true}).waitFor();
+      await page.getByLabel('Result',{exact:true}).selectOption('ALLOW');
+      await page.getByRole('button',{name:'Apply filters',exact:true}).click();
+      await page.getByRole('cell',{name:'Allowed',exact:true}).waitFor();
+      assert.equal(f.eventRequests.at(-1).outcome,'ALLOW');assert.equal(f.eventRequests.at(-1).cursor,undefined);
+      await page.getByRole('button',{name:'Next',exact:true}).click();
+      await page.getByRole('cell',{name:'synthetic-second-page',exact:true}).waitFor();
+      await page.getByLabel('From (local time)',{exact:true}).fill('2026-01-01T10:00');
+      await page.getByLabel('To (local time)',{exact:true}).fill('2026-01-01T11:00');
+      await page.getByRole('button',{name:'Apply filters',exact:true}).click();
+      await page.getByRole('cell',{name:'synthetic-first-page',exact:true}).waitFor();
+      assert.equal(Number(f.eventRequests.at(-1).to)-Number(f.eventRequests.at(-1).from),3600000);
+      assert.equal(f.eventRequests.at(-1).cursor,undefined);
+      assert.ok(await page.getByRole('button',{name:'Previous',exact:true}).isDisabled());
+      const count=f.eventRequests.length;
+      await page.getByLabel('To (local time)',{exact:true}).fill('2026-01-03T11:00');
+      await page.getByRole('button',{name:'Apply filters',exact:true}).click();
+      await page.getByRole('alert').waitFor();await delay(200);assert.equal(f.eventRequests.length,count);
+      f.setMode('error');await page.getByRole('button',{name:'Refresh latest hour',exact:true}).click();
+      await page.getByText('Could not load recorded events. Try again.',{exact:true}).waitFor();
+      await capture(page,'events-error');
+      f.setMode('normal');await page.getByRole('button',{name:'Retry',exact:true}).click();
+      await page.getByRole('cell',{name:'synthetic-first-page',exact:true}).waitFor();
+      f.setMode('empty');await page.getByRole('button',{name:'Refresh latest hour',exact:true}).click();
+      await page.getByText('No recorded events in this interval.',{exact:true}).waitFor();
+      assert.ok(await page.getByRole('button',{name:'Next',exact:true}).isDisabled());
+      await capture(page,'events-empty');
+      f.setMode('normal');await page.getByRole('button',{name:'Refresh latest hour',exact:true}).click();
+      await page.getByRole('cell',{name:'synthetic-first-page',exact:true}).waitFor();
+      assert.deepEqual(f.unexpected,[]);assert.deepEqual(errors,[]);
+    }finally{await f.context.close();}
+  });
+  await scenario('events-viewer-denied',async()=>{
+    const f=await contextFor(390,'en','dark',false);const page=await f.context.newPage();const errors=[];
+    page.on('pageerror',e=>errors.push({url:page.url(),message:e.message}));
+    try{
+      await page.goto(origin+'/events',{waitUntil:'networkidle'});
+      await page.getByText('You do not have permission to view this page.',{exact:true}).waitFor();
+      assert.equal(await page.locator('nav a[href="/events"]').count(),0);
+      assert.equal(f.eventRequests.length,0);
+      await capture(page,'events-viewer');assert.deepEqual(f.unexpected,[]);assert.deepEqual(errors,[]);
     }finally{await f.context.close();}
   });
   await scenario('viewer-navigation',async()=>{
