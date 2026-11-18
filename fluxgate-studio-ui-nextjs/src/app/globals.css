@@ -353,6 +353,7 @@ body {
   flex-wrap: wrap;
 }
 .studio-rule-toggle {
+  color: var(--studio-ink);
   gap: 5px;
   font-size: 11px;
 }
@@ -376,6 +377,9 @@ body {
   display: none;
 }
 .studio-dialog {
+  width: 100vw;
+  height: 100dvh;
+  margin: 0;
   padding: 0;
   border: 0;
   max-width: none;
