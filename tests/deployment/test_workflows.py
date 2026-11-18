@@ -1,4 +1,5 @@
 """Offline workflow integration contracts. No remote operations."""
+import re
 import subprocess
 import os
 import unittest
@@ -6,6 +7,23 @@ from pathlib import Path
 import yaml
 ROOT=Path(__file__).resolve().parents[2]
 class WorkflowContracts(unittest.TestCase):
+    def test_stacked_pr_builds_use_the_same_core_as_compose(self):
+        workflows = ROOT / '.github' / 'workflows'
+        compose = yaml.load((ROOT / 'docker-compose.yml').read_text(), Loader=yaml.BaseLoader)
+        context = compose['services']['admin-api']['build']['additional_contexts']['fluxgate_core']
+        source = re.fullmatch(r'\$\{FLUXGATE_CORE_SOURCE:-https://github\.com/(OpenFluxGate/fluxgate)\.git#([a-f0-9]{40})\}', context)
+        self.assertIsNotNone(source, 'The default Compose build must pin a full Core commit.')
+        repository, revision = source.groups()
+        for filename in ('admin-api-ci', 'deploy-admin-api', 'ui-ci', 'dependency-review', 'deployment-safety'):
+            with self.subTest(workflow=filename):
+                workflow = yaml.load((workflows / f'{filename}.yml').read_text(), Loader=yaml.BaseLoader)
+                self.assertIn('pull_request', workflow['on'])
+                self.assertNotIn('branches', workflow['on']['pull_request'] or {})
+                if filename in ('admin-api-ci', 'deploy-admin-api'):
+                    job = next(iter(workflow['jobs'].values()))
+                    paired = next(step['with'] for step in job['steps'] if step.get('with', {}).get('path') == '.paired-core')
+                    self.assertEqual((repository, revision), (paired['repository'], paired['ref']))
+
     def test_integrated_workflows(self):
         for name in ['deploy-admin-api.yml','deploy-studio-ui.yml']:
             with self.subTest(name=name):
