@@ -39,7 +39,7 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
           <div className="studio-rule-heading flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <h3 className={`font-semibold ${theme.colors.textPrimary} truncate`}>
+                <h3 className={`studio-rule-name font-semibold ${theme.colors.textPrimary}`}>
                   {rule.name}
                 </h3>
                 <button
@@ -49,9 +49,15 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
                   aria-pressed={rule.enabled}
                 >
                   {rule.enabled ? (
-                    <ToggleRight size={20} className={theme.colors.accent} />
+                    <>
+                      <ToggleRight size={18} className={theme.colors.accent} />
+                      <span>Enabled</span>
+                    </>
                   ) : (
-                    <ToggleLeft size={20} className={theme.colors.textMuted} />
+                    <>
+                      <ToggleLeft size={18} className={theme.colors.textMuted} />
+                      <span>Disabled</span>
+                    </>
                   )}
                 </button>
               </div>
@@ -60,7 +66,7 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
               </p>
             </div>
             <Badge variant={policyColors[rule.onLimitExceedPolicy]}>
-              {rule.onLimitExceedPolicy.replace('_', ' ')}
+              {rule.onLimitExceedPolicy.replaceAll('_', ' ')}
             </Badge>
           </div>
 
@@ -134,6 +140,7 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
                 aria-label={`Simulate ${rule.name}`}
               >
                 <Play size={14} />
+                <span>Simulate</span>
               </button>
               <button
                 onClick={() => onEdit(rule)}
@@ -142,6 +149,7 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
                 aria-label={`Edit ${rule.name}`}
               >
                 <Edit2 size={14} />
+                <span>Edit</span>
               </button>
               <button
                 onClick={() => onDelete?.(rule)}
@@ -150,6 +158,7 @@ export const RuleCard = ({ rule, onEdit, onSimulate, onToggle, onDelete }: RuleC
                 aria-label={`Delete ${rule.name}`}
               >
                 <Trash2 size={14} />
+                <span>Delete</span>
               </button>
             </div>
           </div>

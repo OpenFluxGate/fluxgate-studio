@@ -22,7 +22,7 @@ export const StatCard = ({ icon: Icon, label, value, subValue, trend }: StatCard
       <div
         className={`relative ${theme.colors.bgCard} ${theme.colors.border} rounded-lg border p-4 ${theme.colors.borderHover} transition-all duration-300`}
       >
-        <div className="flex items-start justify-between">
+        <div className="studio-stat-icon flex items-start justify-between">
           <div className={`p-2 ${theme.colors.bgTertiary} rounded-lg`}>
             <Icon size={18} className={theme.colors.accent} />
           </div>
@@ -35,7 +35,7 @@ export const StatCard = ({ icon: Icon, label, value, subValue, trend }: StatCard
             </span>
           )}
         </div>
-        <div className="mt-3">
+        <div className="studio-stat-value mt-3">
           <p
             className={`text-3xl font-semibold tabular-nums ${theme.colors.textPrimary} tracking-tight`}
           >

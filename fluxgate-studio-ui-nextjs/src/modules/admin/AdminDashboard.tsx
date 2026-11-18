@@ -230,7 +230,7 @@ export const AdminDashboard = () => {
       </a>
       <aside className="studio-sidebar" aria-label="Workspace navigation">
         <div className="studio-sidebar-heading">
-          <Shield size={18} /> WORKSPACE
+          <Shield size={18} /> FLUXGATE
         </div>
         <p className="studio-sidebar-label">Administration</p>
         <nav>
@@ -314,7 +314,7 @@ export const AdminDashboard = () => {
         {/* Main Content */}
         <main id="studio-main" className="studio-main mx-auto px-6 py-8">
           <section id="overview" className="studio-page-heading" aria-labelledby="overview-title">
-            <p className={`text-xs ${theme.colors.textTertiary}`}>Workspace / Overview</p>
+            <p className={`text-xs ${theme.colors.textTertiary}`}>Workspace / Rate limiting</p>
             <h1
               id="overview-title"
               className={`text-2xl font-semibold ${theme.colors.textPrimary}`}
@@ -328,6 +328,7 @@ export const AdminDashboard = () => {
           {/* Error Banner */}
           {error && (
             <div
+              role="alert"
               className={`mb-6 p-4 ${theme.colors.dangerBg} ${theme.colors.dangerBorder} flex items-center gap-3 rounded-lg border`}
             >
               <AlertCircle size={20} className={theme.colors.danger} />
@@ -345,6 +346,7 @@ export const AdminDashboard = () => {
           {/* Notice Banner */}
           {notice && (
             <div
+              role="status"
               className={`mb-6 p-4 ${theme.colors.successBg} ${theme.colors.successBorder} flex items-center gap-3 rounded-lg border`}
             >
               <span className={theme.colors.success}>{notice}</span>
@@ -361,8 +363,9 @@ export const AdminDashboard = () => {
 
           {/* Loading State */}
           {loading && !stats && (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 size={32} className={`${theme.colors.accent} animate-spin`} />
+            <div className="flex items-center justify-center gap-3 py-20" role="status">
+              <Loader2 size={24} className={`${theme.colors.accent} animate-spin`} />
+              <span className={theme.colors.textSecondary}>Loading rules…</span>
             </div>
           )}
 
@@ -379,7 +382,7 @@ export const AdminDashboard = () => {
               <StatCard icon={Layers} label="Rule Sets" value={stats.totalRuleSets} />
               <StatCard
                 icon={RefreshCw}
-                label="Last Updated"
+                label="Data updated"
                 value={new Date(stats.lastUpdated).toLocaleTimeString()}
                 subValue={new Date(stats.lastUpdated).toLocaleDateString()}
               />
@@ -459,7 +462,12 @@ export const AdminDashboard = () => {
               </div>
             </div>
 
-            <div className="p-4">
+            <div className="studio-inventory p-4">
+              <div className="studio-column-head" aria-hidden="true">
+                <span>Rule / scope</span>
+                <span>Rate bands</span>
+                <span>Management</span>
+              </div>
               <div className="studio-rule-list grid grid-cols-1 gap-3">
                 {filteredRules.map((rule) => (
                   <RuleCard
@@ -488,17 +496,27 @@ export const AdminDashboard = () => {
                   <p className={theme.colors.textTertiary}>
                     {searchQuery ? 'No rules match your search' : 'No rules found'}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedRule(null);
-                      setFormErrors({});
-                      setShowForm(true);
-                    }}
-                    className={`mt-4 text-sm ${theme.colors.accent}`}
-                  >
-                    Create your first rule →
-                  </button>
+                  {searchQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className={`mt-4 text-sm ${theme.colors.accent}`}
+                    >
+                      Clear search
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedRule(null);
+                        setFormErrors({});
+                        setShowForm(true);
+                      }}
+                      className={`mt-4 text-sm ${theme.colors.accent}`}
+                    >
+                      Create your first rule →
+                    </button>
+                  )}
                 </div>
               )}
             </div>
