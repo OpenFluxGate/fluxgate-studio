@@ -134,11 +134,12 @@ public class SecurityConfig {
                     // anyone signs in. Changing them is admin only.
                     .requestMatchers(HttpMethod.GET, BRANDING_PATH)
                     .permitAll()
-                    .requestMatchers(BRANDING_PATH)
+                    .requestMatchers(BRANDING_PATH, "/api/settings/menus")
                     .hasRole(ROLE_ADMIN)
                     // Key lookup and the audit log expose member identifiers, so they are admin
                     // only
-                    .requestMatchers("/api/keys/**", "/api/audit/**")
+                    .requestMatchers(
+                        "/api/keys/**", "/api/audit/**", "/api/events", "/api/events/**")
                     .hasRole(ROLE_ADMIN)
                     // Read-only dry-run, deliberately available to the read-only role
                     .requestMatchers(HttpMethod.POST, "/api/rules/*/simulate")

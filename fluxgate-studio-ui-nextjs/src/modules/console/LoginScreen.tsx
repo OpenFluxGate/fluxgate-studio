@@ -22,16 +22,16 @@ export function LoginScreen({ error }: { error?: string }) {
 
   const handleLogin = async () => {
     setIsLoading(true);
-    await signIn('keycloak', { callbackUrl: '/overview' });
+    await signIn('keycloak', { callbackUrl: '/' });
   };
 
   return (
     <main className="bg-bg text-fg flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <div className="border-line bg-panel rounded-lg border p-6 shadow-sm">
-          <div className="mb-1 flex items-center gap-2.5">
+        <div className="border-line bg-panel border-t-s1 rounded-xl border border-t-[3px] p-6 shadow-sm sm:p-8">
+          <div className="mb-3 flex items-center gap-3">
             <BrandMark size={32} />
-            <h1 className="text-lg font-semibold tracking-tight">FluxGate Studio</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">FluxGate Studio</h1>
           </div>
           <p className="text-muted mb-5 text-[13px]">{t('login.subtitle')}</p>
           {error && (
@@ -44,7 +44,7 @@ export function LoginScreen({ error }: { error?: string }) {
             onClick={handleLogin}
             disabled={isLoading}
             aria-busy={isLoading}
-            className="bg-primary hover:bg-primary-hover inline-flex h-9 w-full items-center justify-center gap-1.5 rounded px-3 text-[13px] font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            className="bg-primary hover:bg-primary-hover inline-flex h-11 w-full items-center justify-center gap-1.5 rounded px-3 text-[13px] font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLoading ? t('login.redirecting') : t('login.signIn')}
             <ArrowRight size={15} aria-hidden />
@@ -52,7 +52,7 @@ export function LoginScreen({ error }: { error?: string }) {
           <p className="text-muted mt-4 text-xs leading-relaxed">{t('login.help')}</p>
         </div>
         <div
-          role="radiogroup"
+          role="group"
           aria-label={t('login.language')}
           className="mt-3 flex justify-center gap-1 text-xs"
         >
@@ -60,11 +60,10 @@ export function LoginScreen({ error }: { error?: string }) {
             <button
               key={option.value}
               type="button"
-              role="radio"
-              aria-checked={locale === option.value}
+              aria-pressed={locale === option.value}
               lang={option.value}
               onClick={() => setLocale(option.value)}
-              className={`h-7 rounded px-2.5 ${locale === option.value ? 'bg-panel2 text-fg font-medium' : 'text-muted hover:text-fg'}`}
+              className={`min-h-9 rounded-md px-3 ${locale === option.value ? 'bg-panel2 text-fg font-medium' : 'text-muted hover:text-fg'}`}
             >
               {option.label}
             </button>

@@ -1,4 +1,5 @@
 import { type Locale, type MessageKey, translate } from './i18n';
+import { MENU_IDS, type MenuId } from './menuPolicy';
 import { formatLimit } from './ruleMeaning';
 
 function lookup(locale: Locale, prefix: string, value: string): string {
@@ -29,6 +30,13 @@ export function valueLabel(field: string, value: unknown, locale: Locale): strin
     return imageLabel(value, locale);
   }
   if (typeof value === 'boolean') return translate(locale, value ? 'value.true' : 'value.false');
+  if ((field === 'admin' || field === 'user') && Array.isArray(value) && value.length) {
+    return value
+      .map((menu) =>
+        MENU_IDS.includes(menu) ? translate(locale, `nav.${menu as MenuId}`) : String(menu)
+      )
+      .join(', ');
+  }
   if (Array.isArray(value)) {
     return value.length ? value.join(', ') : translate(locale, 'value.empty');
   }

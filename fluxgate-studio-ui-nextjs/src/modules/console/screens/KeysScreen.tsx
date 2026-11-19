@@ -262,7 +262,12 @@ export function KeysScreen() {
             }}
             csvName="recent-decisions.csv"
           >
-            <div className="overflow-x-auto">
+            <div
+              role="region"
+              aria-label={t('keys.recent')}
+              tabIndex={0}
+              className="overflow-x-auto"
+            >
               <table className="w-full text-[13px]">
                 <thead>
                   <tr>

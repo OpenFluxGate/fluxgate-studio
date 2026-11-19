@@ -175,3 +175,19 @@ describe('console API', () => {
     );
   });
 });
+
+describe('read-only decision event client', () => {
+  it('uses only the restricted event GET with no-store and propagates errors', async () => {
+    const { fetchDecisionEvents } = await import('./api');
+    fetchMock.mockResolvedValueOnce(Response.json({ items: [], nextCursor: null }));
+    expect(await fetchDecisionEvents({ from: 1, to: 1000 })).toEqual({
+      items: [],
+      nextCursor: null,
+    });
+    expect(fetchMock).toHaveBeenCalledWith('/api/proxy/api/events?from=1&to=1000&limit=50', {
+      cache: 'no-store',
+    });
+    fetchMock.mockResolvedValueOnce(Response.json({ message: 'Denied' }, { status: 403 }));
+    await expect(fetchDecisionEvents({ from: 1, to: 1000 })).rejects.toThrow();
+  });
+});

@@ -6,6 +6,7 @@ import org.bson.Document;
 import org.fluxgate.spring.autoconfigure.FluxgateMongoClientHolder;
 import org.fluxgate.studio.admin.audit.AuditProperties;
 import org.fluxgate.studio.admin.audit.MongoAuditStore;
+import org.fluxgate.studio.admin.monitoring.MongoDecisionEventStore;
 import org.fluxgate.studio.admin.monitoring.MongoEventStore;
 import org.fluxgate.studio.admin.monitoring.MonitoringProperties;
 import org.slf4j.Logger;
@@ -42,12 +43,27 @@ public class MonitoringConfig {
   }
 
   @Bean
+  public MongoDecisionEventStore mongoDecisionEventStore(
+      ObjectProvider<FluxgateMongoClientHolder> clients,
+      @Value("${fluxgate.mongo.database:fluxgate}") String ruleDatabase,
+      MonitoringProperties properties) {
+    String database =
+        properties.eventDatabase() == null || properties.eventDatabase().isBlank()
+            ? ruleDatabase
+            : properties.eventDatabase();
+    return new MongoDecisionEventStore(
+        collection(clients, database, properties.eventCollection()), properties.queryTimeout());
+  }
+
+  @Bean
   public MongoAuditStore mongoAuditStore(
       ObjectProvider<FluxgateMongoClientHolder> clients,
       @Value("${fluxgate.mongo.database:fluxgate}") String database,
       AuditProperties properties) {
     return new MongoAuditStore(
-        collection(clients, database, properties.collection()), properties.retention());
+        collection(clients, database, properties.collection()),
+        collection(clients, database, properties.collection() + "_menu_policy"),
+        properties.retention());
   }
 
   @Bean

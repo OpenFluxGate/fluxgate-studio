@@ -7,7 +7,7 @@
 Synthetic-data tests on 2026-11-17 used MongoDB 7.0.26 and separate JVMs:
 
 - Published Maven Central `io.github.openfluxgate:fluxgate-core:0.3.7` and `fluxgate-mongo-adapter:0.3.7`, Mongo driver 5.2.1. The published artifacts, not a Git tag with a different POM version, were used.
-- Core source `39a1789acfc481e416e7363dc6e9dd3817b147b5`, version 0.5.0, Mongo driver 5.5.2, matching Studio's pinned dependency build.
+- Core source `39a1789acfc481e416e7363dc6e9dd3817b147b5`, version 0.5.0, Mongo driver 5.5.2, the Studio dependency pin at the time of this compatibility run. See [the build guide](README.md#paired-core-artifacts) for the current pin.
 - Studio API and UI package version 0.5.0. The version alignment itself does not migrate documents or indexes.
 
 These results do not cover every 0.3.x release, arbitrary production documents, or the actual deployed service configuration.

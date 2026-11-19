@@ -95,9 +95,9 @@ export function RulesScreen() {
     [daily.data]
   );
 
-  const groups = useMemo(() => {
+  const matches = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const matches = (rules.data ?? []).filter(
+    return (rules.data ?? []).filter(
       (rule) =>
         !needle ||
         rule.id.toLowerCase().includes(needle) ||
@@ -105,6 +105,9 @@ export function RulesScreen() {
         (rule.ruleSetId ?? '').toLowerCase().includes(needle) ||
         rule.tags.some((tag) => tag.toLowerCase().includes(needle))
     );
+  }, [rules.data, query]);
+
+  const groups = useMemo(() => {
     const byGroup = new Map<string | null, Rule[]>();
     for (const rule of matches) {
       byGroup.set(rule.ruleSetId, [...(byGroup.get(rule.ruleSetId) ?? []), rule]);
@@ -112,7 +115,7 @@ export function RulesScreen() {
     return [...byGroup.entries()].sort(([a], [b]) =>
       a === null ? 1 : b === null ? -1 : a.localeCompare(b)
     );
-  }, [rules.data, query]);
+  }, [matches]);
 
   const message = (err: unknown) =>
     err instanceof ApiError && err.status === 409
@@ -261,7 +264,7 @@ export function RulesScreen() {
         className="border-line bg-panel mb-4 flex flex-wrap items-end gap-3 rounded-md border p-3"
         onSubmit={(event) => event.preventDefault()}
       >
-        <Field id="rule-search" label={t('rules.searchLabel')} className="min-w-64 flex-1">
+        <Field id="rule-search" label={t('rules.searchLabel')} className="min-w-0 flex-1 basis-56">
           <input
             id="rule-search"
             name="q"
@@ -274,11 +277,29 @@ export function RulesScreen() {
             className={`${INPUT} w-full`}
           />
         </Field>
+        {query && (
+          <button className={BUTTON} type="button" onClick={() => setQuery('')}>
+            {t('rules.clearSearch')}
+          </button>
+        )}
+        {rules.data && (
+          <span role="status" className="text-muted self-center text-xs">
+            {t('rules.matches', { count: matches.length, total: rules.data.length })}
+          </span>
+        )}
       </form>
 
       {error && (
         <Notice tone="bad" onClose={() => setError(null)}>
           {error}
+        </Notice>
+      )}
+      {daily.error && (
+        <Notice tone="warn">
+          {t('rules.countFailed')}{' '}
+          <button type="button" className="underline" onClick={() => void daily.mutate()}>
+            {t('common.retry')}
+          </button>
         </Notice>
       )}
       {notice && <Notice onClose={() => setNotice(null)}>{notice}</Notice>}
@@ -288,6 +309,7 @@ export function RulesScreen() {
         state={{
           loading: !rules.data && !rules.error,
           error: rules.data ? undefined : rules.error,
+          staleError: rules.data ? rules.error : undefined,
           onRetry: () => void rules.mutate(),
         }}
         data={{
@@ -299,7 +321,7 @@ export function RulesScreen() {
             t('col.meaning'),
             t('col.enabled'),
           ],
-          rows: (rules.data ?? []).map((rule) => [
+          rows: matches.map((rule) => [
             rule.ruleSetId,
             rule.id,
             scopeLabel(rule.scope, locale),
@@ -310,7 +332,12 @@ export function RulesScreen() {
         }}
         csvName="rules.csv"
       >
-        <div className="overflow-x-auto">
+        <div
+          role="region"
+          aria-label={t('rules.listTitle')}
+          tabIndex={0}
+          className="overflow-x-auto"
+        >
           <table className="w-full text-[13px]">
             <thead>
               <tr>
@@ -348,7 +375,10 @@ export function RulesScreen() {
                         <span className="num text-muted ml-3 text-xs font-normal">
                           {t('rules.rejectedIn', {
                             window: t(`window.${countWindow}` as MessageKey),
-                            count: formatCount(rejectedBySet.get(ruleSetId) ?? 0),
+                            count:
+                              !daily.error && rejectedBySet.has(ruleSetId)
+                                ? formatCount(rejectedBySet.get(ruleSetId)!)
+                                : '–',
                           })}
                         </span>
                       )}

@@ -102,7 +102,9 @@ function Delta({
 
 export function OverviewScreen() {
   const { t, locale } = useI18n();
-  const { isAdmin } = useMe();
+  const { menus } = useMe();
+  const showAudit = menus.includes('audit');
+  const showKeyLookup = menus.includes('keys');
   const { kiosk } = useKiosk();
   const now = useNow();
   const { mutate } = useSWRConfig();
@@ -120,7 +122,7 @@ export function OverviewScreen() {
   );
   const overview = useLive(`overview:${key}`, () => fetchOverview(params), refresh);
   const top = useLive(
-    `top:${key}:${ruleSet ?? ''}`,
+    `top:${showKeyLookup ? 'lookup' : 'masked'}:${key}:${ruleSet ?? ''}`,
     () => fetchTopRejected(params, 10, ruleSet),
     refresh
   );
@@ -139,7 +141,7 @@ export function OverviewScreen() {
       ),
     0
   );
-  const notesKey = isAdmin && series.data ? `notes:${key}:${series.data.from}` : null;
+  const notesKey = showAudit && series.data ? `notes:${key}:${series.data.from}` : null;
   const notesSource = useLive(
     notesKey,
     () => fetchAudit({ from: series.data!.from, to: series.data!.to, page: 0, size: 100 }),
@@ -175,21 +177,21 @@ export function OverviewScreen() {
   );
   const annotations: Annotation[] = useMemo(
     () =>
-      (notesSource.data?.content ?? [])
+      ((showAudit && notesSource.data?.content) || [])
         .filter((entry) => entry.action !== 'KEY_LOOKUP')
         .map((entry) => ({
           time: Date.parse(entry.at),
           text: [
             t(`action.${entry.action}` as MessageKey),
             entry.target?.setting
-              ? t('settings.branding')
+              ? t(entry.target.setting === 'menus' ? 'menus.title' : 'settings.branding')
               : [entry.target?.ruleSetId, entry.target?.ruleId].filter(Boolean).join(' / '),
             entry.actor.name || entry.actor.username,
           ]
             .filter(Boolean)
             .join(' · '),
         })),
-    [notesSource.data, t]
+    [notesSource.data, showAudit, t]
   );
   const onZoom = useCallback(
     (from: number, to: number) => update({ range: zoomTo(from, to, Date.now()) }),
@@ -202,7 +204,7 @@ export function OverviewScreen() {
   const unit = t('overview.perBucket', { bucket: formatBucket(bucketMillis, locale) });
   const allSets = overview.data?.ruleSets ?? [];
   const sets = allSets.filter((set) => !state.ruleSet || set.ruleSetId === state.ruleSet);
-  const topRows = top.data ?? [];
+  const topRows = (top.data ?? []).filter((row) => showKeyLookup || row.masked === true);
   const maxRejected = Math.max(1, ...topRows.map((row) => row.rejected));
   const invalidRange =
     state.range.kind === 'absolute' &&
@@ -220,7 +222,7 @@ export function OverviewScreen() {
     empty: !!series.data && summary.total === 0,
     onRetry: () => void series.mutate(),
   };
-  const chartHelp = isAdmin
+  const chartHelp = showAudit
     ? `${t('overview.trendHelp')} ${t('overview.annotationHelp')}`
     : t('overview.trendHelp');
 
@@ -338,14 +340,6 @@ export function OverviewScreen() {
                 ? severityMark(rateSeverity(summary.rate))
                 : '--c-warning'
             }
-            actions={
-              <span className="num text-muted text-[11px] whitespace-nowrap">
-                {t('overview.thresholdsShort', {
-                  warn: formatPercent(WARN_RATE),
-                  bad: formatPercent(BAD_RATE),
-                })}
-              </span>
-            }
             state={{ ...seriesState, empty: false }}
             delta={
               series.data &&
@@ -382,6 +376,13 @@ export function OverviewScreen() {
             }}
           />
         </div>
+        <p className="text-muted num mt-2 text-xs">
+          {t('overview.rejectRate')} ·{' '}
+          {t('overview.thresholdsShort', {
+            warn: formatPercent(WARN_RATE),
+            bad: formatPercent(BAD_RATE),
+          })}
+        </p>
       </Row>
 
       <Row id="trend" title={t('row.trend')}>
@@ -500,7 +501,7 @@ export function OverviewScreen() {
                     {topRows.map((row) => (
                       <tr key={`${row.ruleSetId}:${row.key}`}>
                         <td className={`${TD} mono whitespace-nowrap`}>
-                          {isAdmin && !row.masked ? (
+                          {showKeyLookup && !row.masked ? (
                             <Link
                               href={`/keys?value=${encodeURIComponent(row.key)}&transform=none`}
                               className="text-s1-text hover:underline"

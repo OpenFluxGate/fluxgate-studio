@@ -43,7 +43,7 @@ export {
 } from './controls';
 
 export const TH =
-  'border-b border-line px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-muted';
+  'bg-panel2 border-b border-line px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap text-muted';
 export const TD = 'border-b border-line/70 px-3 py-2 align-middle';
 
 export interface TableData {
@@ -84,14 +84,16 @@ export function PageHeader({
   if (kiosk) return null;
   const environment = process.env.NEXT_PUBLIC_ENV_LABEL;
   return (
-    <div className="border-line bg-panel sticky top-0 z-30 -mx-4 mb-4 flex min-h-12 flex-wrap items-center gap-3 border-b px-4 py-2 md:flex-nowrap md:py-0">
+    <div className="border-line bg-panel relative z-30 -mx-4 mb-5 flex min-h-14 flex-wrap items-center gap-3 border-b px-4 py-2 md:sticky md:top-0 md:flex-nowrap md:py-0">
       <nav aria-label="breadcrumb" className="flex shrink-0 items-center gap-1.5 text-[13px]">
         <span className="text-muted">FluxGate</span>
         <span aria-hidden className="text-faint">
           /
         </span>
         {heading ? (
-          <h1 className="text-fg text-[15px] font-semibold whitespace-nowrap">{title}</h1>
+          <h1 className="text-fg text-lg font-semibold tracking-tight whitespace-nowrap">
+            {title}
+          </h1>
         ) : (
           <span aria-current="page" className="text-fg text-[13px] font-medium whitespace-nowrap">
             {title}
@@ -269,9 +271,9 @@ export function Panel({
     ) : null;
 
   return (
-    <section className={`border-line bg-panel relative min-w-0 rounded-md border ${className}`}>
+    <section className={`border-line bg-panel relative min-w-0 rounded-lg border ${className}`}>
       {title && (
-        <header className="flex h-9 items-center gap-1.5 px-3">
+        <header className="flex min-h-10 items-center gap-1.5 px-3 py-1">
           <h2 className="text-fg truncate text-[13px] font-semibold">{title}</h2>
           {description && (
             <span className="group relative inline-flex" tabIndex={0} aria-label={description}>
@@ -363,7 +365,7 @@ export function Row({
           type="button"
           aria-expanded={open}
           onClick={() => setOpen(!open)}
-          className="text-fg2 hover:text-fg flex h-7 items-center gap-1 rounded pr-2 text-[13px] font-semibold transition-colors"
+          className="text-fg hover:text-s1-text flex h-8 items-center gap-1.5 rounded pr-2 text-sm font-semibold transition-colors"
         >
           <Icon size={15} aria-hidden />
           {title}
@@ -556,8 +558,8 @@ export function Notice({
 export function PageIntro({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mb-4">
-      <h1 className="text-fg text-xl font-semibold tracking-tight">{title}</h1>
-      <p className="text-muted mt-0.5 max-w-3xl text-[13px]">{children}</p>
+      <h1 className="text-fg text-2xl font-semibold tracking-tight">{title}</h1>
+      <p className="text-muted mt-1 max-w-3xl text-[13px]">{children}</p>
     </div>
   );
 }

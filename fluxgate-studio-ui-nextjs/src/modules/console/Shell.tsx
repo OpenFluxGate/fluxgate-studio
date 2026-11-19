@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import {
+  Activity,
   Gauge,
   History,
   KeyRound,
@@ -15,8 +16,8 @@ import {
   Settings,
 } from 'lucide-react';
 
-import { AUDIT_FAILED_EVENT } from '@/lib/api';
-import { type MessageKey } from '@/lib/i18n';
+import { ApiError, AUDIT_FAILED_EVENT } from '@/lib/api';
+import { MENU_IDS, type MenuId } from '@/lib/menuPolicy';
 
 import { BrandMark } from './branding';
 import { BUTTON, Tooltip } from './controls';
@@ -24,22 +25,29 @@ import { useI18n } from './I18nProvider';
 import { KioskContext } from './kiosk';
 import { useMe } from './MeProvider';
 import { usePersistentFlag } from './persistentFlag';
-import { Notice } from './ui';
+import { errorText, Forbidden, Notice, PageHeader } from './ui';
 
-const NAV: { href: string; label: MessageKey; icon: typeof Gauge; adminOnly: boolean }[] = [
-  { href: '/overview', label: 'nav.overview', icon: Gauge, adminOnly: false },
-  { href: '/rules', label: 'nav.rules', icon: ListChecks, adminOnly: false },
-  { href: '/keys', label: 'nav.keys', icon: KeyRound, adminOnly: true },
-  { href: '/audit', label: 'nav.audit', icon: History, adminOnly: true },
-  { href: '/settings', label: 'nav.settings', icon: Settings, adminOnly: false },
-];
+const NAV_ICONS: Record<MenuId, typeof Gauge> = {
+  overview: Gauge,
+  rules: ListChecks,
+  keys: KeyRound,
+  events: Activity,
+  audit: History,
+  settings: Settings,
+};
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const params = useSearchParams();
   const router = useRouter();
   const { t } = useI18n();
-  const { isAdmin, error: meError, retry } = useMe();
+  const { me, menus, loading, error, retry } = useMe();
+  const currentMenu = MENU_IDS.find((menu) => pathname === `/${menu}`);
+  const forbidden = error instanceof ApiError && error.status === 403;
+  const policyUnavailable =
+    me?.menuPolicyUnavailable || (error instanceof ApiError && error.status === 503);
+  const home = pathname === '/';
+  const destination = home && menus[0] ? `/${menus[0]}` : null;
   const [expanded, setExpanded] = usePersistentFlag('studio-sidebar-expanded', true);
   const [auditFailed, setAuditFailed] = useState(false);
 
@@ -55,6 +63,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
     [params, pathname, router]
   );
   const kioskValue = useMemo(() => ({ kiosk, setKiosk }), [kiosk, setKiosk]);
+
+  useEffect(() => {
+    if (destination) router.replace(destination);
+  }, [destination, router]);
 
   useEffect(() => {
     const onFailure = () => setAuditFailed(true);
@@ -79,45 +91,46 @@ export function Shell({ children }: { children: React.ReactNode }) {
       >
         {t('common.skip')}
       </a>
-      <div className="bg-bg text-fg flex h-dvh overflow-hidden">
+      <div className="bg-bg text-fg flex h-dvh flex-col-reverse overflow-hidden md:flex-row">
         {!kiosk && (
           <aside
             aria-label="FluxGate"
-            className={`border-line bg-panel flex h-full w-14 shrink-0 flex-col border-r px-2 py-2 transition-[width] ${expanded ? 'md:w-52' : 'md:w-14'}`}
+            className={`border-line bg-panel z-40 flex w-full shrink-0 flex-col border-t px-1 pt-1 pb-[max(.25rem,env(safe-area-inset-bottom))] md:h-full md:w-14 md:border-t-0 md:border-r md:p-2 ${expanded ? 'md:w-52' : 'md:w-14'}`}
           >
-            <div className="mb-4 flex h-8 items-center gap-2 px-2">
-              <BrandMark size={20} />
+            <div className="border-line mb-5 hidden min-h-12 items-center gap-2.5 border-b px-2 pb-2 md:flex">
+              <BrandMark size={24} />
               {expanded && (
                 <span className="hidden text-[15px] font-semibold tracking-tight md:inline">
                   FluxGate Studio
                 </span>
               )}
             </div>
-            <nav className="flex flex-col gap-0.5" aria-label={t('nav.main')}>
-              {NAV.filter((item) => !item.adminOnly || isAdmin).map((item) => {
-                const active = pathname.startsWith(item.href);
-                const Icon = item.icon;
-                const label = t(item.label);
+            <nav
+              className="flex items-stretch gap-0.5 md:flex-col md:gap-1"
+              aria-label={t('nav.main')}
+            >
+              {menus.map((menu) => {
+                const active = currentMenu === menu;
+                const Icon = NAV_ICONS[menu];
+                const label = t(`nav.${menu}`);
+                const href = `/${menu}`;
                 return (
                   <Link
-                    key={item.href}
-                    href={item.href}
+                    key={menu}
+                    href={href}
                     aria-label={label}
                     aria-current={active ? 'page' : undefined}
-                    className={`group relative flex h-11 items-center gap-2.5 rounded px-2.5 text-[13px] transition-colors md:h-9 ${active ? 'bg-panel2 text-fg font-medium' : 'text-fg2 hover:bg-panel2 hover:text-fg'}`}
+                    className={`group relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-md px-0.5 text-center text-[10px] leading-tight transition-colors md:min-h-10 md:flex-none md:flex-row md:justify-start md:gap-2.5 md:px-2.5 md:text-left md:text-[13px] ${active ? 'bg-select text-s1-text font-semibold' : 'text-fg2 hover:bg-panel2 hover:text-fg'}`}
                   >
                     {active && (
                       <span
                         aria-hidden
-                        className="bg-primary absolute top-2 bottom-2 left-0 w-0.5 rounded"
+                        className="bg-s1 absolute inset-x-3 top-0 h-0.5 rounded md:inset-x-auto md:top-2 md:bottom-2 md:left-0 md:h-auto md:w-0.5"
                       />
                     )}
                     <Icon size={17} aria-hidden className="shrink-0" />
-                    {expanded ? (
-                      <span className="hidden truncate md:inline">{label}</span>
-                    ) : (
-                      <Tooltip text={label} align="start" />
-                    )}
+                    <span className={expanded ? 'md:truncate' : 'md:hidden'}>{label}</span>
+                    {!expanded && <Tooltip text={label} align="start" />}
                   </Link>
                 );
               })}
@@ -144,7 +157,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <main
           id="main"
           tabIndex={-1}
-          className="min-w-0 flex-1 overflow-y-auto px-4 pb-6 outline-none"
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 pb-6 outline-none"
         >
           {kiosk && (
             <button
@@ -157,9 +170,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </button>
           )}
           <div className={kiosk ? 'pt-11' : ''}>
-            {meError && (
+            {(policyUnavailable || (error && !forbidden)) && (
               <Notice tone="bad">
-                {t('common.loadFailed')} {meError.message}{' '}
+                {policyUnavailable
+                  ? t('menus.unavailable')
+                  : `${t('common.loadFailed')} ${errorText(error, t)}`}{' '}
                 <button type="button" className={`${BUTTON} ml-2 h-7`} onClick={retry}>
                   {t('common.retry')}
                 </button>
@@ -170,7 +185,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 {t('common.auditFailed')}
               </Notice>
             )}
-            {children}
+            {error && !forbidden ? null : loading || destination ? (
+              <p role="status" className="text-muted py-4 text-sm">
+                {t('common.loading')}
+              </p>
+            ) : currentMenu && menus.includes(currentMenu) ? (
+              children
+            ) : (
+              <>
+                <PageHeader title={currentMenu ? t(`nav.${currentMenu}`) : 'FluxGate Studio'} />
+                <Forbidden />
+              </>
+            )}
           </div>
         </main>
       </div>

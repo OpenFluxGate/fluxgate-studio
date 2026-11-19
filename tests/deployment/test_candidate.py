@@ -11,7 +11,7 @@ SCRIPT = Path(__file__).resolve().parents[2] / 'deploy/candidate/activate-api.sh
 class Activation(unittest.TestCase):
     def simulate(self, failure='', bad_hash=False, wrong_target=False):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve()
             live = root / 'fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar'
             live.write_text('old')
             staged = root / '0.5.0.jar'
@@ -26,15 +26,35 @@ case "$1" in
 show) case "$*" in
 *LoadState*) echo loaded;;
 *ActiveState*) echo inactive;;
-*MainPID*) echo 0;;
+*MainPID*) if [[ -f $ROOT/inactive ]]; then echo 0; elif [[ -f $ROOT/probe-pid ]]; then cat "$ROOT/probe-pid"; else echo 100; fi;;
 *ExecStart*) echo "/usr/bin/java -jar ${TARGET}";; esac;;
-start) if [[ $FAILURE == start && $(cat "$LIVE") == new ]]; then exit 1; fi;;
-stop) if [[ $FAILURE == stop && ! -f $ROOT/stopped ]]; then touch "$ROOT/stopped"; exit 1; fi;;
+start) rm -f "$ROOT/inactive" "$ROOT/probe-pid"; if [[ $FAILURE == start && $(cat "$LIVE") == new ]]; then exit 1; fi;;
+stop) if [[ $FAILURE == stop && ! -f $ROOT/stopped ]]; then touch "$ROOT/stopped"; exit 1; fi; touch "$ROOT/inactive";;
 esac
 ''',
                 'curl': '''#!/bin/bash
-if [[ $FAILURE == health && $(cat "$LIVE") == new ]]; then exit 22; fi
-exit 0
+[[ ${!#} == http://127.0.0.1:8081/actuator/health ]] || exit 1
+while [[ $# -gt 0 ]]; do
+  if [[ $1 == --output ]]; then output=$2; shift; fi
+  shift
+done
+body='{"status":"UP"}'
+status=200
+if [[ $(cat "$LIVE") == new ]]; then
+  case $FAILURE in
+    health) exit 22 ;;
+    status-redirect) status=302 ;;
+    status-no-content) status=204 ;;
+    body-down) body='{"status":"DOWN"}' ;;
+    body-malformed) body=invalid ;;
+    unstable-pid)
+      value=100
+      if [[ -f $ROOT/probe-pid ]]; then value=$(cat "$ROOT/probe-pid"); fi
+      echo "$((value + 1))" > "$ROOT/probe-pid" ;;
+  esac
+fi
+printf %s "$body" > "$output"
+printf %s "$status"
 ''',
                 'sleep': '#!/bin/bash\nexit 0\n',
                 # macOS has no flock/GNU chmod; mock these local-only contracts.
@@ -75,6 +95,14 @@ exit 0
         self.assertNotEqual(code,0)
         self.assertEqual(data,'old')
         self.assertIn('restored and healthy',err)
+    def test_http_status_json_and_main_pid_gate(self):
+        for failure in ('status-redirect', 'status-no-content', 'body-down', 'body-malformed', 'unstable-pid'):
+            with self.subTest(failure=failure):
+                code, data, _, error = self.simulate(failure=failure)
+                self.assertNotEqual(code, 0)
+                self.assertEqual(data, 'old')
+                self.assertIn('restored and healthy', error)
+
     def test_stop_failure_preserves_old(self):
         code,data,_,err = self.simulate(failure='stop')
         self.assertNotEqual(code,0)

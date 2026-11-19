@@ -13,14 +13,22 @@ case "$1" in
 show) case "$*" in
 *LoadState*) echo loaded;;
 *ActiveState*) echo inactive;;
-*MainPID*) echo 0;;
+*MainPID*) if [[ -f $ROOT/inactive ]]; then echo 0; else echo 100; fi;;
 *WorkingDirectory*) echo "$ROOT/.next/standalone";;
 *ExecStart*) echo "$TARGET";; esac;;
+start) rm -f "$ROOT/inactive";;
+stop) touch "$ROOT/inactive";;
 esac
 MOCK
 cat > /tmp/bin/curl <<'MOCK'
 #!/bin/bash
-[[ $MODE != fail || $(cat "$LIVE") != new ]]
+[[ $MODE != fail || $(cat "$LIVE") != new ]] || exit 22
+while [[ $# -gt 0 ]]; do
+  if [[ $1 == --output ]]; then output=$2; shift; fi
+  shift
+done
+printf '{"status":"UP"}' > "$output"
+printf 200
 MOCK
 printf '#!/bin/bash\nexit 0\n' > /tmp/bin/sleep
 chmod +x /tmp/bin/*

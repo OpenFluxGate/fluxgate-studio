@@ -6,6 +6,8 @@
  * The token is therefore never exposed to client-side JavaScript.
  */
 import { type Branding } from './branding';
+import { decisionEventParams, type DecisionEventQuery } from './decisionEvents';
+import { isPolicy, type MenuId, type MenuPolicy } from './menuPolicy';
 
 const API_BASE_PATH = '/api/proxy';
 
@@ -126,6 +128,8 @@ export interface ApiMe {
   name: string;
   roles: string[];
   canWrite: boolean;
+  menus?: MenuId[];
+  menuPolicyUnavailable?: boolean;
 }
 
 export interface ApiBucket {
@@ -227,7 +231,27 @@ export interface AuditSearch {
 }
 
 export async function fetchMe(): Promise<ApiMe> {
-  return handleResponse<ApiMe>(await fetch(`${API_BASE_PATH}/api/me`));
+  return handleResponse<ApiMe>(await fetch(`${API_BASE_PATH}/api/me`, { cache: 'no-store' }));
+}
+
+async function readMenuPolicy(response: Response): Promise<MenuPolicy> {
+  const policy = await handleResponse<unknown>(response);
+  if (!isPolicy(policy)) throw new ApiError(502, 'Invalid menu policy response.');
+  return policy;
+}
+
+export async function fetchMenuPolicy(): Promise<MenuPolicy> {
+  return readMenuPolicy(await fetch(`${API_BASE_PATH}/api/settings/menus`, { cache: 'no-store' }));
+}
+
+export async function saveMenuPolicy(policy: MenuPolicy): Promise<MenuPolicy> {
+  return readMenuPolicy(
+    await fetch(`${API_BASE_PATH}/api/settings/menus`, {
+      method: 'PUT',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(policy),
+    })
+  );
 }
 
 export type RangeParams = Record<string, string>;
@@ -501,3 +525,28 @@ export async function simulateRule(
 }
 
 export { ApiError };
+
+/** Restricted projection of persisted Mongo decision events. No raw key/IP/user/attributes. */
+export interface ApiDecisionEvent {
+  id: string;
+  occurredAt: number;
+  ruleSetId: string | null;
+  ruleId: string | null;
+  allowed: boolean;
+  remainingTokens: number | null;
+  retryAfterMillis: number | null;
+}
+
+export interface ApiDecisionEventPage {
+  items: ApiDecisionEvent[];
+  nextCursor: string | null;
+}
+
+export async function fetchDecisionEvents(
+  query: DecisionEventQuery
+): Promise<ApiDecisionEventPage> {
+  const params = decisionEventParams(query);
+  return handleResponse<ApiDecisionEventPage>(
+    await fetch(`${API_BASE_PATH}/api/events?${params}`, { cache: 'no-store' })
+  );
+}

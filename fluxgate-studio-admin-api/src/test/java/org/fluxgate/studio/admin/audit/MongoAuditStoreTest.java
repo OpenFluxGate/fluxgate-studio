@@ -6,12 +6,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.model.Sorts;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.bson.Document;
+import org.bson.types.ObjectId;
 import org.fluxgate.studio.admin.dto.response.PageResponse;
 import org.fluxgate.studio.admin.exception.StorageConnectionException;
 import org.junit.jupiter.api.AfterEach;
@@ -28,14 +31,18 @@ class MongoAuditStoreTest {
 
   private MongoClient client;
   private MongoCollection<Document> collection;
+  private MongoCollection<Document> menuPolicyCollection;
   private MongoAuditStore store;
 
   @BeforeEach
   void setUp() {
     client = MongoClients.create(MONGO.getReplicaSetUrl());
     collection = client.getDatabase("studio_audit").getCollection("studio_audit_log");
+    menuPolicyCollection =
+        client.getDatabase("studio_audit").getCollection("studio_audit_log_menu_policy");
     collection.drop();
-    store = new MongoAuditStore(collection, Duration.ofDays(730));
+    menuPolicyCollection.drop();
+    store = new MongoAuditStore(collection, menuPolicyCollection, Duration.ofDays(730));
   }
 
   @AfterEach
@@ -120,31 +127,141 @@ class MongoAuditStoreTest {
   void createsTheRetentionIndex() {
     store.ensureIndexes();
 
-    Document ttl =
-        collection.listIndexes().into(new ArrayList<>()).stream()
-            .filter(index -> "at_1".equals(index.getString("name")))
-            .findFirst()
-            .orElseThrow();
-    assertThat(ttl.get("expireAfterSeconds", Number.class).longValue())
-        .isEqualTo(Duration.ofDays(730).toSeconds());
+    for (MongoCollection<Document> source : List.of(collection, menuPolicyCollection)) {
+      List<Document> indexes = source.listIndexes().into(new ArrayList<>());
+      Document ttl =
+          indexes.stream()
+              .filter(index -> "at_1".equals(index.getString("name")))
+              .findFirst()
+              .orElseThrow();
+      assertThat(ttl.get("expireAfterSeconds", Number.class).longValue())
+          .isEqualTo(Duration.ofDays(730).toSeconds());
+      assertThat(indexes)
+          .anySatisfy(
+              index ->
+                  assertThat(index.get("key", Document.class))
+                      .isEqualTo(new Document("at", -1).append("_id", -1)));
+    }
   }
 
   @Test
   void skipsTheTtlWhenRetentionIsZero() {
-    new MongoAuditStore(collection, Duration.ZERO).ensureIndexes();
+    new MongoAuditStore(collection, menuPolicyCollection, Duration.ZERO).ensureIndexes();
 
-    Document index =
-        collection.listIndexes().into(new ArrayList<>()).stream()
-            .filter(candidate -> "at_1".equals(candidate.getString("name")))
-            .findFirst()
-            .orElseThrow();
-    assertThat(index.containsKey("expireAfterSeconds")).isFalse();
+    for (MongoCollection<Document> source : List.of(collection, menuPolicyCollection)) {
+      Document index =
+          source.listIndexes().into(new ArrayList<>()).stream()
+              .filter(candidate -> "at_1".equals(candidate.getString("name")))
+              .findFirst()
+              .orElseThrow();
+      assertThat(index.containsKey("expireAfterSeconds")).isFalse();
+    }
   }
 
   @Test
   void reportsAMissingCollectionAsUnavailable() {
-    MongoAuditStore disabled = new MongoAuditStore(null, Duration.ZERO);
+    MongoAuditStore disabled = new MongoAuditStore(null, null, Duration.ZERO);
     assertThatThrownBy(() -> disabled.search(new AuditQuery(null, null, null, null, null, 0, 1)))
         .isInstanceOf(StorageConnectionException.class);
+  }
+
+  @Test
+  void keepsMenuAuditInvisibleToRollbackReadersAndCombinesBothSourcesForCurrentReaders() {
+    entry(T0, "alice", AuditAction.RULE_UPDATE, "checkout-first");
+    entry(T0.plusSeconds(2), "bob", AuditAction.RULE_UPDATE, "checkout-last");
+    String menuId = new ObjectId().toHexString();
+    Document pending =
+        MongoAuditStore.toDocument(
+            new AuditEntry(
+                menuId,
+                T0.plusSeconds(1),
+                new AuditActor("sub-alice", "alice", "ALICE"),
+                AuditAction.MENU_POLICY_UPDATE,
+                Map.of("setting", "menus"),
+                Map.of("version", 0L),
+                Map.of("version", 1L),
+                null));
+    store.insertPendingMenuAudit(pending);
+    store.insertPendingMenuAudit(pending);
+
+    // A rollback reader queries the original collection and decodes an enum without
+    // MENU_POLICY_UPDATE.
+    List<LegacyAction> legacyActions =
+        collection
+            .find()
+            .sort(Sorts.descending("at"))
+            .map(row -> LegacyAction.valueOf(row.getString("action")))
+            .into(new ArrayList<>());
+    assertThat(legacyActions).containsExactly(LegacyAction.RULE_UPDATE, LegacyAction.RULE_UPDATE);
+    assertThat(menuPolicyCollection.countDocuments()).isEqualTo(1);
+
+    var page = store.search(new AuditQuery(null, null, null, null, null, 0, 2));
+    assertThat(page.totalElements()).isEqualTo(3);
+    assertThat(page.content())
+        .extracting(AuditEntry::action)
+        .containsExactly(AuditAction.RULE_UPDATE, AuditAction.MENU_POLICY_UPDATE);
+    assertThat(page.content().getFirst().actor().username()).isEqualTo("bob");
+    assertThat(store.search(new AuditQuery(null, null, null, null, null, 1, 2)).content())
+        .extracting(AuditEntry::at)
+        .containsExactly(T0);
+    assertThat(
+            store
+                .search(new AuditQuery(null, null, null, null, null, Integer.MAX_VALUE, 2))
+                .content())
+        .isEmpty();
+    assertThat(store.findById(menuId)).contains(page.content().getLast());
+    assertThat(store.findById(new ObjectId().toHexString())).isEmpty();
+    assertThat(
+            store
+                .search(new AuditQuery(AuditAction.RULE_UPDATE, null, null, null, null, 0, 10))
+                .totalElements())
+        .isEqualTo(2);
+    assertThat(
+            store
+                .search(
+                    new AuditQuery(
+                        AuditAction.MENU_POLICY_UPDATE,
+                        "alice",
+                        "MENUS",
+                        T0.plusSeconds(1),
+                        T0.plusSeconds(2),
+                        0,
+                        10))
+                .content())
+        .containsExactly(page.content().getLast());
+    assertThat(store.search(new AuditQuery(null, "alice", null, null, null, 0, 10)).content())
+        .extracting(AuditEntry::at)
+        .containsExactly(T0.plusSeconds(1), T0);
+  }
+
+  @Test
+  void tieBreaksAcrossCollectionsAndSearchesWhenLegacyCollectionDoesNotExist() {
+    String menuId = new ObjectId("000000000000000000000001").toHexString();
+    store.insertPendingMenuAudit(
+        MongoAuditStore.toDocument(
+            new AuditEntry(
+                menuId,
+                T0,
+                new AuditActor("sub-alice", "alice", "ALICE"),
+                AuditAction.MENU_POLICY_UPDATE,
+                Map.of("setting", "menus"),
+                null,
+                null,
+                null)));
+    assertThat(store.search(new AuditQuery(null, null, null, null, null, 0, 1)).content())
+        .extracting(AuditEntry::id)
+        .containsExactly(menuId);
+    entry(T0, "alice", AuditAction.RULE_UPDATE, "r1");
+
+    assertThat(store.search(new AuditQuery(null, null, null, null, null, 0, 1)).content())
+        .extracting(AuditEntry::action)
+        .containsExactly(AuditAction.RULE_UPDATE);
+    assertThat(store.search(new AuditQuery(null, null, null, null, null, 1, 1)).content())
+        .extracting(AuditEntry::id)
+        .containsExactly(menuId);
+  }
+
+  private enum LegacyAction {
+    RULE_UPDATE
   }
 }

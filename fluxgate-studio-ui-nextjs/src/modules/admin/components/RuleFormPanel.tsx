@@ -411,7 +411,7 @@ export const RuleFormPanel = ({
               {formData.bands.map((band, index) => (
                 <div key={index} className="border-line bg-panel2 rounded-md border p-3">
                   <div className="flex items-start gap-3">
-                    <div className="grid flex-1 gap-3 sm:grid-cols-3">
+                    <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-3">
                       <Field
                         id={`band-window-${index}`}
                         label={t('form.window')}
@@ -500,7 +500,7 @@ export const RuleFormPanel = ({
         </form>
 
         <aside className="border-line bg-bg/40 min-w-0 border-t p-4 lg:border-t-0 lg:border-l">
-          <h3 className="text-muted mb-2 text-xs font-medium">{t('form.preview')}</h3>
+          <h3 className="text-fg mb-2 text-sm font-semibold">{t('form.preview')}</h3>
           <pre className="mono border-line bg-panel2 text-fg2 rounded-md border p-3 text-xs break-words whitespace-pre-wrap">
             {JSON.stringify(
               {

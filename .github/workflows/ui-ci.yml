@@ -9,7 +9,6 @@ on:
       - 'fluxgate-studio-ui-nextjs/**'
       - '.github/workflows/ui-ci.yml'
   pull_request:
-    branches: [ "main", "feature/lts-*" ]
 
 permissions:
   contents: read

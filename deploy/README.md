@@ -14,7 +14,7 @@ that a tested backup/rollback path exists; changing the package version does not
 
 Studio uses the paired FluxGate core `MongoPolicyRepository` API and `0.5.0` artifacts.
 The API is **not available in published 0.3.7 artifacts**. The reviewed source revision is
-[`39a1789acfc481e416e7363dc6e9dd3817b147b5`](https://github.com/OpenFluxGate/openfluxgate-core/commit/39a1789acfc481e416e7363dc6e9dd3817b147b5).
+[`2c141f0d1d49116abd0109bfbd78aab9fd203c3e`](https://github.com/OpenFluxGate/fluxgate/commit/2c141f0d1d49116abd0109bfbd78aab9fd203c3e).
 Compose, Admin API CI, and the Admin API deployment workflow use this exact revision; update all
 three when changing the pairing.
 Envoy and Studio must use compatible policy schemas and repository implementations. The public pin
@@ -24,7 +24,7 @@ before distributing another paired build.
 
 This pair prepares 0.5.0 from source. Its Boot 3 server remains a legacy compatibility build;
 the maintained server baseline and LTS support scope are pending. The paired core's
-[security policy](https://github.com/OpenFluxGate/fluxgate/blob/39a1789acfc481e416e7363dc6e9dd3817b147b5/SECURITY.md#050-source-preparation)
+[security policy](https://github.com/OpenFluxGate/fluxgate/blob/2c141f0d1d49116abd0109bfbd78aab9fd203c3e/SECURITY.md#050-source-preparation)
 records the residual Spring advisories. Native or Docker build success does not close that boundary.
 
 Compose builds these dependencies in its own build container, without a host Maven cache.
@@ -34,15 +34,15 @@ checkout. A direct `docker build` also needs `--build-context fluxgate_core=/abs
 GitHub Actions installs the paired core artifacts into `$RUNNER_TEMP/fluxgate-m2` before building
 the Admin API. The deployment workflow also runs `clean verify` on relevant pull requests; its
 SSH and artifact-copy steps run only for pushes to `main`. Admin API and UI checks run on every
-pull request to their configured target branches, including documentation-only changes, so required
+pull request, including stacked feature branches and documentation-only changes, so required
 checks are not left pending by path filters. Dependency Review blocks newly introduced high or
 critical vulnerabilities; it does not certify the entire resolved dependency graph.
 
 For native development, start in the Studio repository root with Java 21:
 
 ```bash
-git clone https://github.com/OpenFluxGate/openfluxgate-core.git ../fluxgate-core-paired
-git -C ../fluxgate-core-paired checkout 39a1789acfc481e416e7363dc6e9dd3817b147b5
+git clone https://github.com/OpenFluxGate/fluxgate.git ../fluxgate-core-paired
+git -C ../fluxgate-core-paired checkout 2c141f0d1d49116abd0109bfbd78aab9fd203c3e
 export FLUXGATE_CORE_SOURCE="$(cd ../fluxgate-core-paired && pwd)"
 ```
 

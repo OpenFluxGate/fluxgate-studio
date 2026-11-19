@@ -6,6 +6,7 @@ import org.fluxgate.studio.admin.audit.AuditService;
 import org.fluxgate.studio.admin.dto.request.UpdateBrandingRequest;
 import org.fluxgate.studio.admin.settings.Branding;
 import org.fluxgate.studio.admin.settings.BrandingService;
+import org.fluxgate.studio.admin.settings.MenuPolicy;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -35,6 +36,7 @@ public class BrandingController {
     return ResponseEntity.ok().cacheControl(CacheControl.noCache()).body(brandingService.current());
   }
 
+  @MenuAccess(MenuPolicy.SETTINGS)
   @PutMapping
   @PreAuthorize(Roles.WRITER)
   @Operation(summary = "Replace the logo and favicon", description = "Admin only and audited")
