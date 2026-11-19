@@ -7,9 +7,9 @@ import unittest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 class ProcessRollback(unittest.TestCase):
-    def run_case(self,component,mode):
+    def run_case(self,component,mode,recover=False):
         with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp); bin=root/'bin';bin.mkdir()
+            root=Path(tmp).resolve(); bin=root/'bin';bin.mkdir()
             if component=='api':
                 live=root/'fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar';live.write_text('old')
                 stage=root/'stage.jar';stage.write_text('new')
@@ -54,7 +54,13 @@ if [[ $MODE == kill && $(cat "$ROOT/running") == new ]]; then kill -KILL "$PPID"
 esac
 ''',
               'curl':'''#!/bin/bash
-[[ $(cat "$ROOT/running") == old ]]
+[[ $(cat "$ROOT/running") == old ]] || exit 22
+while [[ $# -gt 0 ]]; do
+  if [[ $1 == --output ]]; then output=$2; shift; fi
+  shift
+done
+printf '{"status":"UP"}' > "$output"
+printf 200
 '''}
             for name,text in mocks.items():
                 f=bin/name;f.write_text(text);f.chmod(0o755)
@@ -64,6 +70,15 @@ esac
                 retry=subprocess.run(['bash',str(ROOT/f'deploy/candidate/activate-{component}.sh'),str(root),str(stage),hashlib.sha256(b'new').hexdigest()],env=env,text=True,capture_output=True)
                 self.assertNotEqual(retry.returncode,0)
                 self.assertIn('Unfinished activation',retry.stderr)
+                if recover:
+                    recovery=['bash',str(ROOT/'deploy/candidate/recover.sh'),component,str(root)]
+                    env['MODE']='success'
+                    early=subprocess.run([*recovery,'prepare'],env=env,text=True,capture_output=True)
+                    self.assertNotEqual(early.returncode,0)
+                    self.assertEqual(live.read_text(),'new')
+                    resumed=subprocess.run(recovery,env=env,text=True,capture_output=True)
+                    self.assertEqual(resumed.returncode,0,resumed.stderr)
+
             return p.returncode,live.read_text(),(root/'running').read_text().strip(),(root/'pid').read_text().strip(),(root/'.activation-pending').exists(),p.stderr
     def test_stop_error_never_restores_over_running_new_process(self):
         for component in ['api','ui']:
@@ -80,6 +95,11 @@ esac
             with self.subTest(component=component):
                 code,disk,running,pid,pending,_=self.run_case(component,'kill')
                 self.assertNotEqual(code,0);self.assertEqual((disk,running,pid,pending),('new','new','20',True))
+    def test_manual_recovery_after_kill_starts_verified_old_artifact(self):
+        for component in ['api','ui']:
+            with self.subTest(component=component):
+                _,disk,running,pid,pending,_=self.run_case(component,'kill',recover=True)
+                self.assertEqual((disk,running,pid,pending),('old','old','30',False))
     def test_restored_old_process_has_new_pid(self):
         for component in ['api','ui']:
             with self.subTest(component=component):

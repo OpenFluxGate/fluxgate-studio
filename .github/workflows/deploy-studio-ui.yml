@@ -5,7 +5,16 @@ on:
     branches:
       - main
     paths:
+      - 'fluxgate-studio-admin-api/**'
       - 'fluxgate-studio-ui-nextjs/**'
+      - '.github/workflows/deploy-admin-api.yml'
+      - '.github/workflows/deploy-studio-ui.yml'
+      - 'deploy/candidate/**'
+  pull_request:
+    paths:
+      - 'fluxgate-studio-admin-api/**'
+      - 'fluxgate-studio-ui-nextjs/**'
+      - '.github/workflows/deploy-admin-api.yml'
       - '.github/workflows/deploy-studio-ui.yml'
       - 'deploy/candidate/**'
 
@@ -20,12 +29,16 @@ concurrency:
 
 jobs:
   build-and-deploy:
+    name: Studio UI deployment build
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -49,7 +62,7 @@ jobs:
       - name: Build Next.js (standalone)
         working-directory: fluxgate-studio-ui-nextjs
         env:
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_API_URL: ${{ github.event_name == 'push' && secrets.NEXT_PUBLIC_API_URL || '' }}
         run: npm run build
 
       - name: Prepare verified deployment bundle
@@ -64,18 +77,38 @@ jobs:
             mkdir -p fluxgate-studio-ui-nextjs/.next/standalone/public
             cp -a fluxgate-studio-ui-nextjs/public/. fluxgate-studio-ui-nextjs/.next/standalone/public/
           fi
+          if [[ -n "$(find fluxgate-studio-ui-nextjs/.next/standalone -name '.env*' -print -quit)" ]]; then
+            echo 'Runtime environment files must be supplied by the target host.' >&2
+            exit 1
+          fi
           tar -czf .deployment/ui.tar.gz -C fluxgate-studio-ui-nextjs .next/standalone
           cp deploy/candidate/activate-ui.sh .deployment/activate.sh
+          cp deploy/candidate/{recovery-common.sh,transaction.py,artifact_identity.py} .deployment/
+          git rev-parse HEAD > .deployment/SOURCE_COMMIT
           (cd .deployment && sha256sum * > SHA256SUMS)
 
-      - name: Hold production activation pending operational review
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Publish candidate bundle for paired testing
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: studio-ui-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .deployment/
+          include-hidden-files: true
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Record bundle availability
         run: |
-          echo 'Production activation is disabled in code: reboot recovery and API/UI mixed-version compatibility are not verified. Repository variables cannot bypass this hold.' >&2
+          echo 'The checked bundle is available for paired testing. This job has not activated either service.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Hold production activation pending operational review
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.STUDIO_SAFE_DEPLOY_ENABLED == 'true'
+        run: |
+          echo 'Test bundles are available from both build jobs. Production needs a maintenance window for the API and UI together: new UI with the previous API breaks reads; old UI with the candidate API breaks updates.' >&2
           exit 1
 
       - name: Require verified production activation
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.STUDIO_SAFE_DEPLOY_ENABLED == 'true'
         env:
           ENABLED: ${{ vars.STUDIO_SAFE_DEPLOY_ENABLED }}
           RETENTION_REVIEWED: ${{ vars.STUDIO_AUDIT_RETENTION_REVIEWED }}
@@ -86,7 +119,7 @@ jobs:
           test "$ENABLED" = true || { echo 'Production activation blocked: validate server permissions, recovery and data compatibility before enabling STUDIO_SAFE_DEPLOY_ENABLED.' >&2; exit 1; }
 
       - name: Upload staging bundle without stopping service
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.STUDIO_SAFE_DEPLOY_ENABLED == 'true'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
@@ -98,7 +131,7 @@ jobs:
           strip_components: 1
 
       - name: Activate staged release with server-owned lifetime
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.STUDIO_SAFE_DEPLOY_ENABLED == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
@@ -113,6 +146,7 @@ jobs:
             test -d "$root"
             test -w "$root"
             test ! -e "$root/.activation-pending"
+            systemctl is-active --quiet fluxgate-recover-ui.service
             command -v systemd-run >/dev/null
             command -v flock >/dev/null
             cd "$stage"

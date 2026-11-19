@@ -48,7 +48,8 @@ class WorkflowContracts(unittest.TestCase):
                     self.assertEqual(result.returncode,0,result.stderr)
                     if step.get('uses','').startswith('appleboy/'):
                         self.assertEqual(step['with']['fingerprint'],'${{ secrets.LIGHTSAIL_HOST_FINGERPRINT }}')
-                        self.assertEqual(step['if'],"github.event_name == 'push' && github.ref == 'refs/heads/main'")
+                        self.assertEqual(step['if'], steps[hold]['if'])
+                        self.assertIn("github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.STUDIO_SAFE_DEPLOY_ENABLED == 'true'", step['if'])
                 remote=steps[activate]['with']['script']
                 self.assertIn('sha256sum -c SHA256SUMS',remote)
                 self.assertIn('test ! -e "$root/.activation-pending"',remote)
@@ -57,6 +58,42 @@ class WorkflowContracts(unittest.TestCase):
                 self.assertNotIn('--scope',remote)
                 self.assertIn('vars.STUDIO_SAFE_DEPLOY_ENABLED',str(steps[gate]))
                 self.assertIn('vars.STUDIO_AUDIT_RETENTION_REVIEWED',str(steps[gate]))
+    def test_candidate_bundles_match_the_pull_request_head_before_any_live_step(self):
+        workflows = ROOT / '.github' / 'workflows'
+        source = '${{ github.event.pull_request.head.sha || github.sha }}'
+        paths = None
+        for component, filename in [('api', 'deploy-admin-api.yml'), ('ui', 'deploy-studio-ui.yml')]:
+            with self.subTest(component=component):
+                doc = yaml.load((workflows / filename).read_text(), Loader=yaml.BaseLoader)
+                triggers = doc['on']
+                self.assertEqual(set(triggers), {'push', 'pull_request'})
+                self.assertEqual(triggers['push']['paths'], triggers['pull_request']['paths'])
+                if paths is not None:
+                    self.assertEqual(paths, triggers['pull_request']['paths'])
+                paths = triggers['pull_request']['paths']
+                steps = doc['jobs']['build-and-deploy']['steps']
+                checkout = next(s for s in steps if s.get('name') == 'Checkout')
+                self.assertEqual(checkout['with']['ref'], source)
+                self.assertEqual(checkout['with']['persist-credentials'], 'false')
+                bundle = next(s for s in steps if s.get('name') == 'Prepare verified deployment bundle')
+                for entry in ('git rev-parse HEAD', 'recovery-common.sh', 'transaction.py',
+                              'artifact_identity.py', 'SOURCE_COMMIT', 'SHA256SUMS'):
+                    self.assertIn(entry, bundle['run'])
+                upload = next(s for s in steps if s.get('uses', '').startswith('actions/upload-artifact@'))
+                self.assertRegex(upload['uses'], r'@[0-9a-f]{40}$')
+                self.assertEqual(upload['with']['name'], f'studio-{component}-{source}')
+                self.assertEqual(upload['with']['path'], '.deployment/')
+                self.assertEqual(upload['with']['include-hidden-files'], 'true')
+                self.assertEqual(upload['with']['if-no-files-found'], 'error')
+                gate = next(s for s in steps if s.get('name') == 'Hold production activation pending operational review')
+                self.assertLess(steps.index(bundle), steps.index(upload))
+                self.assertLess(steps.index(upload), steps.index(gate))
+                if component == 'ui':
+                    self.assertIn(" -name '.env*'", bundle['run'])
+                    build = next(s for s in steps if s.get('name') == 'Build Next.js (standalone)')
+                    self.assertEqual(build['env']['NEXT_PUBLIC_API_URL'],
+                                     "${{ github.event_name == 'push' && secrets.NEXT_PUBLIC_API_URL || '' }}")
+
     def test_missing_or_invalid_fingerprint_fails_gate(self):
         for name in ['deploy-admin-api.yml','deploy-studio-ui.yml']:
             doc=yaml.load((ROOT/'.github/workflows'/name).read_text(),Loader=yaml.BaseLoader)
