@@ -64,7 +64,7 @@ class ForwardedHTTPS(http.client.HTTPSConnection):
 
 def main():
     root = pathlib.Path(__file__).resolve().parents[1]
-    jar = pathlib.Path(os.environ.get("FLUXGATE_STUDIO_JAR", str(root / "fluxgate-studio-admin-api/target/fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar")))
+    jar = pathlib.Path(os.environ.get("FLUXGATE_STUDIO_JAR", str(root / "fluxgate-studio-admin-api/target/fluxgate-studio-admin-api-0.5.0.jar")))
     require(jar.is_file(), "Build the fresh Studio executable jar first")
     mongo = required("FLUXGATE_MONGO_URI")
     require(urllib.parse.urlsplit(mongo).hostname in ("127.0.0.1", "localhost"), "Mongo proof must use a local port forward")

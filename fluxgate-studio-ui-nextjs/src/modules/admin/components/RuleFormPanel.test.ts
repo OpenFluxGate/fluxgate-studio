@@ -20,7 +20,7 @@ describe('integer form fields', () => {
     for (const value of [9007199254740992, 1.5, NaN, Infinity]) {
       expect(
         validateRule({ ...form, bands: [{ ...form.bands[0], [field]: value }] })
-      ).toHaveProperty(`bands[0].${field}`, expect.stringContaining('safe integer'));
+      ).toHaveProperty(`bands[0].${field}`, 'form.error.positiveInteger');
     }
   });
   it('rejects an unsafe optimistic revision', () => {

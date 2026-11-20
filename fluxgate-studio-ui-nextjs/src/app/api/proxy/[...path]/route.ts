@@ -24,7 +24,15 @@ const API_BASE = new URL(API_BASE_URL);
 const API_BASE_PATH = API_BASE.pathname.endsWith('/') ? API_BASE.pathname : `${API_BASE.pathname}/`;
 
 /** Only the Admin API surface the console needs is reachable through the proxy. */
-const ALLOWED_PREFIXES = ['api/rules', 'api/dashboard'];
+const ALLOWED_PREFIXES = [
+  'api/rules',
+  'api/dashboard',
+  'api/monitoring',
+  'api/keys',
+  'api/audit',
+  'api/me',
+  'api/branding',
+];
 
 /**
  * Request headers that are forwarded upstream (everything else is dropped).
@@ -39,7 +47,12 @@ const FORWARDED_REQUEST_HEADERS = ['content-type', 'if-match', 'accept'];
 const BLOCKED_REQUEST_HEADERS = ['authorization', 'cookie'];
 
 /** Response headers that are handed back to the browser. */
-const FORWARDED_RESPONSE_HEADERS = ['content-type', 'etag', 'content-disposition'];
+const FORWARDED_RESPONSE_HEADERS = [
+  'content-type',
+  'etag',
+  'content-disposition',
+  'x-studio-audit',
+];
 
 /**
  * Methods the proxy accepts. `HEAD` is included because the App Router answers `HEAD` with the `GET`
@@ -53,6 +66,7 @@ const METHODS_WITH_BODY = ['POST', 'PUT', 'PATCH'];
 const MAX_BODY_BYTES = 1_000_000;
 
 function isAllowed(path: string): boolean {
+  if (path === 'api/events' || path === 'api/settings/menus') return true;
   return ALLOWED_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
@@ -100,6 +114,7 @@ async function proxy(
 
   const { accessToken, cookies } = await backendSession(request);
   const withCookies = (response: NextResponse) => {
+    response.headers.set('Cache-Control', 'private, no-store');
     for (const cookie of cookies) response.headers.append('Set-Cookie', cookie);
     return response;
   };
@@ -114,6 +129,12 @@ async function proxy(
   }
 
   const targetPath = segments.join('/');
+  if (targetPath === 'api/events' && !['GET', 'HEAD'].includes(request.method)) {
+    return withCookies(errorResponse(405, 'Decision events are read-only.'));
+  }
+  if (targetPath === 'api/settings/menus' && !['GET', 'HEAD', 'PUT'].includes(request.method)) {
+    return withCookies(errorResponse(405, 'Menu policy supports GET and PUT.'));
+  }
   if (!isAllowed(targetPath)) {
     return withCookies(errorResponse(404, `Unknown API path: /${targetPath}`));
   }

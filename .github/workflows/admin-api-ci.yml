@@ -10,7 +10,6 @@ on:
       - '.github/workflows/admin-api-ci.yml'
       - 'docker-compose.yml'
   pull_request:
-    branches: [ "main", "feature/lts-*" ]
 
 permissions:
   contents: read
@@ -50,8 +49,8 @@ jobs:
       - name: Check out paired core policy source
         uses: actions/checkout@v4
         with:
-          repository: OpenFluxGate/openfluxgate-core
-          ref: 39a1789acfc481e416e7363dc6e9dd3817b147b5
+          repository: OpenFluxGate/fluxgate
+          ref: 2c141f0d1d49116abd0109bfbd78aab9fd203c3e
           path: .paired-core
 
       - name: Set up JDK

@@ -6,33 +6,46 @@ on:
       - main
     paths:
       - 'fluxgate-studio-admin-api/**'
+      - 'fluxgate-studio-ui-nextjs/**'
       - '.github/workflows/deploy-admin-api.yml'
+      - '.github/workflows/deploy-studio-ui.yml'
+      - 'deploy/candidate/**'
   pull_request:
-    branches: [ "main", "feature/lts-*" ]
     paths:
       - 'fluxgate-studio-admin-api/**'
+      - 'fluxgate-studio-ui-nextjs/**'
       - '.github/workflows/deploy-admin-api.yml'
+      - '.github/workflows/deploy-studio-ui.yml'
+      - 'deploy/candidate/**'
 
 permissions:
   contents: read
+
+# Do not cancel a deployment after it has stopped a service. Keep API/UI groups
+# separate: a shared pending slot could discard the other component's deployment.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-and-deploy:
     name: Admin API deployment build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       # Keep this revision paired with admin-api-ci.yml and docker-compose.yml.
       - name: Check out paired core policy source
         uses: actions/checkout@v4
         with:
-          repository: OpenFluxGate/openfluxgate-core
-          ref: 39a1789acfc481e416e7363dc6e9dd3817b147b5
+          repository: OpenFluxGate/fluxgate
+          ref: 2c141f0d1d49116abd0109bfbd78aab9fd203c3e
           path: .paired-core
           persist-credentials: false
 
@@ -54,39 +67,83 @@ jobs:
         working-directory: fluxgate-studio-admin-api
         run: ./mvnw -B -ntp -Dmaven.repo.local="$RUNNER_TEMP/fluxgate-m2" clean verify
 
-      - name: Stop existing service
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.LIGHTSAIL_HOST }}
-          username: ${{ secrets.LIGHTSAIL_USER }}
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          script: |
-            set -e
-            sudo systemctl stop fluxgate-admin-api || true
-            mkdir -p /opt/fluxgate/admin-api
+      - name: Prepare verified deployment bundle
+        run: |
+          set -euo pipefail
+          mkdir .deployment
+          test -s fluxgate-studio-admin-api/target/fluxgate-studio-admin-api-0.5.0.jar
+          cp fluxgate-studio-admin-api/target/fluxgate-studio-admin-api-0.5.0.jar .deployment/api.jar
+          cp deploy/candidate/activate-api.sh .deployment/activate.sh
+          cp deploy/candidate/{recovery-common.sh,transaction.py,artifact_identity.py} .deployment/
+          git rev-parse HEAD > .deployment/SOURCE_COMMIT
+          (cd .deployment && sha256sum * > SHA256SUMS)
 
-      - name: Copy JAR to Lightsail
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Publish candidate bundle for paired testing
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: studio-api-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .deployment/
+          include-hidden-files: true
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Record bundle availability
+        run: |
+          echo 'The checked bundle is available for paired testing. This job has not activated either service.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Hold production activation pending operational review
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.STUDIO_SAFE_DEPLOY_ENABLED == 'true'
+        run: |
+          echo 'Test bundles are available from both build jobs. Production needs a maintenance window for the API and UI together: new UI with the previous API breaks reads; old UI with the candidate API breaks updates.' >&2
+          exit 1
+
+      - name: Require verified production activation
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.STUDIO_SAFE_DEPLOY_ENABLED == 'true'
+        env:
+          ENABLED: ${{ vars.STUDIO_SAFE_DEPLOY_ENABLED }}
+          RETENTION_REVIEWED: ${{ vars.STUDIO_AUDIT_RETENTION_REVIEWED }}
+          HOST_FINGERPRINT: ${{ secrets.LIGHTSAIL_HOST_FINGERPRINT }}
+        run: |
+          [[ "$HOST_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}=?$ ]] || { echo 'Production blocked: independently verified SSH host fingerprint required.' >&2; exit 1; }
+          test "$RETENTION_REVIEWED" = true || { echo 'Production blocked: audit TTL may delete existing data. Resolve retention behavior and obtain required approval before enabling.' >&2; exit 1; }
+          test "$ENABLED" = true || { echo 'Production activation blocked: validate server permissions, recovery and data compatibility before enabling STUDIO_SAFE_DEPLOY_ENABLED.' >&2; exit 1; }
+
+      - name: Upload staging bundle without stopping service
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.STUDIO_SAFE_DEPLOY_ENABLED == 'true'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          source: "fluxgate-studio-admin-api/target/fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar"
-          target: "/opt/fluxgate/admin-api/"
-          strip_components: 2
+          fingerprint: ${{ secrets.LIGHTSAIL_HOST_FINGERPRINT }}
+          source: ".deployment/*"
+          target: "/opt/fluxgate/admin-api/.deploy-staging/${{ github.run_id }}-${{ github.run_attempt }}"
+          strip_components: 1
 
-      - name: Start service
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Activate staged release with server-owned lifetime
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.STUDIO_SAFE_DEPLOY_ENABLED == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          fingerprint: ${{ secrets.LIGHTSAIL_HOST_FINGERPRINT }}
+          command_timeout: 15m
           script: |
-            set -e
-            sudo systemctl start fluxgate-admin-api
-            sleep 10
-            sudo systemctl status fluxgate-admin-api --no-pager
-            curl --fail --silent --show-error http://localhost:8081/actuator/health
+            set -eu
+            root=/opt/fluxgate/admin-api
+            stage="$root/.deploy-staging/${{ github.run_id }}-${{ github.run_attempt }}"
+            test -d "$root"
+            test -w "$root"
+            test ! -e "$root/.activation-pending"
+            systemctl is-active --quiet fluxgate-recover-api.service
+            command -v systemd-run >/dev/null
+            command -v flock >/dev/null
+            cd "$stage"
+            sha256sum -c SHA256SUMS
+            expected=$(sha256sum api.jar | cut -d' ' -f1)
+            artifact="$stage/api.jar"
+            # The transient system service outlives this SSH client. Never retry blindly
+            # after transport failure: query its status and the pending marker first.
+            sudo -n systemd-run --unit="fluxgate-deploy-api-${{ github.run_id }}-${{ github.run_attempt }}" --uid="$(id -un)" --property=Type=exec --wait /bin/bash "$stage/activate.sh" "$root" "$artifact" "$expected"

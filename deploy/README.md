@@ -2,11 +2,19 @@
 
 Studio manages mutable rule drafts and publishes authoritative policy generations through separate APIs. Editing a rule in the existing UI or `/api/rules` does not publish that draft. Publication requires one complete rules array and one complete ACL object in the same request; the server never assembles a generation by querying draft collections. The Envoy readers use the durable active-policy pointer on each request. A Redis reload notification is an optional hint after commit, and notification failure does not undo publication.
 
+## Studio release version
+
+The Admin API artifact and UI package are both version `0.5.0`. The API build produces
+`fluxgate-studio-admin-api-0.5.0.jar`; the Docker runtime still uses `/app/app.jar`.
+This version alignment does not change API schemas, ports, or server service configuration.
+Before production deployment, verify the server unit uses the intended artifact filename and
+that a tested backup/rollback path exists; changing the package version does not validate either.
+
 ## Paired core artifacts
 
 Studio uses the paired FluxGate core `MongoPolicyRepository` API and `0.5.0` artifacts.
 The API is **not available in published 0.3.7 artifacts**. The reviewed source revision is
-[`39a1789acfc481e416e7363dc6e9dd3817b147b5`](https://github.com/OpenFluxGate/openfluxgate-core/commit/39a1789acfc481e416e7363dc6e9dd3817b147b5).
+[`2c141f0d1d49116abd0109bfbd78aab9fd203c3e`](https://github.com/OpenFluxGate/fluxgate/commit/2c141f0d1d49116abd0109bfbd78aab9fd203c3e).
 Compose, Admin API CI, and the Admin API deployment workflow use this exact revision; update all
 three when changing the pairing.
 Envoy and Studio must use compatible policy schemas and repository implementations. The public pin
@@ -16,7 +24,7 @@ before distributing another paired build.
 
 This pair prepares 0.5.0 from source. Its Boot 3 server remains a legacy compatibility build;
 the maintained server baseline and LTS support scope are pending. The paired core's
-[security policy](https://github.com/OpenFluxGate/fluxgate/blob/39a1789acfc481e416e7363dc6e9dd3817b147b5/SECURITY.md#050-source-preparation)
+[security policy](https://github.com/OpenFluxGate/fluxgate/blob/2c141f0d1d49116abd0109bfbd78aab9fd203c3e/SECURITY.md#050-source-preparation)
 records the residual Spring advisories. Native or Docker build success does not close that boundary.
 
 Compose builds these dependencies in its own build container, without a host Maven cache.
@@ -26,15 +34,15 @@ checkout. A direct `docker build` also needs `--build-context fluxgate_core=/abs
 GitHub Actions installs the paired core artifacts into `$RUNNER_TEMP/fluxgate-m2` before building
 the Admin API. The deployment workflow also runs `clean verify` on relevant pull requests; its
 SSH and artifact-copy steps run only for pushes to `main`. Admin API and UI checks run on every
-pull request to their configured target branches, including documentation-only changes, so required
+pull request, including stacked feature branches and documentation-only changes, so required
 checks are not left pending by path filters. Dependency Review blocks newly introduced high or
 critical vulnerabilities; it does not certify the entire resolved dependency graph.
 
 For native development, start in the Studio repository root with Java 21:
 
 ```bash
-git clone https://github.com/OpenFluxGate/openfluxgate-core.git ../fluxgate-core-paired
-git -C ../fluxgate-core-paired checkout 39a1789acfc481e416e7363dc6e9dd3817b147b5
+git clone https://github.com/OpenFluxGate/fluxgate.git ../fluxgate-core-paired
+git -C ../fluxgate-core-paired checkout 2c141f0d1d49116abd0109bfbd78aab9fd203c3e
 export FLUXGATE_CORE_SOURCE="$(cd ../fluxgate-core-paired && pwd)"
 ```
 
@@ -55,7 +63,7 @@ cd fluxgate-studio-admin-api
 ```
 
 Keep `FLUXGATE_M2_DIR` in the terminal for later Maven commands. The wrapper provides Maven; Docker
-is needed for the integration-test tier. This builds `target/fluxgate-studio-admin-api-0.0.1-SNAPSHOT.jar`.
+is needed for the integration-test tier. This builds `target/fluxgate-studio-admin-api-0.5.0.jar`.
 It does not publish SNAPSHOT artifacts; release distribution still requires a paired public release.
 
 Studio obtains policy collections from the qualified `fluxgateMongoDatabase` bean supplied by
@@ -160,3 +168,21 @@ The script binds its own Studio instance to `127.0.0.1:8099` and an ephemeral JW
 It checks anonymous, unsigned, and wrong-audience rejection; reader mutation denial; actor-spoof rejection; authenticated publication; immediate denial on both authz Pods after an ACL-only generation; unchanged counter epoch; operation replay; stale CAS rejection; invalid-ACL rejection without pointer mutation; and rollback to a new revision. A finally block republishes the initial ACL without resetting counters and verifies the existing fixture identity receives 200 or 429 from both Pods. It terminates only its own Java/JWKS processes and removes temporary signing material. This proof creates durable revisions and may consume quota; it does not reset the fixture's counter epoch.
 
 Success writes optional `studio-policy-live.json` evidence and prints status/check results. No JWT, private key, raw authentication header, or transport exception details are printed. Failed validation or restoration exits nonzero and emits no new success evidence. These results prove the exercised local fixture, not a production deployment.
+
+## Audit retention and upgrade safety
+
+Audit index management is disabled by default (`STUDIO_AUDIT_CREATE_INDEXES=false`).
+This preserves existing database indexes and retention policies; it does **not** disable or remove
+an existing TTL index. Audit writes and reads continue without automatic index management.
+`FLUXGATE_EVENT_CREATE_INDEXES` controls only event-history indexes, not audit indexes.
+
+Only set `STUDIO_AUDIT_CREATE_INDEXES=true` after reviewing the actual audit collection, its
+existing indexes, the approved retention period, and a tested backup/restore plan. With index
+management enabled, positive `STUDIO_AUDIT_RETENTION` (default `730d`) requests a TTL index on
+`at`; MongoDB can then permanently delete older records. Changing retention does not migrate
+an existing TTL index: conflicting index options are logged and startup continues. Such policy
+changes require a separately approved database maintenance procedure. An application binary
+rollback cannot recover TTL-deleted records or undo indexes created by a prior deployment.
+
+For the verified mixed-version failure modes and the limits of binary rollback, see
+[the 0.5.0 upgrade and rollback checklist](UPGRADE-ROLLBACK.md).

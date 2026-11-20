@@ -1,0 +1,49 @@
+name: Deployment safety contracts
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/deploy-*.yml'
+      - '.github/workflows/deployment-safety.yml'
+      - 'tests/deployment/**'
+      - 'deploy/candidate/**'
+      - 'deploy/compatibility/**'
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install PyYAML==6.0.3
+      - run: python -m unittest discover -s tests/deployment -p 'test_*.py' -v
+
+  linux-rehearsals:
+    name: Linux recovery and audit retention
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify activation and recovery-helper installation
+        run: |
+          set -euo pipefail
+          for suite in linux-filesystem-smoke.sh linux-installer-smoke.sh; do
+            docker run --rm --network none --read-only --cap-drop ALL \
+              --security-opt no-new-privileges --pids-limit 64 --memory 128m --cpus 1 \
+              --tmpfs /tmp:rw,exec,nosuid,size=32m -v "$PWD:/src:ro" \
+              --entrypoint /bin/bash python:3.12-slim "/src/tests/deployment/$suite"
+          done
+
+      - name: Verify audit metadata and restore into a new database
+        run: bash tests/deployment/test_audit_retention.sh

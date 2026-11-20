@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.fluxgate.studio.admin.audit.AuditService;
 import org.fluxgate.studio.admin.controller.RuleController;
 import org.fluxgate.studio.admin.exception.GlobalExceptionHandler;
 import org.fluxgate.studio.admin.service.RuleService;
@@ -39,6 +40,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class OpenApiRuntimeCompatibilityTest {
   @Autowired private MockMvc mockMvc;
   @MockBean private RuleService ruleService;
+  @MockBean private AuditService auditService;
 
   @Test
   @WithMockUser(roles = "USER")

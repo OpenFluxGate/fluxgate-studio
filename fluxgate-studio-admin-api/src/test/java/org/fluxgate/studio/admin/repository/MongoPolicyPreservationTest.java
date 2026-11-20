@@ -31,6 +31,7 @@ import org.fluxgate.adapter.mongo.repository.MongoRateLimitRuleRepository;
 import org.fluxgate.control.aop.RuleChangeAspect;
 import org.fluxgate.control.notify.RuleChangeNotifier;
 import org.fluxgate.core.config.RateLimitRule;
+import org.fluxgate.studio.admin.audit.AuditService;
 import org.fluxgate.studio.admin.controller.RuleController;
 import org.fluxgate.studio.admin.dto.request.CreateRuleRequest;
 import org.fluxgate.studio.admin.dto.request.ImportRulesRequest;
@@ -231,7 +232,8 @@ class MongoPolicyPreservationTest {
     RuleService proxied = factory.getProxy();
     try {
       var mvc =
-          MockMvcBuilders.standaloneSetup(new RuleController(proxied))
+          MockMvcBuilders.standaloneSetup(
+                  new RuleController(proxied, org.mockito.Mockito.mock(AuditService.class)))
               .setControllerAdvice(new GlobalExceptionHandler())
               .build();
       var response =

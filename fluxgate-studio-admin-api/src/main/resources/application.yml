@@ -39,6 +39,21 @@ fluxgate:
       # ROLE_USER or ROLE_ADMIN. The dev profile opens it up so that Swagger UI works without a
       # token; a deployment must leave this at false.
       public-api-docs: ${STUDIO_PUBLIC_API_DOCS:false}
+    monitoring:
+      event-database: ${FLUXGATE_EVENT_DB:}
+      event-collection: ${FLUXGATE_EVENT_COLLECTION:rate_limit_events}
+      create-indexes: ${FLUXGATE_EVENT_CREATE_INDEXES:true}
+      cache-ttl: 10s
+      query-timeout: 5s
+      key-transforms: none,sha256
+    audit:
+      collection: ${STUDIO_AUDIT_COLLECTION:studio_audit_log}
+      # Opt in only after reviewing the collection, retention policy, and backup.
+      # A TTL index can irreversibly delete historical records; existing indexes are never removed.
+      create-indexes: ${STUDIO_AUDIT_CREATE_INDEXES:false}
+      retention: ${STUDIO_AUDIT_RETENTION:730d}
+    settings:
+      collection: ${STUDIO_SETTINGS_COLLECTION:studio_settings}
 
   # MongoDB rule storage
   mongo:
@@ -75,6 +90,8 @@ logging:
   level:
     org.fluxgate: DEBUG
     org.springframework.web: INFO
+    # These subclasses inherit MVC request logging, including request URLs at DEBUG.
+    org.fluxgate.studio.admin.config.mvc: ${logging.level.org.springframework.web:INFO}
 
 # OpenAPI / Swagger
 springdoc:

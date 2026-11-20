@@ -32,11 +32,14 @@
 
 ## 주요 기능
 
-- **규칙 관리**: Rate Limit 규칙 생성, 수정, 삭제, 활성화/비활성화
-- **대시보드**: 실시간 통계 및 전체 규칙 현황
-- **인증**: Keycloak OAuth2/OIDC 연동
-- **다크/라이트 테마**: 사용자 맞춤 UI 테마
-- **규칙 시뮬레이션**: 배포 전 Rate Limit 규칙 테스트
+- **모니터링 콘솔**: 서비스가 남긴 판정 이력(`rate_limit_events`)으로 허용·차단 추이, 많이 차단된 키, 규칙 묶음별 마지막 판정을 보여 줍니다. Redis는 읽지 않습니다.
+- **규칙 관리**: 규칙 묶음별 표, 한도의 실제 의미 문장(`60s·30`은 "처음 30회 연속, 이후 2초마다 1회"), 저장 전 바뀐 값 확인
+- **키 조회**(admin): 특정 키가 지금 막혀 있는지, 언제 풀리는지, 최근 판정. 조회는 변경 기록에 먼저 남깁니다.
+- **변경 기록**(admin): 누가 무엇을 만들고, 바꾸고, 지우고, 가져오고, 게시했는지와 누가 어떤 키를 조회했는지
+- **인증**: Keycloak OAuth2/OIDC. `ROLE_USER`는 읽기(키는 마스킹), `ROLE_ADMIN`은 쓰기
+- **Grafana 스타일 대시보드**: 시간 범위 프리셋(5분~24시간), 시계열 드래그 확대와 축소, 자동 갱신(끄기·10s·30s·1m), 모든 패널을 거르는 규칙 묶음 변수, 접히는 행, 패널 메뉴(크게 보기·데이터 보기·CSV), TV 모드(`?kiosk`, Esc로 끝내기). 대시보드 상태는 주소(`?from=now-1h&to=now&refresh=10s&ruleSet=...`)에 남아 링크로 같은 화면을 열 수 있습니다.
+- **다크 기본**, 라이트·시스템 테마, 한국어·영어
+- **규칙 시뮬레이션**: 규칙 구간에 몰아치는 요청을 미리 계산
 
 ## 기술 스택
 
@@ -57,6 +60,12 @@
 - Keycloak (인증 서버)
 - MongoDB (규칙 저장소)
 - Docker Compose
+
+## Admin API의 뷰와 스트리밍 정책
+
+Studio 화면은 Next.js가 렌더링하고, Admin API는 결정 이벤트를 페이지 단위의 JSON으로 반환합니다. Spring MVC 디스패처는 애플리케이션 뷰를 거부해 뷰 리졸버와 렌더러의 호출을 막습니다. 컨트롤러와 예외 처리기가 Spring emitter, 스트리밍 응답 또는 reactive publisher를 반환하면 MVC가 스트림을 시작하기 전에 HTTP 406을 반환합니다. `ResponseEntity`로 감싼 본문에도 적용됩니다. 이벤트 API에 `application/json`을 요청하면 정상 조회되며, SSE만 요청하면 HTTP 406을 받습니다. 프레임워크의 HTML 오류 경로는 상태 코드를 담은 고정 페이지를 반환합니다.
+
+0.5.0 후보에 포함된 Spring MVC 버전은 6.2.19입니다. 이 설정은 두 보안 권고에 해당하는 렌더링 기능을 Studio에서 차단합니다. 서블릿 코드, 렌더링 라이브러리 또는 오류 리졸버를 추가한 배포 환경은 적용 범위를 다시 검증하고, 해당 환경에서 사용할 수 있는 Spring 수정판으로 업그레이드하세요. [XSLT 뷰 권고](https://spring.io/security/cve-2026-47884/) · [SSE 뷰 조각 권고](https://spring.io/security/cve-2026-47890/)
 
 ## 빠른 시작
 
@@ -181,6 +190,16 @@ fluxgate:
 
 Keycloak 관리 콘솔: `http://keycloak:8080/admin` (admin/admin)
 
+### Studio 역할별 메뉴
+
+관리자는 **설정 → 역할별 메뉴**에서 역할과 화면을 선택하고, 첫 화면을 미리 본 뒤 저장합니다. 기본값은 관리자에게 여섯 메뉴 전체, 조회자에게 개요·규칙·설정입니다. 관제용 조회자에게 개요만 보여 주려면 조회자에서 개요 하나를 선택해 저장합니다. 닫은 기능은 이미 열려 있는 탭에서도 다음 요청부터 접근이 제한됩니다.
+
+Keycloak에서 기존 realm 역할인 `admin`과 `user`를 부여하고, Studio는 MongoDB에 메뉴 구성을 저장하고 변경 기록을 남깁니다. 두 역할을 모두 가진 계정에는 관리자 구성이 적용됩니다. 키 조회·판정 이벤트·변경 기록은 관리자 역할이 필요합니다. 관리자는 언제든 설정을 열어 메뉴를 복원할 수 있습니다.
+
+배포할 때는 모든 Admin API 인스턴스를 먼저 올리고 인증된 `GET /api/me`가 각 인스턴스에서 `menus`를 반환하는지 확인한 뒤 UI를 전환합니다. 이전 API는 기존 역할 기준으로 접근을 허용합니다. 역할별 제한을 적용한 뒤에는 UI를 롤백할 때도 메뉴 정책을 지원하는 API가 요청을 처리하도록 합니다.
+
+메뉴 변경은 `<STUDIO_AUDIT_COLLECTION>_menu_policy` 컬렉션에 기록합니다. 기본 이름은 `studio_audit_log_menu_policy`입니다. Studio의 변경 기록 화면은 두 컬렉션을 함께 조회하며, 이전 API에서도 기존 감사 이력을 읽을 수 있습니다. MongoDB 권한을 컬렉션별로 부여하는 경우 새 컬렉션에 조회·삽입·수정 권한이 필요합니다. 감사 보관 기간은 기존 컬렉션과 맞추고, Studio가 인덱스를 관리하는 배포에서는 인덱스 생성 권한도 부여합니다.
+
 ## API 엔드포인트
 
 ### 대시보드
@@ -193,6 +212,29 @@ Keycloak 관리 콘솔: `http://keycloak:8080/admin` (admin/admin)
 - `PUT /api/rules/{id}` - 규칙 수정
 - `DELETE /api/rules/{id}` - 규칙 삭제
 - `PATCH /api/rules/{id}/toggle` - 규칙 활성화/비활성화 토글
+
+### 모니터링, 키 조회, 변경 기록
+- `GET /api/me` - 현재 사용자, 역할, 쓰기 가능 여부와 이용할 수 있는 메뉴 ID
+- `GET /api/settings/menus` (admin) - 현재 버전과 역할별 메뉴 목록 `admin`, `user` 조회
+- `PUT /api/settings/menus` (admin) - 조회한 버전으로 두 목록을 저장. 다른 관리자가 먼저 저장하면 HTTP 409 반환
+- `GET /api/monitoring/overview?window=5m|15m|1h|6h|24h` 또는 `?from=&to=`(epoch ms, 최대 24시간) - 전체와 규칙 묶음별 판정
+- `GET /api/monitoring/timeseries?window=&ruleSetId=` - 구간별 허용·차단 건수
+- `GET /api/monitoring/top-rejected?window=&ruleSetId=&limit=` - 많이 차단된 키, `ROLE_USER`에게는 마스킹
+- `GET /api/keys/transforms` (admin) - 키 변환 목록
+- `POST /api/keys/decisions` (admin) - 키 조회. 변경 기록에 먼저 남기고, 남기지 못하면 503
+- `GET /api/audit` (admin) - 변경 기록 검색. 조회 입력값은 마스킹
+- `GET /api/audit/{id}` (admin) - 변경 기록 한 건, 원문
+
+규칙과 정책 변경은 성공한 뒤 변경 기록에 남깁니다. 기록에 실패하면 변경은 유지하고 응답에 `X-Studio-Audit: failed`를 붙이며, 콘솔이 경고를 띄웁니다.
+
+설정은 `fluxgate.studio.monitoring.*`(이벤트 DB와 컬렉션, 인덱스 자동 생성, 캐시 10초, 쿼리 제한 5초, 키 변환)과 `fluxgate.studio.audit.*`(컬렉션, 보관 기간 기본 730일)입니다. 기동할 때 이벤트 컬렉션에 인덱스 세 개(`{timestamp: 1}`, `{ruleSetId: 1, timestamp: 1}`, `{userId: 1, timestamp: -1}`)를 만들고, 공용 DB에서는 `FLUXGATE_EVENT_CREATE_INDEXES=false`로 끄고 DBA에 요청합니다. UI 환경변수는 `NEXT_PUBLIC_DEFAULT_LOCALE`(기본 `en`)과 `NEXT_PUBLIC_EXTERNAL_DASHBOARD_URL`입니다.
+
+로컬에서 데모 데이터(최근 2시간 판정)를 넣으려면:
+
+```bash
+docker cp docker/demo-events.js fluxgate-mongo:/tmp/demo-events.js
+docker exec fluxgate-mongo mongosh --quiet -u fluxgate -p fluxgate123 --authenticationDatabase admin fluxgate --file /tmp/demo-events.js
+```
 
 ### API 문서
 - Swagger UI: `http://localhost:8090/swagger-ui.html` (`prod` 프로필에서는 비활성화)

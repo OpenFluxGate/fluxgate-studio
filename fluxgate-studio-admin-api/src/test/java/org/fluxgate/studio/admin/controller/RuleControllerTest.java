@@ -3,6 +3,8 @@ package org.fluxgate.studio.admin.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -18,6 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
+import org.fluxgate.studio.admin.audit.AuditService;
 import org.fluxgate.studio.admin.dto.request.CreateRuleRequest;
 import org.fluxgate.studio.admin.dto.request.ImportRulesRequest;
 import org.fluxgate.studio.admin.dto.request.RateBandRequest;
@@ -50,13 +53,14 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class RuleControllerTest {
 
   @Mock private RuleService ruleService;
+  @Mock private AuditService auditService;
 
   private MockMvc mockMvc;
   private ObjectMapper objectMapper;
 
   @BeforeEach
   void setUp() {
-    RuleController controller = new RuleController(ruleService);
+    RuleController controller = new RuleController(ruleService, auditService);
     mockMvc =
         MockMvcBuilders.standaloneSetup(controller)
             .setControllerAdvice(new GlobalExceptionHandler())
@@ -640,7 +644,8 @@ class RuleControllerTest {
         .thenReturn(createTestRuleResponse("shared", "Edited", true));
     for (var request : identityRequests())
       mockMvc.perform(request.param("ruleSetId", "set")).andExpect(status().is2xxSuccessful());
-    verify(ruleService).getRuleById("set", "shared");
+    // The read route and the three writes each read the rule once, writes do it for the audit log.
+    verify(ruleService, times(4)).getRuleById("set", "shared");
     verify(ruleService).deleteRule("set", "shared");
     verify(ruleService).toggleRule("set", "shared");
     verify(ruleService).simulate(eq("set"), eq("shared"), any());
@@ -653,7 +658,7 @@ class RuleControllerTest {
         .thenReturn(createTestRuleResponse("shared", "Edited", true));
     for (var request : identityRequests())
       mockMvc.perform(request.param("unassigned", "true")).andExpect(status().is2xxSuccessful());
-    verify(ruleService).getRuleById(null, "shared");
+    verify(ruleService, times(4)).getRuleById(null, "shared");
     verify(ruleService).deleteRule(null, "shared");
     verify(ruleService).toggleRule(null, "shared");
     verify(ruleService).simulate(org.mockito.ArgumentMatchers.isNull(), eq("shared"), any());
@@ -664,10 +669,12 @@ class RuleControllerTest {
   @Test
   void legacyAmbiguityIsTyped409OnEveryIdentityRoute() throws Exception {
     when(ruleService.getRuleById("shared")).thenThrow(new AmbiguousRuleException());
-    doThrow(new AmbiguousRuleException()).when(ruleService).deleteRule("shared");
-    when(ruleService.toggleRule("shared")).thenThrow(new AmbiguousRuleException());
+    // Writes now read the rule first for the audit log, so the read already answers 409.
+    lenient().doThrow(new AmbiguousRuleException()).when(ruleService).deleteRule("shared");
+    lenient().when(ruleService.toggleRule("shared")).thenThrow(new AmbiguousRuleException());
     when(ruleService.simulate(eq("shared"), any())).thenThrow(new AmbiguousRuleException());
-    when(ruleService.updateRule(eq("shared"), any(), any()))
+    lenient()
+        .when(ruleService.updateRule(eq("shared"), any(), any()))
         .thenThrow(new AmbiguousRuleException());
     for (var request : identityRequests())
       mockMvc.perform(request).andExpect(status().isConflict());

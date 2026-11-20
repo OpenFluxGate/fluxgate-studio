@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.List;
 import org.bson.Document;
+import org.fluxgate.studio.admin.audit.AuditService;
 import org.fluxgate.studio.admin.config.SecurityConfig;
 import org.fluxgate.studio.admin.exception.PolicyApiException;
 import org.fluxgate.studio.admin.service.PolicyPublicationService;
@@ -39,6 +40,7 @@ class PolicyControllerTest {
   @Autowired MockMvc mvc;
   @Autowired PolicyController controller;
   @MockBean PolicyPublicationService service;
+  @MockBean AuditService auditService;
 
   @Test
   @WithMockUser(roles = "USER")

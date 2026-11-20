@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -27,6 +28,19 @@ public class GlobalExceptionHandler {
 
   /** Upper bound on an echoed detail, so that a long message cannot be used as an oracle. */
   private static final int MAX_DETAIL_LENGTH = 200;
+
+  @ExceptionHandler(MenuPolicyException.class)
+  public ResponseEntity<ErrorResponse> handleMenuPolicy(
+      MenuPolicyException ex, HttpServletRequest request) {
+    HttpStatus status = ex.status();
+    return ResponseEntity.status(status)
+        .body(
+            new ErrorResponse(
+                status.value(),
+                status.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()));
+  }
 
   @ExceptionHandler(RuleNotFoundException.class)
   public ResponseEntity<ErrorResponse> handleRuleNotFound(
@@ -163,6 +177,11 @@ public class GlobalExceptionHandler {
                 "Invalid request",
                 request.getRequestURI(),
                 safeDetails(ex.getMessage())));
+  }
+
+  @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+  public ResponseEntity<Void> handleNotAcceptable() {
+    return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).build();
   }
 
   @ExceptionHandler(Exception.class)

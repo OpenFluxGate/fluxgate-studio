@@ -32,11 +32,15 @@ This repository owns `fluxgate-studio-admin-api` and `fluxgate-studio-ui-nextjs`
 
 ## Features
 
-- **Rule Management**: Create, update, delete, and toggle rate limit rules
-- **Dashboard**: Real-time statistics and overview of all rules
-- **Authentication**: OAuth2/OIDC integration with Keycloak
-- **Dark/Light Theme**: Customizable UI theme
-- **Rule Simulation**: Test rate limit rules before deployment
+- **Monitoring console**: allowed and rejected trends, most rejected keys and the last decision per rule set, read from the decisions your services record (`rate_limit_events`). Studio never reads Redis.
+- **Rule management**: rules grouped by rule set, each limit explained in plain language (`60s·30` reads "30 at once, then 1 every 2s"), and a review step that lists the changed values before saving
+- **Key lookup** (admin): whether one key is currently blocked, when it is expected to be released, and its recent decisions. Every lookup is written to the audit log first.
+- **Audit log** (admin): who created, changed, toggled, deleted, imported or published what, and who looked up which key
+- **Authentication**: OAuth2/OIDC with Keycloak. `ROLE_USER` reads (keys masked), `ROLE_ADMIN` writes.
+- **Grafana style dashboard**: time range presets (5m to 24h), drag to zoom on the time series, zoom out, auto refresh (off, 10s, 30s, 1m), a rule set variable that filters every panel, collapsible rows, panel menus (view, inspect data, download CSV) and a TV mode (`?kiosk`, Esc to leave). The dashboard state lives in the address (`?from=now-1h&to=now&refresh=10s&ruleSet=...`), so a link reopens the same view.
+- **Dark by default**, light and system themes, English and Korean
+- **Settings**: every user picks the language (English or Korean) and the theme. Admins replace the top left icon and the favicon, which apply to every user and the sign in page as soon as they are saved, and are recorded in the audit log.
+- **Rule simulation**: dry-run a burst against a rule's bands
 
 ## Tech Stack
 
@@ -57,6 +61,12 @@ This repository owns `fluxgate-studio-admin-api` and `fluxgate-studio-ui-nextjs`
 - Keycloak (Identity Provider)
 - MongoDB (Rule Storage)
 - Docker Compose
+
+## Admin API view and streaming policy
+
+Studio renders its interface in Next.js. The Admin API returns decision events as paginated JSON. Its Spring MVC dispatcher rejects application views before invoking a view resolver or a view's renderer. Controller and exception-handler responses that use Spring emitters, streaming bodies or reactive publishers return HTTP 406 before MVC starts an event stream. This also applies to bodies wrapped in `ResponseEntity`. Asking the events endpoint for `application/json` works normally. An SSE-only request receives HTTP 406. The framework's HTML error route returns a fixed page with the HTTP status.
+
+The 0.5.0 candidate packages Spring MVC 6.2.19. These controls disable the rendering features involved in the two Spring advisories for the shipped Admin API. Recheck deployments that add servlet code, rendering libraries or custom error resolvers. Upgrade to a patched Spring line when available for your deployment. [XSLT view advisory](https://spring.io/security/cve-2026-47884/) · [SSE view fragment advisory](https://spring.io/security/cve-2026-47890/)
 
 ## Quick Start
 
@@ -149,6 +159,11 @@ NEXTAUTH_SECRET=your-secret-key
 KEYCLOAK_CLIENT_ID=fluxgate-studio
 KEYCLOAK_CLIENT_SECRET=fluxgate-studio-secret
 KEYCLOAK_ISSUER=http://keycloak:8080/realms/fluxgate
+
+# Console language before the operator picks one (en or ko). Default en.
+NEXT_PUBLIC_DEFAULT_LOCALE=en
+# Optional link shown on the overview, for example your APM dashboard
+NEXT_PUBLIC_EXTERNAL_DASHBOARD_URL=
 ```
 
 #### Admin API (application.yml)
@@ -169,6 +184,41 @@ fluxgate:
     rule-collection: rate_limit_rules
 ```
 
+#### Monitoring and audit log
+
+```yaml
+fluxgate:
+  studio:
+    monitoring:
+      event-database: ${FLUXGATE_EVENT_DB:}          # empty means the rule database
+      event-collection: ${FLUXGATE_EVENT_COLLECTION:rate_limit_events}
+      create-indexes: ${FLUXGATE_EVENT_CREATE_INDEXES:true}
+      cache-ttl: 10s                                 # identical queries share one result
+      query-timeout: 5s                              # maxTimeMS of every aggregation
+      key-transforms: none,sha256                    # how a typed key can be matched
+    audit:
+      collection: ${STUDIO_AUDIT_COLLECTION:studio_audit_log}
+      retention: ${STUDIO_AUDIT_RETENTION:730d}      # 0 keeps entries forever
+    settings:
+      collection: ${STUDIO_SETTINGS_COLLECTION:studio_settings}  # console logo and favicon
+```
+
+The console reads only these fields of each decision: `timestamp` (epoch ms), `allowed`, `ruleSetId`, `ruleId`,
+`userId`, `remainingTokens`, `retryAfterMs`, `endpoint` and `method`. FluxGate's `MongoRateLimitMetricsRecorder`
+writes all of them.
+
+At startup the Admin API creates three indexes on the event collection: `{timestamp: 1}`,
+`{ruleSetId: 1, timestamp: 1}` and `{userId: 1, timestamp: -1}`. On a shared database where the Studio account may
+not create indexes, set `FLUXGATE_EVENT_CREATE_INDEXES=false` and ask your DBA to create them. A failed index
+creation only logs a warning.
+
+To see the console with data on a laptop, load two hours of sample decisions into the Compose MongoDB:
+
+```bash
+docker cp docker/demo-events.js fluxgate-mongo:/tmp/demo-events.js
+docker exec fluxgate-mongo mongosh --quiet -u fluxgate -p fluxgate123 --authenticationDatabase admin fluxgate --file /tmp/demo-events.js
+```
+
 ### Keycloak Setup
 
 The included `docker/fluxgate-realm.json` creates:
@@ -183,6 +233,16 @@ The included `docker/fluxgate-realm.json` creates:
   | user | user | user |
 
 Access Keycloak Admin Console at `http://keycloak:8080/admin` (admin/admin)
+
+### Role menus in Studio
+
+In **Settings → Role menus**, an administrator selects a role, chooses its screens, previews the landing page, and saves the change. The default administrator sees all six screens. The default viewer sees Overview, Rules and Settings. To give viewers a monitoring-only console, select the viewer, keep Overview selected and save. The next request to a disabled feature is denied, including requests from tabs opened before the change.
+
+Keycloak assigns the existing `admin` and `user` realm roles. Studio stores the menu policy in MongoDB and records changes in the activity log. An account with both roles uses the administrator policy. Key lookup, Decision events and Activity log require the administrator role. Settings always stays available to administrators so they can restore access.
+
+When rolling out the editor, upgrade every Admin API replica before enabling it in the UI. Verify that each replica returns `menus` on an authenticated `GET /api/me`. Earlier builds enforce the original role defaults. Keep a menu-aware API in service while custom restrictions are in use, including during UI rollback.
+
+Menu changes use a companion audit collection, `<STUDIO_AUDIT_COLLECTION>_menu_policy` (default `studio_audit_log_menu_policy`). Activity log includes records from both collections. Earlier API versions can still read their original audit history. If MongoDB access is granted per collection, allow the Studio account to find, insert and update companion records. Use the same retention as the original collection and grant index creation if Studio manages these indexes.
 
 ## API Endpoints
 
@@ -202,6 +262,22 @@ Reads require `ROLE_USER` or `ROLE_ADMIN`; every mutating endpoint requires `ROL
 | PATCH | `/api/rules/{id}/toggle` | admin | Toggle enabled/disabled (compare-and-set, `409` on a concurrent edit) |
 | DELETE | `/api/rules/{id}` | admin | Delete a rule |
 | DELETE | `/api/rules?ruleSetId=` | admin | Delete every rule of a rule set |
+| GET | `/api/me` | user, admin | Caller, roles, write capability and effective menu IDs |
+| GET | `/api/settings/menus` | admin | Current policy with its version and the two menu lists, `admin` and `user` |
+| PUT | `/api/settings/menus` | admin | Save both lists using the version returned by GET. A stale version returns HTTP 409. |
+| GET | `/api/monitoring/overview?window=5m\|15m\|1h\|6h\|24h` or `?from=&to=` | user, admin | Totals and per rule set activity. `from` and `to` are epoch ms, at most 24 hours apart |
+| GET | `/api/monitoring/timeseries?window=&ruleSetId=` | user, admin | Allowed and rejected decisions per bucket |
+| GET | `/api/monitoring/top-rejected?window=&ruleSetId=&limit=` | user, admin | Most rejected keys, masked for `ROLE_USER` |
+| GET | `/api/keys/transforms` | admin | Enabled key transforms |
+| POST | `/api/keys/decisions` | admin | Look up one key (`{value, transform, window}`), recorded in the audit log first |
+| GET | `/api/audit?action=&actor=&q=&from=&to=&page=&size=` | admin | Search the audit log, lookup values masked |
+| GET | `/api/audit/{id}` | admin | One audit entry, unmasked |
+| GET | `/api/branding` | public | Console logo and favicon as data URLs, `null` for the defaults |
+| PUT | `/api/branding` | admin | Replace both images (`{logo, favicon}`). PNG, SVG, ICO, JPEG, WebP or GIF, logo up to 128 KB, favicon up to 64 KB. SVG with scripts is refused |
+
+Every rule and policy change is written to the audit log after it succeeds. If that write fails, the change stays and
+the response carries `X-Studio-Audit: failed`, which the console shows as a warning. A key lookup that cannot be
+recorded is refused with `503`.
 
 ### Pagination
 

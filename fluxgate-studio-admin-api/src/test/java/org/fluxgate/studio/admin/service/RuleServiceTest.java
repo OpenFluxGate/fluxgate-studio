@@ -24,6 +24,7 @@ import org.fluxgate.core.config.OnLimitExceedPolicy;
 import org.fluxgate.core.config.RateLimitBand;
 import org.fluxgate.core.config.RateLimitRule;
 import org.fluxgate.core.spi.RateLimitRuleRepository;
+import org.fluxgate.studio.admin.audit.AuditService;
 import org.fluxgate.studio.admin.controller.RuleController;
 import org.fluxgate.studio.admin.dto.request.CreateRuleRequest;
 import org.fluxgate.studio.admin.dto.request.ImportRulesRequest;
@@ -365,6 +366,29 @@ class RuleServiceTest {
       assertThatThrownBy(() -> ruleService.createRule(request))
           .isInstanceOf(StorageOperationException.class);
     }
+  }
+
+  @Test
+  void emptyTagsInEditPayloadAddsTagsToPreviouslyEmptyAttributes() {
+    when(studioRuleRepository.findById("test-rule"))
+        .thenReturn(Optional.of(createTestRule("test-rule", "Test Rule", true, 3L)));
+    when(studioRuleRepository.replaceIfVersionMatches(any(RateLimitRule.class), eq(3L)))
+        .thenReturn(true);
+    UpdateRuleRequest request =
+        new UpdateRuleRequest(
+            "Test Rule",
+            true,
+            "PER_IP",
+            "ip",
+            "REJECT_REQUEST",
+            List.of(new RateBandRequest(60L, 100L, "100-per-minute")),
+            "test-ruleset",
+            List.of(),
+            Map.of(),
+            3L);
+    RuleResponse result = ruleService.updateRule("test-rule", request, null);
+    assertThat(result.attributes()).containsEntry("tags", List.of());
+    assertThat(result.attributes()).hasSize(1);
   }
 
   @Nested
@@ -735,7 +759,8 @@ class RuleServiceTest {
       RuleService proxied = proxyFactory.getProxy();
       try {
         var mvc =
-            MockMvcBuilders.standaloneSetup(new RuleController(proxied))
+            MockMvcBuilders.standaloneSetup(
+                    new RuleController(proxied, org.mockito.Mockito.mock(AuditService.class)))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
         var response =

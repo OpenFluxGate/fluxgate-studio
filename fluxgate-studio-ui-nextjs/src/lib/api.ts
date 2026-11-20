@@ -5,6 +5,10 @@
  * `src/app/api/proxy/[...path]/route.ts`), which attaches the Keycloak access token on the server.
  * The token is therefore never exposed to client-side JavaScript.
  */
+import { type Branding } from './branding';
+import { decisionEventParams, type DecisionEventQuery } from './decisionEvents';
+import { isPolicy, type MenuId, type MenuPolicy } from './menuPolicy';
+
 const API_BASE_PATH = '/api/proxy';
 
 // API Response Types (matching Spring Boot DTOs)
@@ -111,7 +115,235 @@ class ApiError extends Error {
 
 const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' };
 
+export const AUDIT_FAILED_EVENT = 'studio:audit-failed';
+
+function notifyAuditFailure(response: Response): void {
+  if (response.headers.get('x-studio-audit') === 'failed' && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUDIT_FAILED_EVENT));
+  }
+}
+
+export interface ApiMe {
+  username: string;
+  name: string;
+  roles: string[];
+  canWrite: boolean;
+  menus?: MenuId[];
+  menuPolicyUnavailable?: boolean;
+}
+
+export interface ApiBucket {
+  start: number;
+  allowed: number;
+  rejected: number;
+}
+
+export interface ApiRuleSetSummary {
+  ruleSetId: string;
+  total: number;
+  rejected: number;
+  rejectRate: number;
+  lastDecisionAt: number | null;
+  trend: number[];
+}
+
+export interface ApiOverview {
+  window: string;
+  from: number;
+  to: number;
+  total: number;
+  rejected: number;
+  rejectRate: number;
+  ruleSets: ApiRuleSetSummary[];
+}
+
+export interface ApiTimeseries {
+  window: string;
+  from: number;
+  to: number;
+  bucketMillis: number;
+  buckets: ApiBucket[];
+}
+
+export interface ApiRejectedKey {
+  ruleSetId: string;
+  key: string;
+  masked: boolean;
+  rejected: number;
+  lastRejectedAt: number;
+}
+
+export interface ApiKeyDecision {
+  timestamp: number;
+  ruleSetId: string | null;
+  ruleId: string | null;
+  endpoint: string | null;
+  method: string | null;
+  allowed: boolean;
+  remainingTokens: number;
+  retryAfterMs: number;
+}
+
+export type ApiKeyStatusName = 'ALLOWED' | 'BLOCKED' | 'RECOVERED';
+
+export interface ApiKeyStatus {
+  ruleSetId: string | null;
+  status: ApiKeyStatusName;
+  lastDecisionAt: number;
+  lastAllowed: boolean;
+  remainingTokens: number;
+  blockedUntil: number | null;
+  allowed: number;
+  rejected: number;
+}
+
+export interface ApiKeyLookup {
+  key: string;
+  transform: string;
+  window: string;
+  from: number;
+  to: number;
+  bucketMillis: number;
+  ruleSets: ApiKeyStatus[];
+  buckets: ApiBucket[];
+  recent: ApiKeyDecision[];
+}
+
+export interface ApiAuditEntry {
+  id: string;
+  at: string;
+  actor: { subject: string | null; username: string; name: string };
+  action: string;
+  target: Record<string, unknown> | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  detail: Record<string, unknown> | null;
+}
+
+export interface AuditSearch {
+  action?: string;
+  actor?: string;
+  q?: string;
+  from?: number;
+  to?: number;
+  page: number;
+  size: number;
+}
+
+export async function fetchMe(): Promise<ApiMe> {
+  return handleResponse<ApiMe>(await fetch(`${API_BASE_PATH}/api/me`, { cache: 'no-store' }));
+}
+
+async function readMenuPolicy(response: Response): Promise<MenuPolicy> {
+  const policy = await handleResponse<unknown>(response);
+  if (!isPolicy(policy)) throw new ApiError(502, 'Invalid menu policy response.');
+  return policy;
+}
+
+export async function fetchMenuPolicy(): Promise<MenuPolicy> {
+  return readMenuPolicy(await fetch(`${API_BASE_PATH}/api/settings/menus`, { cache: 'no-store' }));
+}
+
+export async function saveMenuPolicy(policy: MenuPolicy): Promise<MenuPolicy> {
+  return readMenuPolicy(
+    await fetch(`${API_BASE_PATH}/api/settings/menus`, {
+      method: 'PUT',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(policy),
+    })
+  );
+}
+
+export type RangeParams = Record<string, string>;
+
+export async function fetchOverview(range: RangeParams): Promise<ApiOverview> {
+  const params = new URLSearchParams(range);
+  return handleResponse<ApiOverview>(
+    await fetch(`${API_BASE_PATH}/api/monitoring/overview?${params.toString()}`)
+  );
+}
+
+export async function fetchTimeseries(
+  range: RangeParams,
+  ruleSetId?: string
+): Promise<ApiTimeseries> {
+  const params = new URLSearchParams(range);
+  if (ruleSetId) params.set('ruleSetId', ruleSetId);
+  return handleResponse<ApiTimeseries>(
+    await fetch(`${API_BASE_PATH}/api/monitoring/timeseries?${params.toString()}`)
+  );
+}
+
+export async function fetchTopRejected(
+  range: RangeParams,
+  limit = 20,
+  ruleSetId?: string
+): Promise<ApiRejectedKey[]> {
+  const params = new URLSearchParams(range);
+  params.set('limit', String(limit));
+  if (ruleSetId) params.set('ruleSetId', ruleSetId);
+  return handleResponse<ApiRejectedKey[]>(
+    await fetch(`${API_BASE_PATH}/api/monitoring/top-rejected?${params.toString()}`)
+  );
+}
+
+export async function fetchKeyTransforms(): Promise<string[]> {
+  return handleResponse<string[]>(await fetch(`${API_BASE_PATH}/api/keys/transforms`));
+}
+
+export async function lookupKey(request: {
+  value: string;
+  transform: string;
+  window: string;
+}): Promise<ApiKeyLookup> {
+  return handleResponse<ApiKeyLookup>(
+    await fetch(`${API_BASE_PATH}/api/keys/decisions`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(request),
+    })
+  );
+}
+
+export async function fetchAudit(search: AuditSearch): Promise<ApiPage<ApiAuditEntry>> {
+  const params = new URLSearchParams({ page: String(search.page), size: String(search.size) });
+  if (search.action) params.set('action', search.action);
+  if (search.actor) params.set('actor', search.actor);
+  if (search.q) params.set('q', search.q);
+  if (search.from !== undefined) params.set('from', String(search.from));
+  if (search.to !== undefined) params.set('to', String(search.to));
+  return handleResponse<ApiPage<ApiAuditEntry>>(
+    await fetch(`${API_BASE_PATH}/api/audit?${params.toString()}`)
+  );
+}
+
+export async function fetchAuditEntry(id: string): Promise<ApiAuditEntry> {
+  return handleResponse<ApiAuditEntry>(
+    await fetch(`${API_BASE_PATH}/api/audit/${encodeURIComponent(id)}`)
+  );
+}
+
+/** Public branding, read through a route that works before sign in. */
+export async function fetchBranding(): Promise<Branding> {
+  return handleResponse<Branding>(await fetch('/brand', { cache: 'no-store' }));
+}
+
+/** Replaces the logo and favicon. A null image restores the default. Admin only. */
+export async function saveBranding(update: {
+  logo: string | null;
+  favicon: string | null;
+}): Promise<Branding> {
+  return handleResponse<Branding>(
+    await fetch(`${API_BASE_PATH}/api/branding`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(update),
+    })
+  );
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
+  notifyAuditFailure(response);
   if (!response.ok) {
     // Handle 401 Unauthorized - session might be expired
     if (response.status === 401) {
@@ -293,3 +525,28 @@ export async function simulateRule(
 }
 
 export { ApiError };
+
+/** Restricted projection of persisted Mongo decision events. No raw key/IP/user/attributes. */
+export interface ApiDecisionEvent {
+  id: string;
+  occurredAt: number;
+  ruleSetId: string | null;
+  ruleId: string | null;
+  allowed: boolean;
+  remainingTokens: number | null;
+  retryAfterMillis: number | null;
+}
+
+export interface ApiDecisionEventPage {
+  items: ApiDecisionEvent[];
+  nextCursor: string | null;
+}
+
+export async function fetchDecisionEvents(
+  query: DecisionEventQuery
+): Promise<ApiDecisionEventPage> {
+  const params = decisionEventParams(query);
+  return handleResponse<ApiDecisionEventPage>(
+    await fetch(`${API_BASE_PATH}/api/events?${params}`, { cache: 'no-store' })
+  );
+}

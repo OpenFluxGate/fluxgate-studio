@@ -1,0 +1,52 @@
+name: UI synthetic browser QA
+on:
+  pull_request:
+    paths:
+      - 'fluxgate-studio-ui-nextjs/**'
+      - '.github/workflows/ui-visual.yml'
+      - 'tests/browser-ui/**'
+permissions:
+  contents: read
+concurrency:
+  group: studio-visual-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  synthetic-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: fluxgate-studio-ui-nextjs
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXTAUTH_URL: http://127.0.0.1:3173
+      NEXTAUTH_SECRET: build-only-synthetic-not-a-real-secret
+      ADMIN_API_URL: http://127.0.0.1:9
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:9
+      KEYCLOAK_ISSUER: http://127.0.0.1:9/qa
+      KEYCLOAK_CLIENT_ID: qa-only
+      KEYCLOAK_CLIENT_SECRET: qa-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: fluxgate-studio-ui-nextjs/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Install pinned browser harness outside application dependency tree
+        run: |
+          npm install --prefix "$RUNNER_TEMP/studio-browser" --no-save --ignore-scripts playwright@1.56.1
+          node "$RUNNER_TEMP/studio-browser/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Run synthetic local UI matrix
+        run: |
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/studio-browser/node_modules/playwright" node ../tests/browser-ui/smoke.cjs
+      - name: Preserve synthetic screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-synthetic-visual-qa
+          path: fluxgate-studio-ui-nextjs/visual-results/
+          retention-days: 14
+          if-no-files-found: warn
